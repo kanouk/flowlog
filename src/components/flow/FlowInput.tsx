@@ -2,7 +2,7 @@ import { useState, useRef, KeyboardEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 
 interface FlowInputProps {
-  onSubmit: (content: string) => Promise<void>;
+  onSubmit: (content: string) => void;
   disabled?: boolean;
 }
 
@@ -20,20 +20,15 @@ export function FlowInput({ onSubmit, disabled }: FlowInputProps) {
     setIsComposing(false);
   };
 
-  const handleKeyDown = async (e: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
       e.preventDefault();
-      if (content.trim() && !isSubmitting && !disabled) {
-        setIsSubmitting(true);
-        try {
-        await onSubmit(content.trim());
-          setContent('');
-          if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-            textareaRef.current.focus();
-          }
-        } finally {
-          setIsSubmitting(false);
+      if (content.trim() && !disabled) {
+        onSubmit(content.trim());
+        setContent('');
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+          textareaRef.current.focus();
         }
       }
     }
