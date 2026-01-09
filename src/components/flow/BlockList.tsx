@@ -41,10 +41,12 @@ export function BlockList({ blocks, onDelete, showDelete = true }: BlockListProp
 
   return (
     <div className="space-y-3">
-      {blocks.map((block, index) => (
+      {blocks.map((block, index) => {
+        const isTemporary = block.id.startsWith('temp-');
+        return (
         <div
           key={block.id}
-          className="block-card block-card-hover p-4 group animate-block-enter"
+          className={`block-card block-card-hover p-4 group animate-block-enter ${isTemporary ? 'opacity-60' : ''}`}
           style={{ animationDelay: `${index * 50}ms` }}
         >
           <div className="flex items-start gap-3">
@@ -68,7 +70,8 @@ export function BlockList({ blocks, onDelete, showDelete = true }: BlockListProp
             )}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -61,11 +61,29 @@ export function FlowEditor({ date: propDate }: FlowEditorProps) {
     loadData();
   }, [loadData]);
 
-  const handleAddBlock = async (content: string) => {
-    const newBlock = await addBlock(content);
-    if (newBlock) {
-      setBlocks(prev => [newBlock, ...prev]);
-    }
+  const handleAddBlock = (content: string) => {
+    // 楽観的更新: 仮のブロックを即座にUIに追加
+    const tempId = `temp-${Date.now()}`;
+    const optimisticBlock: Block = {
+      id: tempId,
+      entry_id: entry?.id || '',
+      user_id: '',
+      content,
+      created_at: new Date().toISOString(),
+    };
+    
+    setBlocks(prev => [optimisticBlock, ...prev]);
+    
+    // バックエンドに非同期で保存
+    addBlock(content).then(savedBlock => {
+      if (savedBlock) {
+        // 成功: 仮IDを本物のIDに置換
+        setBlocks(prev => prev.map(b => b.id === tempId ? savedBlock : b));
+      } else {
+        // 失敗: 仮ブロックを削除してロールバック
+        setBlocks(prev => prev.filter(b => b.id !== tempId));
+      }
+    });
   };
 
   const handleDeleteBlock = async (blockId: string) => {
