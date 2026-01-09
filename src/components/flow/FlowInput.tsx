@@ -26,10 +26,11 @@ export function FlowInput({ onSubmit, disabled }: FlowInputProps) {
       if (content.trim() && !isSubmitting && !disabled) {
         setIsSubmitting(true);
         try {
-          await onSubmit(content.trim());
+        await onSubmit(content.trim());
           setContent('');
           if (textareaRef.current) {
             textareaRef.current.style.height = 'auto';
+            textareaRef.current.focus();
           }
         } finally {
           setIsSubmitting(false);
