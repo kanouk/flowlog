@@ -151,7 +151,7 @@
   }
   
   .block-card {
-    @apply bg-card border border-block-border rounded-2xl;
+    @apply bg-card border border-block-border rounded-2xl overflow-hidden;
     box-shadow: 0 4px 20px -4px hsl(var(--block-shadow) / 0.1);
   }
   
