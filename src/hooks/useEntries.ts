@@ -122,6 +122,22 @@ export function useEntries() {
     return true;
   }, []);
 
+  const updateBlock = useCallback(async (blockId: string, content: string) => {
+    const { data, error } = await supabase
+      .from('blocks')
+      .update({ content })
+      .eq('id', blockId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating block:', error);
+      toast.error('ブロックの更新に失敗しました');
+      return null;
+    }
+    return data as Block;
+  }, []);
+
   const formatEntry = useCallback(async (entryId: string, blocks: Block[], date: string) => {
     if (!session) return null;
 
@@ -205,6 +221,7 @@ export function useEntries() {
     getBlocks,
     addBlock,
     deleteBlock,
+    updateBlock,
     formatEntry,
     getEntries,
     getEntry,
