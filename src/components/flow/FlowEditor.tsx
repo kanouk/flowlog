@@ -24,6 +24,7 @@ export function FlowEditor({ date: propDate }: FlowEditorProps) {
     getBlocks, 
     addBlock, 
     deleteBlock,
+    updateBlock,
     formatEntry,
     getEntry,
   } = useEntries();
@@ -90,6 +91,21 @@ export function FlowEditor({ date: propDate }: FlowEditorProps) {
     const success = await deleteBlock(blockId);
     if (success) {
       setBlocks(prev => prev.filter(b => b.id !== blockId));
+    }
+  };
+
+  const handleUpdateBlock = async (blockId: string, content: string) => {
+    // 楽観的更新: 即座にUIを更新
+    const originalBlocks = [...blocks];
+    setBlocks(prev => prev.map(b => 
+      b.id === blockId ? { ...b, content } : b
+    ));
+    
+    // バックエンドに更新
+    const updated = await updateBlock(blockId, content);
+    if (!updated) {
+      // 失敗時はロールバック
+      setBlocks(originalBlocks);
     }
   };
 
@@ -173,7 +189,9 @@ export function FlowEditor({ date: propDate }: FlowEditorProps) {
           <BlockList 
             blocks={blocks} 
             onDelete={isToday ? handleDeleteBlock : undefined}
+            onUpdate={isToday ? handleUpdateBlock : undefined}
             showDelete={isToday}
+            editable={isToday}
           />
         </TabsContent>
 
