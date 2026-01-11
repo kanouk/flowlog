@@ -1,5 +1,7 @@
 import { useState, useRef, KeyboardEvent } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Send } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Button } from '@/components/ui/button';
 
 interface FlowInputProps {
   onSubmit: (content: string) => void;
@@ -11,6 +13,7 @@ export function FlowInput({ onSubmit, disabled }: FlowInputProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isMobile = useIsMobile();
 
   const handleCompositionStart = () => {
     setIsComposing(true);
@@ -20,17 +23,24 @@ export function FlowInput({ onSubmit, disabled }: FlowInputProps) {
     setIsComposing(false);
   };
 
+  const handleSubmit = () => {
+    if (content.trim() && !disabled) {
+      onSubmit(content.trim());
+      setContent('');
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.focus();
+      }
+    }
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // モバイルではEnterで送信しない（改行として動作）
+    if (isMobile) return;
+    
     if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
       e.preventDefault();
-      if (content.trim() && !disabled) {
-        onSubmit(content.trim());
-        setContent('');
-        if (textareaRef.current) {
-          textareaRef.current.style.height = 'auto';
-          textareaRef.current.focus();
-        }
-      }
+      handleSubmit();
     }
   };
 
@@ -58,11 +68,23 @@ export function FlowInput({ onSubmit, disabled }: FlowInputProps) {
       />
       <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
         <p className="text-sm text-muted-foreground">
-          Enterで保存 • Shift+Enterで改行
+          {isMobile ? '改行可能 • ボタンで保存' : 'Enterで保存 • Shift+Enterで改行'}
         </p>
-        {isSubmitting && (
-          <Loader2 className="h-4 w-4 animate-spin text-primary" />
-        )}
+        <div className="flex items-center gap-2">
+          {isSubmitting && (
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          )}
+          {isMobile && (
+            <Button 
+              onClick={handleSubmit}
+              disabled={!content.trim() || disabled || isSubmitting}
+              size="sm"
+            >
+              <Send className="h-4 w-4 mr-1" />
+              保存
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
