@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { LogOut, Calendar, Settings, Menu, ChevronLeft } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { getTodayKey } from '@/lib/dateUtils';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -20,8 +20,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
-  const selectedDate = searchParams.get('date') || format(new Date(), 'yyyy-MM-dd');
-  const today = format(new Date(), 'yyyy-MM-dd');
+  const today = getTodayKey();
+  const selectedDate = searchParams.get('date') || today;
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -41,8 +41,20 @@ export default function Dashboard() {
   }, [user, getEntries]);
 
   const handleDateSelect = (date: string) => {
-    setSearchParams({ date });
+    if (date === today) {
+      setSearchParams({});
+    } else {
+      setSearchParams({ date });
+    }
     setSidebarOpen(false);
+  };
+
+  const handleNavigateToDate = (targetDate: string) => {
+    if (targetDate === today) {
+      setSearchParams({});
+    } else {
+      setSearchParams({ date: targetDate });
+    }
   };
 
   const handleBackToToday = () => {
@@ -143,7 +155,10 @@ export default function Dashboard() {
 
           {/* Main editor */}
           <main className="flex-1 min-w-0">
-            <FlowEditor date={selectedDate} />
+            <FlowEditor 
+              date={selectedDate} 
+              onNavigateToDate={handleNavigateToDate}
+            />
           </main>
         </div>
       </div>

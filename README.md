@@ -1,8 +1,27 @@
-# Welcome to your Lovable project
+# FlowLog
+
+思考ログを記録・整形するアプリケーション
 
 ## Project info
 
 **URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+
+## ブロック編集仕様
+
+- **content**: 全日付で編集可能
+- **occurred_at**: 編集可能（未来日時は禁止、+5分まで許容）
+  - 日付が変わった場合、ブロックは自動的に該当日に移動
+  - 元の日のentryが空になった場合、自動削除
+
+## 技術仕様
+
+- **Supabase TIMESTAMPTZ**: ISO8601 形式で返る前提
+- **TZ処理**: date-fns-tz の formatInTimeZone / fromZonedTime に統一
+- **occurred_at パース**: parseISO() を使用（new Date(str) は使わない）
+- **occurred_at 生成**: createOccurredAt(dayKey, time) を使用（Date直操作禁止）
+- **未来日時禁止**: UI + DBトリガーで二重担保
+- **空entry削除**: クライアント側実装（将来的にDBトリガー化を検討）
+- **Edge Function**: parseISO + formatInTimeZone に統一
 
 ## How can I edit this code?
 
@@ -59,6 +78,7 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+- Supabase (Lovable Cloud)
 
 ## How can I deploy this project?
 

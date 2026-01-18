@@ -1,13 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { parseISO } from "npm:date-fns@3";
+import { formatInTimeZone } from "npm:date-fns-tz@3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const TIMEZONE = 'Asia/Tokyo';
+
 interface Block {
   content: string;
-  created_at: string;
+  occurred_at: string;
 }
 
 serve(async (req) => {
@@ -30,17 +34,14 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    // Sort blocks by timestamp
+    // Sort blocks by occurred_at (parseISO使用)
     const sortedBlocks = [...blocks].sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      (a, b) => parseISO(a.occurred_at).getTime() - parseISO(b.occurred_at).getTime()
     );
 
-    // Format blocks for the prompt
-    const blocksText = sortedBlocks.map((block, i) => {
-      const time = new Date(block.created_at).toLocaleTimeString('ja-JP', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      });
+    // Format blocks for the prompt (formatInTimeZone使用)
+    const blocksText = sortedBlocks.map((block) => {
+      const time = formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH:mm');
       return `[${time}] ${block.content}`;
     }).join('\n');
 
@@ -62,6 +63,8 @@ serve(async (req) => {
 ${blocksText}`;
 
     console.log('Calling AI gateway for formatting...');
+    console.log('Blocks count:', blocks.length);
+    console.log('Date:', date);
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',

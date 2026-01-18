@@ -1,14 +1,17 @@
 import { useState, useRef, KeyboardEvent } from 'react';
-import { Loader2, Send } from 'lucide-react';
+import { Loader2, Send, Clock } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
+import { AddBlockMode } from '@/hooks/useEntries';
 
 interface FlowInputProps {
-  onSubmit: (content: string) => void;
+  onSubmit: (content: string, mode: AddBlockMode) => void;
   disabled?: boolean;
+  selectedDate: string;
+  isToday: boolean;
 }
 
-export function FlowInput({ onSubmit, disabled }: FlowInputProps) {
+export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInputProps) {
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
@@ -23,9 +26,9 @@ export function FlowInput({ onSubmit, disabled }: FlowInputProps) {
     setIsComposing(false);
   };
 
-  const handleSubmit = () => {
+  const handleSubmitWithMode = (mode: AddBlockMode) => {
     if (content.trim() && !disabled) {
-      onSubmit(content.trim());
+      onSubmit(content.trim(), mode);
       setContent('');
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -40,7 +43,7 @@ export function FlowInput({ onSubmit, disabled }: FlowInputProps) {
     
     if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
       e.preventDefault();
-      handleSubmit();
+      handleSubmitWithMode('toSelectedDate');
     }
   };
 
@@ -74,16 +77,29 @@ export function FlowInput({ onSubmit, disabled }: FlowInputProps) {
           {isSubmitting && (
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
           )}
-          {isMobile && (
+          
+          {/* 過去日の場合: 「今で追加」ボタン */}
+          {!isToday && (
             <Button 
-              onClick={handleSubmit}
-              disabled={!content.trim() || disabled || isSubmitting}
+              variant="outline"
               size="sm"
+              onClick={() => handleSubmitWithMode('toNow')}
+              disabled={!content.trim() || disabled || isSubmitting}
             >
-              <Send className="h-4 w-4 mr-1" />
-              保存
+              <Clock className="h-4 w-4 mr-1" />
+              今で追加
             </Button>
           )}
+          
+          {/* 常に表示: メインボタン */}
+          <Button 
+            size="sm"
+            onClick={() => handleSubmitWithMode('toSelectedDate')}
+            disabled={!content.trim() || disabled || isSubmitting}
+          >
+            <Send className="h-4 w-4 mr-1" />
+            {isToday ? '保存' : 'この日に追加'}
+          </Button>
         </div>
       </div>
     </div>
