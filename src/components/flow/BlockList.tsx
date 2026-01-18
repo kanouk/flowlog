@@ -1,16 +1,20 @@
 import { useState, useRef, KeyboardEvent } from 'react';
-import { format } from 'date-fns';
-import { ja } from 'date-fns/locale';
-import { Trash2, Pencil, Check, X } from 'lucide-react';
+import { Trash2, Pencil, Check, X, Calendar, Clock } from 'lucide-react';
 import { Block } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { formatTimeJST, getOccurredAtDayKey, createOccurredAt, isFutureDate, parseTimestamp } from '@/lib/dateUtils';
+import { toast } from 'sonner';
 
 interface BlockListProps {
   blocks: Block[];
   onDelete?: (blockId: string) => void;
-  onUpdate?: (blockId: string, content: string) => void;
+  onUpdate?: (blockId: string, content: string, newOccurredAt?: string) => void;
   showDelete?: boolean;
   editable?: boolean;
+  selectedDate?: string;
 }
 
 export function BlockList({ 
@@ -19,10 +23,14 @@ export function BlockList({
   onUpdate,
   showDelete = true,
   editable = true,
+  selectedDate,
 }: BlockListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
   const [isComposing, setIsComposing] = useState(false);
+  const [editingDateTimeId, setEditingDateTimeId] = useState<string | null>(null);
+  const [editDayKey, setEditDayKey] = useState('');
+  const [editTime, setEditTime] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const startEditing = (block: Block) => {
@@ -59,6 +67,50 @@ export function BlockList({
     }
   };
 
+  const startEditingDateTime = (block: Block) => {
+    if (!editable || block.id.startsWith('temp-')) return;
+    setEditingDateTimeId(block.id);
+    setEditDayKey(getOccurredAtDayKey(block.occurred_at));
+    setEditTime(formatTimeJST(block.occurred_at));
+  };
+
+  const cancelEditingDateTime = () => {
+    setEditingDateTimeId(null);
+    setEditDayKey('');
+    setEditTime('');
+  };
+
+  const saveEditingDateTime = (blockId: string, currentContent: string) => {
+    if (!editDayKey || !editTime || !onUpdate) {
+      cancelEditingDateTime();
+      return;
+    }
+    
+    const newOccurredAt = createOccurredAt(editDayKey, editTime);
+    
+    if (isFutureDate(newOccurredAt)) {
+      toast.error('未来の日時は指定できません');
+      return;
+    }
+    
+    onUpdate(blockId, currentContent, newOccurredAt);
+    cancelEditingDateTime();
+  };
+
+  const handleDateSelect = (date: Date | undefined) => {
+    if (date) {
+      // 未来日は選択不可
+      if (date > new Date()) {
+        toast.error('未来の日付は指定できません');
+        return;
+      }
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      setEditDayKey(`${year}-${month}-${day}`);
+    }
+  };
+
   if (blocks.length === 0) {
     return (
       <div className="text-center py-12">
@@ -92,6 +144,7 @@ export function BlockList({
       {blocks.map((block, index) => {
         const isTemporary = block.id.startsWith('temp-');
         const isEditing = editingId === block.id;
+        const isEditingDateTime = editingDateTimeId === block.id;
 
         return (
           <div
@@ -115,7 +168,6 @@ export function BlockList({
                       onCompositionStart={() => setIsComposing(true)}
                       onCompositionEnd={() => setIsComposing(false)}
                       onBlur={() => {
-                        // 少し遅延させてボタンクリックを処理できるようにする
                         setTimeout(() => {
                           if (editingId === block.id) {
                             saveEditing();
@@ -138,13 +190,63 @@ export function BlockList({
                     >
                       {block.content}
                     </p>
-                    <p className="timestamp-badge inline-block mt-2">
-                      {format(new Date(block.created_at), 'HH:mm', { locale: ja })}
-                    </p>
+                    
+                    {/* タイムスタンプ + 日時編集 */}
+                    {isEditingDateTime ? (
+                      <div className="flex items-center gap-2 mt-2">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
+                              <Calendar className="h-3 w-3 mr-1" />
+                              {editDayKey}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <CalendarComponent
+                              mode="single"
+                              selected={parseTimestamp(`${editDayKey}T00:00:00Z`)}
+                              onSelect={handleDateSelect}
+                              disabled={(date) => date > new Date()}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <Input
+                          type="time"
+                          value={editTime}
+                          onChange={(e) => setEditTime(e.target.value)}
+                          className="h-7 w-24 text-xs"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => saveEditingDateTime(block.id, block.content)}
+                        >
+                          <Check className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={cancelEditingDateTime}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <button
+                        className="timestamp-badge inline-block mt-2 hover:bg-muted cursor-pointer transition-colors"
+                        onClick={() => startEditingDateTime(block)}
+                        disabled={!editable || isTemporary}
+                      >
+                        {formatTimeJST(block.occurred_at)}
+                      </button>
+                    )}
                   </>
                 )}
               </div>
-              {!isEditing && !isTemporary && (
+              {!isEditing && !isTemporary && !isEditingDateTime && (
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   {editable && onUpdate && (
                     <Button
