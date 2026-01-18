@@ -1,11 +1,13 @@
 import { useState, useRef, KeyboardEvent } from 'react';
-import { Loader2, Send, Clock } from 'lucide-react';
+import { Loader2, Send, Clock, ImagePlus, X } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { AddBlockMode } from '@/hooks/useEntries';
+import { useImageUpload } from '@/hooks/useImageUpload';
+import { toast } from 'sonner';
 
 interface FlowInputProps {
-  onSubmit: (content: string, mode: AddBlockMode) => void;
+  onSubmit: (content: string, mode: AddBlockMode, images: string[]) => void;
   disabled?: boolean;
   selectedDate: string;
   isToday: boolean;
@@ -15,8 +17,12 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
+  const { uploadImages, maxImages } = useImageUpload();
 
   const handleCompositionStart = () => {
     setIsComposing(true);
@@ -26,14 +32,39 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setIsComposing(false);
   };
 
-  const handleSubmitWithMode = (mode: AddBlockMode) => {
-    if (content.trim() && !disabled) {
-      onSubmit(content.trim(), mode);
+  const handleSubmitWithMode = async (mode: AddBlockMode) => {
+    const hasContent = content.trim().length > 0;
+    const hasImages = selectedImages.length > 0;
+    
+    if (!hasContent && !hasImages) return;
+    if (disabled) return;
+
+    setIsSubmitting(true);
+    try {
+      // 画像をアップロード
+      let uploadedUrls: string[] = [];
+      if (hasImages) {
+        uploadedUrls = await uploadImages(selectedImages);
+        if (uploadedUrls.length !== selectedImages.length) {
+          // 一部アップロード失敗
+          toast.warning('一部の画像のアップロードに失敗しました');
+        }
+      }
+
+      onSubmit(content.trim(), mode, uploadedUrls);
+      
+      // リセット
       setContent('');
+      setSelectedImages([]);
+      previewUrls.forEach(url => URL.revokeObjectURL(url));
+      setPreviewUrls([]);
+      
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
         textareaRef.current.focus();
       }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -55,6 +86,40 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     }
   };
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const remaining = maxImages - selectedImages.length;
+    if (remaining <= 0) {
+      toast.error(`画像は最大${maxImages}枚までです`);
+      return;
+    }
+
+    const toAdd = files.slice(0, remaining);
+    if (files.length > remaining) {
+      toast.warning(`最大${maxImages}枚のため、${remaining}枚のみ追加しました`);
+    }
+
+    // プレビューURL生成
+    const newPreviews = toAdd.map(f => URL.createObjectURL(f));
+    setSelectedImages(prev => [...prev, ...toAdd]);
+    setPreviewUrls(prev => [...prev, ...newPreviews]);
+
+    // input をリセット（同じファイルを再選択可能に）
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const removeImage = (index: number) => {
+    URL.revokeObjectURL(previewUrls[index]);
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setPreviewUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const canSubmit = (content.trim().length > 0 || selectedImages.length > 0) && !disabled && !isSubmitting;
+
   return (
     <div className="block-card p-6 relative">
       <textarea
@@ -69,10 +134,58 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
         className="input-flow w-full min-h-[120px] text-lg leading-relaxed"
         rows={4}
       />
+
+      {/* 画像プレビュー */}
+      {previewUrls.length > 0 && (
+        <div className="flex gap-2 mt-4 flex-wrap">
+          {previewUrls.map((url, i) => (
+            <div key={i} className="relative w-20 h-20 group">
+              <img 
+                src={url} 
+                alt="" 
+                className="w-full h-full object-cover rounded-md border border-border"
+              />
+              <button
+                type="button"
+                onClick={() => removeImage(i)}
+                className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
-        <p className="text-sm text-muted-foreground">
-          {isMobile ? '改行可能 • ボタンで保存' : 'Enterで保存 • Shift+Enterで改行'}
-        </p>
+        <div className="flex items-center gap-2">
+          {/* 画像選択ボタン */}
+          <label className={`cursor-pointer ${selectedImages.length >= maxImages ? 'opacity-50 cursor-not-allowed' : ''}`}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handleImageSelect}
+              disabled={selectedImages.length >= maxImages || isSubmitting}
+            />
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              asChild
+              disabled={selectedImages.length >= maxImages}
+            >
+              <span>
+                <ImagePlus className="h-4 w-4" />
+              </span>
+            </Button>
+          </label>
+          <p className="text-sm text-muted-foreground">
+            {isMobile ? '改行可能 • ボタンで保存' : 'Enterで保存 • Shift+Enterで改行'}
+            {selectedImages.length > 0 && ` • 画像${selectedImages.length}/${maxImages}`}
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           {isSubmitting && (
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -84,7 +197,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
               variant="outline"
               size="sm"
               onClick={() => handleSubmitWithMode('toNow')}
-              disabled={!content.trim() || disabled || isSubmitting}
+              disabled={!canSubmit}
             >
               <Clock className="h-4 w-4 mr-1" />
               今で追加
@@ -95,7 +208,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
           <Button 
             size="sm"
             onClick={() => handleSubmitWithMode('toSelectedDate')}
-            disabled={!content.trim() || disabled || isSubmitting}
+            disabled={!canSubmit}
           >
             <Send className="h-4 w-4 mr-1" />
             {isToday ? '保存' : 'この日に追加'}

@@ -10,8 +10,9 @@ const corsHeaders = {
 const TIMEZONE = 'Asia/Tokyo';
 
 interface Block {
-  content: string;
+  content: string | null;
   occurred_at: string;
+  images?: string[];
 }
 
 serve(async (req) => {
@@ -42,7 +43,11 @@ serve(async (req) => {
     // Format blocks for the prompt (formatInTimeZone使用)
     const blocksText = sortedBlocks.map((block) => {
       const time = formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH:mm');
-      return `[${time}] ${block.content}`;
+      const imageNote = block.images && block.images.length > 0 
+        ? ` [📷${block.images.length}枚]` 
+        : '';
+      const content = block.content || '';
+      return `[${time}]${imageNote} ${content}`.trim();
     }).join('\n');
 
     const systemPrompt = `あなたは思考ログを整形するアシスタントです。ユーザーが一日の中で書き留めた短いメモやつぶやきを、読みやすい日記形式に整形してください。

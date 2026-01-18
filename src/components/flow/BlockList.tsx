@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { formatTimeJST, getOccurredAtDayKey, createOccurredAt, isFutureDate, parseTimestamp } from '@/lib/dateUtils';
 import { toast } from 'sonner';
 
@@ -31,12 +32,13 @@ export function BlockList({
   const [editingDateTimeId, setEditingDateTimeId] = useState<string | null>(null);
   const [editDayKey, setEditDayKey] = useState('');
   const [editTime, setEditTime] = useState('');
+  const [modalImage, setModalImage] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const startEditing = (block: Block) => {
     if (!editable || block.id.startsWith('temp-')) return;
     setEditingId(block.id);
-    setEditContent(block.content);
+    setEditContent(block.content || '');
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus();
@@ -52,7 +54,8 @@ export function BlockList({
   };
 
   const saveEditing = () => {
-    if (editingId && editContent.trim() && onUpdate) {
+    if (editingId && onUpdate) {
+      // content が空でも画像があれば OK（ただし編集UIでは画像操作は未対応）
       onUpdate(editingId, editContent.trim());
     }
     cancelEditing();
@@ -80,7 +83,7 @@ export function BlockList({
     setEditTime('');
   };
 
-  const saveEditingDateTime = (blockId: string, currentContent: string) => {
+  const saveEditingDateTime = (blockId: string, currentContent: string | null) => {
     if (!editDayKey || !editTime || !onUpdate) {
       cancelEditingDateTime();
       return;
@@ -93,7 +96,7 @@ export function BlockList({
       return;
     }
     
-    onUpdate(blockId, currentContent, newOccurredAt);
+    onUpdate(blockId, currentContent || '', newOccurredAt);
     cancelEditingDateTime();
   };
 
@@ -140,160 +143,194 @@ export function BlockList({
   }
 
   return (
-    <div className="space-y-3">
-      {blocks.map((block, index) => {
-        const isTemporary = block.id.startsWith('temp-');
-        const isEditing = editingId === block.id;
-        const isEditingDateTime = editingDateTimeId === block.id;
+    <>
+      <div className="space-y-3">
+        {blocks.map((block, index) => {
+          const isTemporary = block.id.startsWith('temp-');
+          const isEditing = editingId === block.id;
+          const isEditingDateTime = editingDateTimeId === block.id;
+          const hasImages = block.images && block.images.length > 0;
+          const hasContent = block.content && block.content.trim().length > 0;
 
-        return (
-          <div
-            key={block.id}
-            className={`block-card block-card-hover p-4 group animate-block-enter ${isTemporary ? 'opacity-60' : ''}`}
-            style={{ animationDelay: `${index * 50}ms` }}
-          >
-            <div className="flex items-start gap-3">
-              <div className="flex-1">
-                {isEditing ? (
-                  <div className="space-y-2">
-                    <textarea
-                      ref={textareaRef}
-                      value={editContent}
-                      onChange={(e) => {
-                        setEditContent(e.target.value);
-                        e.target.style.height = 'auto';
-                        e.target.style.height = `${e.target.scrollHeight}px`;
-                      }}
-                      onKeyDown={handleKeyDown}
-                      onCompositionStart={() => setIsComposing(true)}
-                      onCompositionEnd={() => setIsComposing(false)}
-                      onBlur={() => {
-                        setTimeout(() => {
-                          if (editingId === block.id) {
-                            saveEditing();
-                          }
-                        }, 150);
-                      }}
-                      className="w-full bg-background border border-input rounded-md px-3 py-2 text-foreground leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                      rows={1}
-                    />
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>Enter: 保存</span>
-                      <span>Esc: キャンセル</span>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <p 
-                      className={`text-foreground leading-relaxed whitespace-pre-wrap ${editable && !isTemporary ? 'cursor-pointer hover:bg-muted/50 -mx-2 -my-1 px-2 py-1 rounded transition-colors' : ''}`}
-                      onClick={() => startEditing(block)}
-                    >
-                      {block.content}
-                    </p>
-                    
-                    {/* タイムスタンプ + 日時編集 */}
-                    {isEditingDateTime ? (
-                      <div className="flex items-center gap-2 mt-2">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
-                              <Calendar className="h-3 w-3 mr-1" />
-                              {editDayKey}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <CalendarComponent
-                              mode="single"
-                              selected={parseTimestamp(`${editDayKey}T00:00:00Z`)}
-                              onSelect={handleDateSelect}
-                              disabled={(date) => date > new Date()}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <Input
-                          type="time"
-                          value={editTime}
-                          onChange={(e) => setEditTime(e.target.value)}
-                          className="h-7 w-24 text-xs"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => saveEditingDateTime(block.id, block.content)}
-                        >
-                          <Check className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={cancelEditingDateTime}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
+          return (
+            <div
+              key={block.id}
+              className={`block-card block-card-hover p-4 group animate-block-enter ${isTemporary ? 'opacity-60' : ''}`}
+              style={{ animationDelay: `${index * 50}ms` }}
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex-1">
+                  {isEditing ? (
+                    <div className="space-y-2">
+                      <textarea
+                        ref={textareaRef}
+                        value={editContent}
+                        onChange={(e) => {
+                          setEditContent(e.target.value);
+                          e.target.style.height = 'auto';
+                          e.target.style.height = `${e.target.scrollHeight}px`;
+                        }}
+                        onKeyDown={handleKeyDown}
+                        onCompositionStart={() => setIsComposing(true)}
+                        onCompositionEnd={() => setIsComposing(false)}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            if (editingId === block.id) {
+                              saveEditing();
+                            }
+                          }, 150);
+                        }}
+                        className="w-full bg-background border border-input rounded-md px-3 py-2 text-foreground leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                        rows={1}
+                      />
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>Enter: 保存</span>
+                        <span>Esc: キャンセル</span>
                       </div>
-                    ) : (
-                      <button
-                        className="timestamp-badge inline-block mt-2 hover:bg-muted cursor-pointer transition-colors"
-                        onClick={() => startEditingDateTime(block)}
-                        disabled={!editable || isTemporary}
+                    </div>
+                  ) : (
+                    <>
+                      {hasContent && (
+                        <p 
+                          className={`text-foreground leading-relaxed whitespace-pre-wrap ${editable && !isTemporary ? 'cursor-pointer hover:bg-muted/50 -mx-2 -my-1 px-2 py-1 rounded transition-colors' : ''}`}
+                          onClick={() => startEditing(block)}
+                        >
+                          {block.content}
+                        </p>
+                      )}
+
+                      {/* 画像表示 */}
+                      {hasImages && (
+                        <div className={`grid gap-2 ${hasContent ? 'mt-3' : ''} ${block.images!.length === 1 ? 'grid-cols-1 max-w-xs' : block.images!.length === 2 ? 'grid-cols-2 max-w-sm' : 'grid-cols-3 max-w-md'}`}>
+                          {block.images!.map((url, i) => (
+                            <img
+                              key={i}
+                              src={url}
+                              alt=""
+                              className="w-full aspect-square object-cover rounded-md cursor-pointer hover:opacity-80 transition-opacity border border-border"
+                              onClick={() => setModalImage(url)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* タイムスタンプ + 日時編集 */}
+                      {isEditingDateTime ? (
+                        <div className="flex items-center gap-2 mt-2">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
+                                <Calendar className="h-3 w-3 mr-1" />
+                                {editDayKey}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <CalendarComponent
+                                mode="single"
+                                selected={parseTimestamp(`${editDayKey}T00:00:00Z`)}
+                                onSelect={handleDateSelect}
+                                disabled={(date) => date > new Date()}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
+                          <Input
+                            type="time"
+                            value={editTime}
+                            onChange={(e) => setEditTime(e.target.value)}
+                            className="h-7 w-24 text-xs"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => saveEditingDateTime(block.id, block.content)}
+                          >
+                            <Check className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={cancelEditingDateTime}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <button
+                          className="timestamp-badge inline-block mt-2 hover:bg-muted cursor-pointer transition-colors"
+                          onClick={() => startEditingDateTime(block)}
+                          disabled={!editable || isTemporary}
+                        >
+                          {formatTimeJST(block.occurred_at)}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+                {!isEditing && !isTemporary && !isEditingDateTime && (
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {editable && onUpdate && hasContent && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => startEditing(block)}
                       >
-                        {formatTimeJST(block.occurred_at)}
-                      </button>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
                     )}
-                  </>
+                    {showDelete && onDelete && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => onDelete(block.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 )}
-              </div>
-              {!isEditing && !isTemporary && !isEditingDateTime && (
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {editable && onUpdate && (
+                {isEditing && (
+                  <div className="flex items-center gap-1">
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => startEditing(block)}
+                      className="h-8 w-8 text-muted-foreground hover:text-primary"
+                      onClick={saveEditing}
                     >
-                      <Pencil className="h-4 w-4" />
+                      <Check className="h-4 w-4" />
                     </Button>
-                  )}
-                  {showDelete && onDelete && (
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => onDelete(block.id)}
+                      onClick={cancelEditing}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <X className="h-4 w-4" />
                     </Button>
-                  )}
-                </div>
-              )}
-              {isEditing && (
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-primary"
-                    onClick={saveEditing}
-                  >
-                    <Check className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                    onClick={cancelEditing}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+
+      {/* 画像拡大モーダル */}
+      <Dialog open={!!modalImage} onOpenChange={() => setModalImage(null)}>
+        <DialogContent className="max-w-4xl p-2">
+          {modalImage && (
+            <img
+              src={modalImage}
+              alt=""
+              className="w-full h-auto max-h-[80vh] object-contain rounded"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

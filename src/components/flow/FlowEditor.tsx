@@ -56,9 +56,9 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
   }, [loadData]);
 
   /**
-   * ブロック追加（楽観的更新 + 遷移処理）
+   * ブロック追加（楽観的更新 + 遷移処理 + 画像対応）
    */
-  const handleAddBlock = async (content: string, mode: AddBlockMode) => {
+  const handleAddBlock = async (content: string, mode: AddBlockMode, images: string[] = []) => {
     // 楽観的更新: 仮のブロックを即座にUIに追加
     const tempId = `temp-${Date.now()}`;
     const optimisticBlock: Block = {
@@ -66,6 +66,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       entry_id: entry?.id || '',
       user_id: '',
       content,
+      images: [],
       occurred_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
     };
@@ -87,6 +88,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       content,
       selectedDate: date,
       mode,
+      images,
     });
     
     if (savedBlock) {

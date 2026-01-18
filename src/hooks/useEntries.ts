@@ -15,9 +15,10 @@ export interface Block {
   id: string;
   entry_id: string;
   user_id: string;
-  content: string;
-  occurred_at: string;  // ユーザー意味の日時
-  created_at: string;   // 内部用（監査/安定ソート）
+  content: string | null;  // 画像のみの場合はnull
+  images: string[];        // 画像URLの配列（最大5枚）
+  occurred_at: string;     // ユーザー意味の日時
+  created_at: string;      // 内部用（監査/安定ソート）
 }
 
 export interface Entry {
@@ -116,13 +117,14 @@ export function useEntries() {
   }, [user]);
 
   /**
-   * ブロック追加（過去日対応 + "今で追加"モード）
+   * ブロック追加（過去日対応 + "今で追加"モード + 画像対応）
    */
   const addBlockWithDate = useCallback(async ({ 
     content, 
     selectedDate, 
-    mode 
-  }: { content: string; selectedDate: string; mode: AddBlockMode }) => {
+    mode,
+    images = [],
+  }: { content: string; selectedDate: string; mode: AddBlockMode; images?: string[] }) => {
     if (!user) return { block: null, navigateToDate: null };
 
     setLoading(true);
@@ -163,7 +165,8 @@ export function useEntries() {
         .insert({
           entry_id: entry.id,
           user_id: user.id,
-          content,
+          content: content || null,
+          images,
           occurred_at: occurredAt,
         })
         .select()
@@ -286,7 +289,11 @@ export function useEntries() {
     try {
       const { data, error } = await supabase.functions.invoke('format-entries', {
         body: {
-          blocks: blocks.map(b => ({ content: b.content, occurred_at: b.occurred_at })),
+          blocks: blocks.map(b => ({ 
+            content: b.content, 
+            occurred_at: b.occurred_at,
+            images: b.images,
+          })),
           date,
         },
       });
