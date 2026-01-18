@@ -1,5 +1,5 @@
 import { useState, useRef, KeyboardEvent } from 'react';
-import { Loader2, Send, Clock, ImagePlus, X } from 'lucide-react';
+import { Loader2, Send, Clock, ImagePlus, X, Camera } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { AddBlockMode } from '@/hooks/useEntries';
@@ -21,6 +21,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
   const { uploadImages, maxImages } = useImageUpload();
 
@@ -107,9 +108,11 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setPreviewUrls(prev => [...prev, ...newPreviews]);
 
     // input をリセット（同じファイルを再選択可能に）
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    e.target.value = '';
+  };
+
+  const handleCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleImageSelect(e);
   };
 
   const removeImage = (index: number) => {
@@ -178,6 +181,29 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
             >
               <span>
                 <ImagePlus className="h-4 w-4" />
+              </span>
+            </Button>
+          </label>
+          
+          {/* カメラ撮影ボタン */}
+          <label className={`cursor-pointer ${selectedImages.length >= maxImages ? 'opacity-50 cursor-not-allowed' : ''}`}>
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleCameraCapture}
+              disabled={selectedImages.length >= maxImages || isSubmitting}
+            />
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              asChild
+              disabled={selectedImages.length >= maxImages}
+            >
+              <span>
+                <Camera className="h-4 w-4" />
               </span>
             </Button>
           </label>
