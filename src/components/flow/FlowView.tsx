@@ -39,6 +39,7 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
     deleteBlock,
     updateBlock,
     formatEntry,
+    summarizeUrl,
   } = useEntries();
 
   const [entry, setEntry] = useState<Entry | null>(null);
@@ -63,7 +64,16 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
   }, [loadData]);
 
   /**
-   * ブロック追加（楽観的更新 + 遷移処理 + 画像対応 + カテゴリ対応）
+   * URLを抽出するヘルパー
+   */
+  const extractFirstUrl = (text: string): string | null => {
+    const urlRegex = /(https?:\/\/[^\s]+)/i;
+    const match = text.match(urlRegex);
+    return match ? match[1] : null;
+  };
+
+  /**
+   * ブロック追加（楽観的更新 + 遷移処理 + 画像対応 + カテゴリ対応 + 自動サマライズ）
    */
   const handleAddBlock = async (content: string, mode: AddBlockMode, images: string[] = [], category: BlockCategory = 'event') => {
     const tempId = `temp-${Date.now()}`;
@@ -99,6 +109,21 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
         toast.success(`今日（${formatDateJST(new Date().toISOString())}）に追加しました`);
       } else {
         setBlocks(prev => sortBlocksDesc(prev.map(b => b.id === tempId ? savedBlock : b)));
+      }
+
+      // 「あとで読む」カテゴリでURLが含まれている場合は自動サマライズ
+      if (category === 'read_later') {
+        const url = extractFirstUrl(content);
+        if (url) {
+          // バックグラウンドでサマライズ（awaitしない）
+          summarizeUrl(savedBlock.id, url).then(metadata => {
+            if (metadata) {
+              setBlocks(prev => prev.map(b => 
+                b.id === savedBlock.id ? { ...b, url_metadata: metadata } : b
+              ));
+            }
+          });
+        }
       }
     } else {
       setBlocks(prev => prev.filter(b => b.id !== tempId));
