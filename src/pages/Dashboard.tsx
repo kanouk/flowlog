@@ -17,7 +17,7 @@ export default function Dashboard() {
   const { getEntries } = useEntries();
   
   const [entries, setEntries] = useState<Entry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
   const today = getTodayKey();
@@ -32,10 +32,10 @@ export default function Dashboard() {
   useEffect(() => {
     async function loadEntries() {
       if (!user) return;
-      setLoading(true);
+      // 初回ロード時のみローディング表示（再訪問時はバックグラウンドで更新）
       const data = await getEntries();
       setEntries(data);
-      setLoading(false);
+      setInitialLoading(false);
     }
     loadEntries();
   }, [user, getEntries]);
@@ -66,7 +66,8 @@ export default function Dashboard() {
     navigate('/auth');
   };
 
-  if (authLoading || loading) {
+  // 初回ロード時のみフルローディング画面を表示
+  if (authLoading || (initialLoading && entries.length === 0)) {
     return (
       <div className="min-h-screen flow-gradient flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
