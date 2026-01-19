@@ -13,7 +13,7 @@ import { Loader2 } from 'lucide-react';
 import { getTodayKey } from '@/lib/dateUtils';
 import { useSwipeGesture } from '@/hooks/useSwipeGesture';
 import { useIsMobile } from '@/hooks/use-mobile';
-
+import logoImage from '@/assets/logo.png';
 export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -126,7 +126,10 @@ export default function Dashboard() {
               </Sheet>
             )}
             
-            <h1 className="text-xl font-semibold text-gradient">FlowLog</h1>
+            <div className="flex items-center gap-2">
+              <img src={logoImage} alt="FlowLog" className="h-7 w-7" />
+              <h1 className="text-xl font-semibold text-gradient">FlowLog</h1>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
