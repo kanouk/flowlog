@@ -257,25 +257,6 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
           )}
         </div>
         
-        {blocks.length > 0 && (
-          <Button
-            onClick={handleFormat}
-            disabled={formatting}
-            className="gap-2"
-          >
-            {formatting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                整形中...
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4" />
-                整形する
-              </>
-            )}
-          </Button>
-        )}
       </div>
 
       {/* Tabs */}
@@ -298,6 +279,32 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
             selectedDate={date}
             isToday={isToday}
           />
+          
+          {/* 整形ボタン - ログリストの直前に配置 */}
+          {blocks.length > 0 && (
+            <div className="flex justify-end">
+              <Button
+                onClick={handleFormat}
+                disabled={formatting}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+              >
+                {formatting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    整形中...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    整形する
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+          
           <BlockList 
             blocks={blocks} 
             onDelete={handleDeleteBlock}
