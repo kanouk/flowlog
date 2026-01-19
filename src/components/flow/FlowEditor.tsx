@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { Sparkles, Loader2, PenLine, FileText } from 'lucide-react';
+import { Sparkles, Loader2, PenLine, FileText, CalendarDays, Sun } from 'lucide-react';
 import { FlowInput } from '@/components/flow/FlowInput';
 import { BlockList } from '@/components/flow/BlockList';
 import { FormattedView } from '@/components/flow/FormattedView';
@@ -245,24 +245,27 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className={`flex items-center justify-between p-4 rounded-lg ${!isToday ? 'bg-muted/30' : ''}`}>
-        <div>
+      <div className={`flex items-center gap-4 p-5 rounded-xl border ${isToday ? 'bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20' : 'bg-muted/30 border-border'}`}>
+        <div className={`flex items-center justify-center w-12 h-12 rounded-xl ${isToday ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>
+          {isToday ? <Sun className="h-6 w-6" /> : <CalendarDays className="h-6 w-6" />}
+        </div>
+        <div className="flex-1">
           <div className="flex items-center gap-2">
             <h2 className="text-2xl font-semibold text-foreground">
               {isToday ? '今日のログ' : formattedDate}
             </h2>
             {isToday ? (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/15 text-primary">
                 今日
               </span>
             ) : (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground">
                 過去
               </span>
             )}
           </div>
           {isToday && (
-            <p className="text-muted-foreground mt-1">
+            <p className="text-muted-foreground mt-1 text-sm">
               {formattedDate}
             </p>
           )}
