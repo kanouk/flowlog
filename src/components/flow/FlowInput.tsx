@@ -170,7 +170,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const canSubmit = (content.trim().length > 0 || selectedImages.length > 0) && !disabled && !isSubmitting;
 
   return (
-    <div className={`relative bg-card border-2 rounded-2xl overflow-hidden ${currentConfig.borderColor} ${!isToday ? 'bg-muted/50' : ''}`}
+    <div className={`relative bg-card rounded-2xl overflow-hidden ${!isToday ? 'bg-muted/50' : ''}`}
          style={{ boxShadow: '0 4px 20px -4px rgba(0,0,0,0.1)' }}>
       {/* カテゴリカラーのアクセントストライプ */}
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${currentConfig.accentColor}`} />
@@ -293,12 +293,12 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
           )}
           
-          
           {/* 常に表示: メインボタン */}
           <Button 
             size="sm"
             onClick={() => handleSubmitWithMode('toSelectedDate')}
             disabled={!canSubmit}
+            className={`${currentConfig.buttonColor} disabled:opacity-50`}
           >
             <Send className="h-4 w-4 mr-1" />
             {isToday ? '保存' : 'この日に追加'}

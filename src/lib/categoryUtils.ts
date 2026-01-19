@@ -8,6 +8,7 @@ export interface CategoryConfig {
   bgColor: string;
   borderColor: string;
   accentColor: string;
+  buttonColor: string;
   icon: LucideIcon;
 }
 
@@ -18,6 +19,7 @@ export const CATEGORY_CONFIG: Record<BlockCategory, CategoryConfig> = {
     bgColor: 'bg-blue-100 dark:bg-blue-900/30',
     borderColor: 'border-blue-300 dark:border-blue-700',
     accentColor: 'bg-blue-500',
+    buttonColor: 'bg-blue-500 hover:bg-blue-600 text-white',
     icon: CalendarDays,
   },
   thought: { 
@@ -26,6 +28,7 @@ export const CATEGORY_CONFIG: Record<BlockCategory, CategoryConfig> = {
     bgColor: 'bg-purple-100 dark:bg-purple-900/30',
     borderColor: 'border-purple-300 dark:border-purple-700',
     accentColor: 'bg-purple-500',
+    buttonColor: 'bg-purple-500 hover:bg-purple-600 text-white',
     icon: Brain,
   },
   task: { 
@@ -34,6 +37,7 @@ export const CATEGORY_CONFIG: Record<BlockCategory, CategoryConfig> = {
     bgColor: 'bg-orange-100 dark:bg-orange-900/30',
     borderColor: 'border-orange-300 dark:border-orange-700',
     accentColor: 'bg-orange-500',
+    buttonColor: 'bg-orange-500 hover:bg-orange-600 text-white',
     icon: CheckSquare,
   },
   read_later: { 
@@ -42,6 +46,7 @@ export const CATEGORY_CONFIG: Record<BlockCategory, CategoryConfig> = {
     bgColor: 'bg-green-100 dark:bg-green-900/30',
     borderColor: 'border-green-300 dark:border-green-700',
     accentColor: 'bg-green-500',
+    buttonColor: 'bg-green-500 hover:bg-green-600 text-white',
     icon: Bookmark,
   },
 };
