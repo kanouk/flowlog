@@ -289,6 +289,23 @@
   animation: thumbnail-enter 0.3s ease-out forwards;
 }
 
+/* Calendar entry indicator */
+.has-entry::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: hsl(var(--primary));
+}
+
+.has-entry[aria-selected="true"]::after {
+  background-color: hsl(var(--primary-foreground));
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

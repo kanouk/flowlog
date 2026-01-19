@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEntries, Entry } from '@/hooks/useEntries';
 import { FlowView } from '@/components/flow/FlowView';
 import { StockView } from '@/components/stock/StockView';
-import { DateList } from '@/components/flow/DateList';
+import { DateSelector } from '@/components/flow/DateSelector';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -116,7 +116,7 @@ export default function Dashboard() {
                     <SheetTitle className="text-left">ログ一覧</SheetTitle>
                   </SheetHeader>
                   <div className="mt-6">
-                    <DateList 
+                    <DateSelector 
                       entries={entries} 
                       onSelect={handleDateSelect}
                       selectedDate={selectedDate}
@@ -182,7 +182,7 @@ export default function Dashboard() {
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm font-medium">ログ一覧</span>
                   </div>
-                  <DateList 
+                  <DateSelector 
                     entries={entries} 
                     onSelect={handleDateSelect}
                     selectedDate={selectedDate}
