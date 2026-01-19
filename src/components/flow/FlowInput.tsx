@@ -208,15 +208,19 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
         rows={4}
       />
 
-      {/* 画像プレビュー */}
+{/* 画像プレビュー */}
       {previewUrls.length > 0 && (
         <div className="flex gap-2 mt-4 flex-wrap">
           {previewUrls.map((url, i) => (
-            <div key={i} className="relative w-20 h-20 group">
+            <div 
+              key={url} 
+              className="relative w-20 h-20 group animate-thumbnail-enter"
+              style={{ animationDelay: `${i * 50}ms` }}
+            >
               <img 
                 src={url} 
                 alt="" 
-                className="w-full h-full object-cover rounded-md border border-border"
+                className="w-full h-full object-cover rounded-md border border-border shadow-sm"
               />
               <button
                 type="button"
