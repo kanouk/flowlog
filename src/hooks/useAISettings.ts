@@ -51,6 +51,7 @@ export interface AISettings {
   selected_provider: AIProvider;
   selected_model: string;
   custom_system_prompt: string | null;
+  custom_summarize_prompt: string | null;
   has_openai_key: boolean;
   has_anthropic_key: boolean;
   has_google_key: boolean;
@@ -70,10 +71,20 @@ export const DEFAULT_SYSTEM_PROMPT = `あなたは思考ログを整形するア
 
 出力はMarkdown形式で返してください。`;
 
+export const DEFAULT_SUMMARIZE_PROMPT = `あなたはウェブページの内容を簡潔にまとめるアシスタントです。
+以下のルールに従ってください：
+1. ページの主要な内容を日本語で3-5行にまとめる
+2. 重要なポイントを簡潔に整理する
+3. 専門用語は必要に応じて簡潔に説明を加える
+4. 客観的な要約を心がける
+5. 箇条書きは使わず、自然な文章でまとめる
+6. マークダウン記法は使わず、プレーンテキストで出力する`;
+
 const DEFAULT_SETTINGS: AISettings = {
   selected_provider: 'lovable',
   selected_model: 'google/gemini-2.5-flash',
   custom_system_prompt: null,
+  custom_summarize_prompt: null,
   has_openai_key: false,
   has_anthropic_key: false,
   has_google_key: false,
@@ -84,6 +95,7 @@ export interface AISettingsUpdate {
   selected_provider?: AIProvider;
   selected_model?: string;
   custom_system_prompt?: string | null;
+  custom_summarize_prompt?: string | null;
   openai_api_key?: string | null;
   anthropic_api_key?: string | null;
   google_api_key?: string | null;
@@ -110,15 +122,16 @@ export function useAISettings() {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const row = data[0];
+        const row = data[0] as Record<string, unknown>;
         setSettings({
-          id: row.id,
+          id: row.id as string,
           selected_provider: row.selected_provider as AIProvider,
-          selected_model: row.selected_model,
-          custom_system_prompt: row.custom_system_prompt,
-          has_openai_key: row.has_openai_key,
-          has_anthropic_key: row.has_anthropic_key,
-          has_google_key: row.has_google_key,
+          selected_model: row.selected_model as string,
+          custom_system_prompt: (row.custom_system_prompt as string) || null,
+          custom_summarize_prompt: (row.custom_summarize_prompt as string) || null,
+          has_openai_key: row.has_openai_key as boolean,
+          has_anthropic_key: row.has_anthropic_key as boolean,
+          has_google_key: row.has_google_key as boolean,
         });
       } else {
         setSettings(DEFAULT_SETTINGS);
@@ -149,6 +162,7 @@ export function useAISettings() {
         selected_provider: string;
         selected_model: string;
         custom_system_prompt: string | null;
+        custom_summarize_prompt: string | null;
         openai_api_key?: string | null;
         anthropic_api_key?: string | null;
         google_api_key?: string | null;
@@ -159,6 +173,7 @@ export function useAISettings() {
         selected_provider: newSettings.selected_provider ?? settings.selected_provider,
         selected_model: newSettings.selected_model ?? settings.selected_model,
         custom_system_prompt: newSettings.custom_system_prompt ?? settings.custom_system_prompt ?? null,
+        custom_summarize_prompt: newSettings.custom_summarize_prompt ?? settings.custom_summarize_prompt ?? null,
       };
 
       // Only include API keys if they were explicitly set (not undefined)

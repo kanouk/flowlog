@@ -16,8 +16,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { useAISettings, AIProvider, DEFAULT_SYSTEM_PROMPT } from '@/hooks/useAISettings';
-import { Bot, Key, Eye, EyeOff, Loader2, Check, Sparkles, Zap, XCircle, CheckCircle, ChevronDown, RotateCcw, FileText, Trash2 } from 'lucide-react';
+import { useAISettings, AIProvider, DEFAULT_SYSTEM_PROMPT, DEFAULT_SUMMARIZE_PROMPT } from '@/hooks/useAISettings';
+import { Bot, Key, Eye, EyeOff, Loader2, Check, Sparkles, Zap, XCircle, CheckCircle, ChevronDown, RotateCcw, FileText, Trash2, Bookmark } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -45,11 +45,13 @@ export function AISettingsSection() {
   const [anthropicKey, setAnthropicKey] = useState('');
   const [googleKey, setGoogleKey] = useState('');
   const [customPrompt, setCustomPrompt] = useState('');
+  const [customSummarizePrompt, setCustomSummarizePrompt] = useState('');
   const [showOpenaiKey, setShowOpenaiKey] = useState(false);
   const [showAnthropicKey, setShowAnthropicKey] = useState(false);
   const [showGoogleKey, setShowGoogleKey] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [promptOpen, setPromptOpen] = useState(false);
+  const [summarizePromptOpen, setSummarizePromptOpen] = useState(false);
   
   // Connection test state
   const [testingProvider, setTestingProvider] = useState<AIProvider | null>(null);
@@ -60,6 +62,7 @@ export function AISettingsSection() {
       setSelectedProvider(settings.selected_provider);
       setSelectedModel(settings.selected_model);
       setCustomPrompt(settings.custom_system_prompt || '');
+      setCustomSummarizePrompt(settings.custom_summarize_prompt || '');
       // API keys are never fetched - always start empty
       setOpenaiKey('');
       setAnthropicKey('');
@@ -72,10 +75,11 @@ export function AISettingsSection() {
     const providerChanged = selectedProvider !== settings.selected_provider;
     const modelChanged = selectedModel !== settings.selected_model;
     const promptChanged = customPrompt !== (settings.custom_system_prompt || '');
+    const summarizePromptChanged = customSummarizePrompt !== (settings.custom_summarize_prompt || '');
     const hasNewApiKey = openaiKey !== '' || anthropicKey !== '' || googleKey !== '';
     
-    setHasChanges(providerChanged || modelChanged || promptChanged || hasNewApiKey);
-  }, [selectedProvider, selectedModel, customPrompt, openaiKey, anthropicKey, googleKey, settings]);
+    setHasChanges(providerChanged || modelChanged || promptChanged || summarizePromptChanged || hasNewApiKey);
+  }, [selectedProvider, selectedModel, customPrompt, customSummarizePrompt, openaiKey, anthropicKey, googleKey, settings]);
 
   // Clear test result when API key changes
   useEffect(() => {
@@ -152,6 +156,7 @@ export function AISettingsSection() {
       selected_provider: selectedProvider,
       selected_model: selectedModel,
       custom_system_prompt: customPrompt || null,
+      custom_summarize_prompt: customSummarizePrompt || null,
     };
 
     // Only include API keys if user entered new values
@@ -396,6 +401,52 @@ export function AISettingsSection() {
                 toast.success('デフォルトプロンプトに戻しました');
               }}
               disabled={!customPrompt}
+              className="gap-2"
+            >
+              <RotateCcw className="h-3 w-3" />
+              デフォルトに戻す
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              空にするとデフォルトを使用
+            </p>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Custom Summarize Prompt Section */}
+      <Collapsible open={summarizePromptOpen} onOpenChange={setSummarizePromptOpen}>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" className="w-full justify-between p-0 h-auto hover:bg-transparent">
+            <span className="flex items-center gap-2 text-sm font-medium">
+              <Bookmark className="h-4 w-4 text-primary" />
+              要約プロンプト
+            </span>
+            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${summarizePromptOpen ? 'rotate-180' : ''}`} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-4 space-y-3">
+          <div className="space-y-2">
+            <Label htmlFor="custom-summarize-prompt" className="text-sm text-muted-foreground">
+              「あとで読む」のURL要約に使用するプロンプトをカスタマイズできます
+            </Label>
+            <Textarea
+              id="custom-summarize-prompt"
+              value={customSummarizePrompt || DEFAULT_SUMMARIZE_PROMPT}
+              onChange={(e) => setCustomSummarizePrompt(e.target.value)}
+              placeholder={DEFAULT_SUMMARIZE_PROMPT}
+              className="min-h-[150px] text-sm font-mono"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCustomSummarizePrompt('');
+                toast.success('デフォルトプロンプトに戻しました');
+              }}
+              disabled={!customSummarizePrompt}
               className="gap-2"
             >
               <RotateCcw className="h-3 w-3" />
