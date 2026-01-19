@@ -133,20 +133,20 @@ export function DateSelector({ entries, onSelect, selectedDate }: DateSelectorPr
             </p>
           </div>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-1 overflow-hidden">
             {entries.map((entry) => (
               <button
                 key={entry.id}
                 onClick={() => onSelect(entry.date)}
                 className={`
-                  w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all
+                  w-full max-w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all overflow-hidden
                   ${selectedDate === entry.date
                     ? 'bg-primary text-primary-foreground'
                     : 'hover:bg-muted'
                   }
                 `}
               >
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 overflow-hidden">
                   <p className="font-medium truncate">
                     {formatDateLabel(entry.date)}
                   </p>
