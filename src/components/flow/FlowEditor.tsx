@@ -245,18 +245,28 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className={`flex items-center justify-between p-4 rounded-lg ${!isToday ? 'bg-muted/30' : ''}`}>
         <div>
-          <h2 className="text-2xl font-semibold text-foreground">
-            {isToday ? '今日のログ' : formattedDate}
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-semibold text-foreground">
+              {isToday ? '今日のログ' : formattedDate}
+            </h2>
+            {isToday ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                今日
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
+                過去
+              </span>
+            )}
+          </div>
           {isToday && (
             <p className="text-muted-foreground mt-1">
               {formattedDate}
             </p>
           )}
         </div>
-        
       </div>
 
       {/* Tabs */}
@@ -280,9 +290,13 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
             isToday={isToday}
           />
           
-          {/* 整形ボタン - ログリストの直前に配置 */}
-          {blocks.length > 0 && (
-            <div className="flex justify-end">
+          {/* セクションヘッダー + 整形ボタン */}
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-muted-foreground">
+              {isToday ? '今日のログ' : 'この日のログ'}
+            </h3>
+            
+            {blocks.length > 0 && (
               <Button
                 onClick={handleFormat}
                 disabled={formatting}
@@ -302,8 +316,8 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
                   </>
                 )}
               </Button>
-            </div>
-          )}
+            )}
+          </div>
           
           <BlockList 
             blocks={blocks} 
