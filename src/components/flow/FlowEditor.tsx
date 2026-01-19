@@ -180,7 +180,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       date
     );
 
-    if (!result.success) {
+    if (result.success === false) {
       toast.error(result.reason);
       setBlocks(originalBlocks);
       return;
@@ -189,14 +189,14 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     const newOccurredAt = result.occurredAt;
 
     // 永続化
-    const updated = await updateBlock(activeId, { occurred_at: result.occurredAt });
+    const updated = await updateBlock(activeId, { occurred_at: newOccurredAt });
     
     if (!updated) {
       setBlocks(originalBlocks);
     } else {
       // 成功: occurred_at を更新して再ソート
       setBlocks(prev => sortBlocksDesc(
-        prev.map(b => b.id === activeId ? { ...b, occurred_at: result.occurredAt } : b)
+        prev.map(b => b.id === activeId ? { ...b, occurred_at: newOccurredAt } : b)
       ));
     }
   };
