@@ -9,6 +9,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { LogOut, Calendar, Settings, Menu, ChevronLeft } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import { getTodayKey } from '@/lib/dateUtils';
+import { useSwipeGesture } from '@/hooks/useSwipeGesture';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -19,9 +21,25 @@ export default function Dashboard() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isMobile = useIsMobile();
   
   const today = getTodayKey();
   const selectedDate = searchParams.get('date') || today;
+
+  // モバイルでスワイプジェスチャーによるサイドメニュー開閉
+  useSwipeGesture({
+    onSwipeRight: () => {
+      if (isMobile && !sidebarOpen) {
+        setSidebarOpen(true);
+      }
+    },
+    onSwipeLeft: () => {
+      if (isMobile && sidebarOpen) {
+        setSidebarOpen(false);
+      }
+    },
+    minSwipeDistance: 50,
+  });
 
   useEffect(() => {
     if (!authLoading && !user) {
