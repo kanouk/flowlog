@@ -12,6 +12,28 @@
 - **occurred_at**: 編集可能（未来日時は禁止、+5分まで許容）
   - 日付が変わった場合、ブロックは自動的に該当日に移動
   - 元の日のentryが空になった場合、自動削除
+- **category**: 4種類（event, thought, task, read_later）
+  - FlowInputで選択可能、直前の選択をlocalStorageで保持
+  - BlockListでPopoverから変更可能
+- **is_done / done_at**: taskカテゴリのみ有効
+  - チェックボックスで完了/未完了を切り替え
+  - done_atは完了時刻を記録
+
+## 表示仕様
+
+### フロー（Flow）
+- **ソート順**: occurred_at 降順（新→古）
+- **D&D並び替え**: ドラッグで並び替え可能
+  - occurred_at を前後ブロックの中間時刻に更新
+  - 日付境界を跨がない（selectedDateのJST範囲内にクランプ）
+
+### ストック（Stock）
+- **タブ**: 日記 / タスク / あとで読む
+  - 日記: event + thought
+  - タスク: task（未完了→完了の順、内部はoccurred_at昇順）
+  - あとで読む: read_later
+- **ソート順**: occurred_at 昇順（古→新）
+- **AI整形版**: 日記タブでのみ表示
 
 ## 技術仕様
 
@@ -19,6 +41,7 @@
 - **TZ処理**: date-fns-tz の formatInTimeZone / fromZonedTime に統一
 - **occurred_at パース**: parseISO() を使用（new Date(str) は使わない）
 - **occurred_at 生成**: createOccurredAt(dayKey, time) を使用（Date直操作禁止）
+  - **例外**: D&Dの中間時刻計算（calculateMiddleOccurredAt）のみ UTCミリ秒→ISO直接生成を許可
 - **未来日時禁止**: UI + DBトリガーで二重担保
 - **空entry削除**: クライアント側実装（将来的にDBトリガー化を検討）
 - **Edge Function**: parseISO + formatInTimeZone に統一

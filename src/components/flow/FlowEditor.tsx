@@ -5,15 +5,28 @@ import { Sparkles, Loader2, PenLine, FileText } from 'lucide-react';
 import { FlowInput } from '@/components/flow/FlowInput';
 import { BlockList } from '@/components/flow/BlockList';
 import { FormattedView } from '@/components/flow/FormattedView';
-import { useEntries, Block, Entry, AddBlockMode } from '@/hooks/useEntries';
+import { useEntries, Block, Entry, AddBlockMode, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDateJST } from '@/lib/dateUtils';
+import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDateJST, calculateMiddleOccurredAt } from '@/lib/dateUtils';
+import { BlockCategory } from '@/lib/categoryUtils';
+import { arrayMove } from '@dnd-kit/sortable';
 
 interface FlowEditorProps {
   date?: string;
   onNavigateToDate?: (date: string) => void;
+}
+
+/**
+ * ブロックを降順にソート（occurred_at, created_at）
+ */
+function sortBlocksDesc(blocks: Block[]): Block[] {
+  return [...blocks].sort((a, b) => {
+    const diff = parseTimestamp(b.occurred_at).getTime() - parseTimestamp(a.occurred_at).getTime();
+    if (diff !== 0) return diff;
+    return parseTimestamp(b.created_at).getTime() - parseTimestamp(a.created_at).getTime();
+  });
 }
 
 export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps) {
@@ -27,7 +40,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     getEntry,
     addBlockWithDate,
     deleteBlock,
-    updateBlockWithOccurredAt,
+    updateBlock,
     formatEntry,
   } = useEntries();
 
@@ -43,7 +56,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       const entryData = await getEntry(date);
       setEntry(entryData);
       
-      // blocks は occurred_at 範囲で取得
+      // blocks は occurred_at 範囲で取得（降順で返ってくる）
       const blocksData = await getBlocksByDate(date);
       setBlocks(blocksData);
     } finally {
@@ -56,9 +69,9 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
   }, [loadData]);
 
   /**
-   * ブロック追加（楽観的更新 + 遷移処理 + 画像対応）
+   * ブロック追加（楽観的更新 + 遷移処理 + 画像対応 + カテゴリ対応）
    */
-  const handleAddBlock = async (content: string, mode: AddBlockMode, images: string[] = []) => {
+  const handleAddBlock = async (content: string, mode: AddBlockMode, images: string[] = [], category: BlockCategory = 'event') => {
     // 楽観的更新: 仮のブロックを即座にUIに追加
     const tempId = `temp-${Date.now()}`;
     const optimisticBlock: Block = {
@@ -69,18 +82,14 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       images: [],
       occurred_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
+      category,
+      is_done: false,
+      done_at: null,
     };
     
-    // toNowモードでなければローカルに追加
+    // toNowモードでなければローカルに追加（降順ソート）
     if (mode !== 'toNow' || isToday) {
-      setBlocks(prev => {
-        const updated = [...prev, optimisticBlock];
-        return updated.sort((a, b) => {
-          const occurredDiff = parseTimestamp(a.occurred_at).getTime() - parseTimestamp(b.occurred_at).getTime();
-          if (occurredDiff !== 0) return occurredDiff;
-          return parseTimestamp(a.created_at).getTime() - parseTimestamp(b.created_at).getTime();
-        });
-      });
+      setBlocks(prev => sortBlocksDesc([...prev, optimisticBlock]));
     }
     
     // バックエンドに非同期で保存
@@ -89,6 +98,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       selectedDate: date,
       mode,
       images,
+      category,
     });
     
     if (savedBlock) {
@@ -97,8 +107,8 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
         onNavigateToDate?.(navigateToDate);
         toast.success(`今日（${formatDateJST(new Date().toISOString())}）に追加しました`);
       } else {
-        // 成功: 仮IDを本物のIDに置換
-        setBlocks(prev => prev.map(b => b.id === tempId ? savedBlock : b));
+        // 成功: 仮IDを本物のIDに置換して再ソート
+        setBlocks(prev => sortBlocksDesc(prev.map(b => b.id === tempId ? savedBlock : b)));
       }
     } else {
       // 失敗: 仮ブロックを削除してロールバック
@@ -117,28 +127,77 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
   };
 
   /**
-   * ブロック更新（content + occurred_at）
+   * ブロック更新（汎用：content, occurred_at, category, is_done, done_at）
    */
-  const handleUpdateBlock = async (blockId: string, content: string, newOccurredAt?: string) => {
+  const handleUpdateBlock = async (blockId: string, updates: BlockUpdatePayload) => {
     // 楽観的更新: 即座にUIを更新
     const originalBlocks = [...blocks];
     setBlocks(prev => prev.map(b => 
-      b.id === blockId ? { ...b, content, ...(newOccurredAt && { occurred_at: newOccurredAt }) } : b
+      b.id === blockId ? { ...b, ...updates } : b
     ));
     
     // バックエンドに更新
-    const updated = await updateBlockWithOccurredAt(blockId, content, newOccurredAt);
+    const updated = await updateBlock(blockId, updates);
     
     if (!updated) {
       // 失敗時はロールバック
       setBlocks(originalBlocks);
-    } else if (newOccurredAt) {
+    } else if (updates.occurred_at) {
       // occurred_at が変わった場合、dayKey が変わっていたらブロックを除去
-      const newDayKey = getOccurredAtDayKey(newOccurredAt);
+      const newDayKey = getOccurredAtDayKey(updates.occurred_at);
       if (newDayKey !== date) {
         setBlocks(prev => prev.filter(b => b.id !== blockId));
-        toast.success(`${formatDateJST(newOccurredAt)}に移動しました`);
+        toast.success(`${formatDateJST(updates.occurred_at)}に移動しました`);
+      } else {
+        // 同じ日内なら再ソート
+        setBlocks(prev => sortBlocksDesc(prev));
       }
+    }
+  };
+
+  /**
+   * D&D並び替え（責務集約: 並び替え計算・楽観更新・永続化・失敗ロールバック）
+   */
+  const handleDragEnd = async (activeId: string, overId: string) => {
+    const oldIndex = blocks.findIndex(b => b.id === activeId);
+    const newIndex = blocks.findIndex(b => b.id === overId);
+    
+    if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+
+    // 楽観的並び替え
+    const originalBlocks = [...blocks];
+    const newBlocks = arrayMove(blocks, oldIndex, newIndex);
+    setBlocks(newBlocks);
+
+    // 前後ブロック取得（降順なので prev が新しい、next が古い）
+    const prevBlock = newIndex > 0 ? newBlocks[newIndex - 1] : null;
+    const nextBlock = newIndex < newBlocks.length - 1 ? newBlocks[newIndex + 1] : null;
+
+    // 中間時刻計算（日付クランプ付き）
+    const result = calculateMiddleOccurredAt(
+      prevBlock?.occurred_at || null,
+      nextBlock?.occurred_at || null,
+      date
+    );
+
+    if (!result.success) {
+      toast.error(result.reason);
+      setBlocks(originalBlocks);
+      return;
+    }
+
+    const newOccurredAt = result.occurredAt;
+
+    // 永続化
+    const updated = await updateBlock(activeId, { occurred_at: result.occurredAt });
+    
+    if (!updated) {
+      setBlocks(originalBlocks);
+    } else {
+      // 成功: occurred_at を更新して再ソート
+      setBlocks(prev => sortBlocksDesc(
+        prev.map(b => b.id === activeId ? { ...b, occurred_at: result.occurredAt } : b)
+      ));
     }
   };
 
@@ -243,6 +302,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
             blocks={blocks} 
             onDelete={handleDeleteBlock}
             onUpdate={handleUpdateBlock}
+            onDragEnd={handleDragEnd}
             showDelete={true}
             editable={true}
             selectedDate={date}
@@ -250,7 +310,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
         </TabsContent>
 
         <TabsContent value="stock" className="mt-0">
-          {entry && <FormattedView entry={entry} />}
+          <FormattedView entry={entry} blocks={blocks} onUpdate={handleUpdateBlock} />
         </TabsContent>
       </Tabs>
     </div>
