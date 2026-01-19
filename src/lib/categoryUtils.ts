@@ -6,6 +6,8 @@ export interface CategoryConfig {
   label: string;
   color: string;
   bgColor: string;
+  borderColor: string;
+  accentColor: string;
   icon: LucideIcon;
 }
 
@@ -14,24 +16,32 @@ export const CATEGORY_CONFIG: Record<BlockCategory, CategoryConfig> = {
     label: '出来事', 
     color: 'text-blue-600 dark:text-blue-400', 
     bgColor: 'bg-blue-100 dark:bg-blue-900/30',
+    borderColor: 'border-blue-300 dark:border-blue-700',
+    accentColor: 'bg-blue-500',
     icon: CalendarDays,
   },
   thought: { 
     label: '思ったこと', 
     color: 'text-purple-600 dark:text-purple-400', 
     bgColor: 'bg-purple-100 dark:bg-purple-900/30',
+    borderColor: 'border-purple-300 dark:border-purple-700',
+    accentColor: 'bg-purple-500',
     icon: Brain,
   },
   task: { 
     label: 'タスク', 
     color: 'text-orange-600 dark:text-orange-400', 
     bgColor: 'bg-orange-100 dark:bg-orange-900/30',
+    borderColor: 'border-orange-300 dark:border-orange-700',
+    accentColor: 'bg-orange-500',
     icon: CheckSquare,
   },
   read_later: { 
     label: 'あとで読む', 
     color: 'text-green-600 dark:text-green-400', 
     bgColor: 'bg-green-100 dark:bg-green-900/30',
+    borderColor: 'border-green-300 dark:border-green-700',
+    accentColor: 'bg-green-500',
     icon: Bookmark,
   },
 };
