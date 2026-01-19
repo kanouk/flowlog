@@ -170,7 +170,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   return (
     <div className="block-card p-6 relative">
       {/* カテゴリ選択チップ */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="flex gap-2 mb-4">
         {CATEGORIES.map((cat) => {
           const config = CATEGORY_CONFIG[cat];
           const Icon = config.icon;
@@ -181,14 +181,14 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
               key={cat}
               type="button"
               onClick={() => handleCategoryChange(cat)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+              className={`inline-flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
                 isSelected 
                   ? `${config.bgColor} ${config.color} ring-2 ring-offset-1 ring-current`
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
               <Icon className="h-3.5 w-3.5" />
-              {config.label}
+              <span className="hidden sm:inline">{config.label}</span>
             </button>
           );
         })}
