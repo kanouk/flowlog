@@ -10,15 +10,19 @@ import {
   getOccurredAtDayKey,
   isFutureDate,
 } from '@/lib/dateUtils';
+import type { BlockCategory } from '@/lib/categoryUtils';
 
 export interface Block {
   id: string;
   entry_id: string;
   user_id: string;
-  content: string | null;  // 画像のみの場合はnull
-  images: string[];        // 画像URLの配列（最大5枚）
-  occurred_at: string;     // ユーザー意味の日時
-  created_at: string;      // 内部用（監査/安定ソート）
+  content: string | null;
+  images: string[];
+  occurred_at: string;
+  created_at: string;
+  category: BlockCategory;
+  is_done: boolean;
+  done_at: string | null;
 }
 
 export interface Entry {
@@ -32,6 +36,14 @@ export interface Entry {
 }
 
 export type AddBlockMode = 'toSelectedDate' | 'toNow';
+
+export interface BlockUpdatePayload {
+  content?: string;
+  occurred_at?: string;
+  category?: BlockCategory;
+  is_done?: boolean;
+  done_at?: string | null;
+}
 
 export function useEntries() {
   const { user, session } = useAuth();
@@ -94,7 +106,7 @@ export function useEntries() {
   }, [user]);
 
   /**
-   * 指定日付のブロックを occurred_at 範囲で取得
+   * 指定日付のブロックを occurred_at 範囲で取得（降順）
    */
   const getBlocksByDate = useCallback(async (selectedDate: string) => {
     if (!user) return [];
@@ -106,8 +118,8 @@ export function useEntries() {
       .eq('user_id', user.id)
       .gte('occurred_at', start)
       .lt('occurred_at', end)
-      .order('occurred_at', { ascending: true })
-      .order('created_at', { ascending: true });
+      .order('occurred_at', { ascending: false })
+      .order('created_at', { ascending: false });
     
     if (error) {
       console.error('Error fetching blocks:', error);
@@ -117,14 +129,21 @@ export function useEntries() {
   }, [user]);
 
   /**
-   * ブロック追加（過去日対応 + "今で追加"モード + 画像対応）
+   * ブロック追加（過去日対応 + "今で追加"モード + 画像対応 + カテゴリ対応）
    */
   const addBlockWithDate = useCallback(async ({ 
     content, 
     selectedDate, 
     mode,
     images = [],
-  }: { content: string; selectedDate: string; mode: AddBlockMode; images?: string[] }) => {
+    category = 'event',
+  }: { 
+    content: string; 
+    selectedDate: string; 
+    mode: AddBlockMode; 
+    images?: string[];
+    category?: BlockCategory;
+  }) => {
     if (!user) return { block: null, navigateToDate: null };
 
     setLoading(true);
@@ -168,6 +187,7 @@ export function useEntries() {
           content: content || null,
           images,
           occurred_at: occurredAt,
+          category,
         })
         .select()
         .single();
@@ -187,16 +207,15 @@ export function useEntries() {
   }, [user, getOrCreateEntryForDate]);
 
   /**
-   * ブロック更新（content + occurred_at）
+   * ブロック更新（汎用：content, occurred_at, category, is_done, done_at）
    */
-  const updateBlockWithOccurredAt = useCallback(async (
+  const updateBlock = useCallback(async (
     blockId: string, 
-    content: string, 
-    newOccurredAt?: string
+    updates: BlockUpdatePayload
   ) => {
     if (!user) return null;
 
-    if (newOccurredAt && isFutureDate(newOccurredAt)) {
+    if (updates.occurred_at && isFutureDate(updates.occurred_at)) {
       toast.error('未来の日時は指定できません');
       return null;
     }
@@ -210,18 +229,27 @@ export function useEntries() {
       
       const oldEntryId = currentBlock?.entry_id;
       
-      let updateData: { content: string; occurred_at?: string; entry_id?: string } = { content };
+      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'is_done' | 'done_at'>> = {};
       
-      if (newOccurredAt) {
-        const newDayKey = getOccurredAtDayKey(newOccurredAt);
+      if (updates.content !== undefined) {
+        updateData.content = updates.content;
+      }
+      if (updates.category !== undefined) {
+        updateData.category = updates.category;
+      }
+      if (updates.is_done !== undefined) {
+        updateData.is_done = updates.is_done;
+      }
+      if (updates.done_at !== undefined) {
+        updateData.done_at = updates.done_at;
+      }
+      if (updates.occurred_at) {
+        const newDayKey = getOccurredAtDayKey(updates.occurred_at);
         const entry = await getOrCreateEntryForDate(newDayKey);
         if (!entry) throw new Error('Failed to get/create entry');
         
-        updateData = {
-          content,
-          occurred_at: newOccurredAt,
-          entry_id: entry.id,
-        };
+        updateData.occurred_at = updates.occurred_at;
+        updateData.entry_id = entry.id;
       }
 
       const { data, error } = await supabase
@@ -233,14 +261,15 @@ export function useEntries() {
 
       if (error) throw error;
       
-      if (oldEntryId && newOccurredAt) {
+      if (oldEntryId && updates.occurred_at) {
         await cleanupEmptyEntry(oldEntryId);
       }
       
       return data as Block;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error updating block:', error);
-      if (error.message?.includes('future')) {
+      const errMsg = error instanceof Error ? error.message : '';
+      if (errMsg.includes('future') || (error as { code?: string })?.code === '23514') {
         toast.error('未来の日時は指定できません');
       } else {
         toast.error('ブロックの更新に失敗しました');
@@ -248,6 +277,17 @@ export function useEntries() {
       return null;
     }
   }, [user, getOrCreateEntryForDate, cleanupEmptyEntry]);
+
+  /**
+   * ブロック更新（後方互換: content + occurred_at）
+   */
+  const updateBlockWithOccurredAt = useCallback(async (
+    blockId: string, 
+    content: string, 
+    newOccurredAt?: string
+  ) => {
+    return updateBlock(blockId, { content, occurred_at: newOccurredAt });
+  }, [updateBlock]);
 
   /**
    * ブロック削除（空entry削除対応）
@@ -293,6 +333,8 @@ export function useEntries() {
             content: b.content, 
             occurred_at: b.occurred_at,
             images: b.images,
+            category: b.category,
+            is_done: b.is_done,
           })),
           date,
         },
@@ -312,11 +354,12 @@ export function useEntries() {
 
       toast.success('整形が完了しました');
       return data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error formatting entry:', error);
-      if (error.message?.includes('429')) {
+      const errMsg = error instanceof Error ? error.message : '';
+      if (errMsg.includes('429')) {
         toast.error('レート制限に達しました。しばらくしてから再試行してください。');
-      } else if (error.message?.includes('402')) {
+      } else if (errMsg.includes('402')) {
         toast.error('クレジットが不足しています。');
       } else {
         toast.error('整形に失敗しました');
@@ -372,6 +415,7 @@ export function useEntries() {
     getBlocksByDate,
     getOrCreateEntryForDate,
     addBlockWithDate,
+    updateBlock,
     updateBlockWithOccurredAt,
     deleteBlock,
     formatEntry,

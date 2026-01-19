@@ -85,3 +85,63 @@ export function isFutureDate(isoString: string): boolean {
   const fiveMinutesFromNow = Date.now() + 5 * 60 * 1000;
   return parseISO(isoString).getTime() > fiveMinutesFromNow;
 }
+
+/**
+ * D&D並び替え用: 前後ブロックから中間時刻を計算（日付境界クランプ付き）
+ * 
+ * 【D&D例外】この関数のみ UTCミリ秒→ISO 直接生成を許可（READMEに明記）
+ * 通常の occurred_at 生成は createOccurredAt() を使うこと
+ * 
+ * @param prevOccurredAt - 前のブロック（降順なのでより新しい）
+ * @param nextOccurredAt - 次のブロック（降順なのでより古い）
+ * @param selectedDate - 選択中の日付 (YYYY-MM-DD) ※必須
+ */
+export function calculateMiddleOccurredAt(
+  prevOccurredAt: string | null,
+  nextOccurredAt: string | null,
+  selectedDate: string
+): { success: true; occurredAt: string } | { success: false; reason: string } {
+  // 日付範囲を取得（JST 00:00 ～ 翌日 00:00 のUTC）
+  const { start, end } = getDateRangeUTC(selectedDate);
+  const startMs = parseISO(start).getTime();
+  const endMs = parseISO(end).getTime() - 1; // endは翌日00:00なので-1ms
+
+  const now = Date.now();
+  const fiveMinutesFromNow = now + 5 * 60 * 1000;
+
+  let newMs: number;
+
+  if (prevOccurredAt && nextOccurredAt) {
+    // 両方存在: 中間時刻
+    const prevMs = parseISO(prevOccurredAt).getTime();
+    const nextMs = parseISO(nextOccurredAt).getTime();
+    const gap = Math.abs(prevMs - nextMs);
+    
+    if (gap <= 1) {
+      return { success: false, reason: 'この位置には移動できません（時間が詰まりすぎています）' };
+    }
+    
+    newMs = Math.floor((prevMs + nextMs) / 2);
+  } else if (nextOccurredAt) {
+    // 先頭に移動（降順なので next はより古い）: nextより1秒新しく
+    const nextMs = parseISO(nextOccurredAt).getTime();
+    newMs = nextMs + 1000;
+  } else if (prevOccurredAt) {
+    // 末尾に移動（降順なので prev はより新しい）: prevより1秒古く
+    const prevMs = parseISO(prevOccurredAt).getTime();
+    newMs = prevMs - 1000;
+  } else {
+    return { success: false, reason: '移動先がありません' };
+  }
+
+  // 日付範囲内にクランプ（クリティカル修正）
+  newMs = Math.max(startMs, Math.min(endMs, newMs));
+
+  // 未来チェック
+  if (newMs > fiveMinutesFromNow) {
+    return { success: false, reason: '未来の日時には移動できません' };
+  }
+
+  // D&D例外: UTCミリ秒→ISOで生成
+  return { success: true, occurredAt: new Date(newMs).toISOString() };
+}

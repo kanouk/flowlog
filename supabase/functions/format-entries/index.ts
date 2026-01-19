@@ -13,6 +13,18 @@ interface Block {
   content: string | null;
   occurred_at: string;
   images?: string[];
+  category?: string;
+  is_done?: boolean;
+}
+
+function getCategoryLabel(category: string): string {
+  const labels: Record<string, string> = {
+    event: '出来事',
+    thought: '思ったこと',
+    task: 'タスク',
+    read_later: 'あとで読む',
+  };
+  return labels[category] || category;
 }
 
 serve(async (req) => {
@@ -43,11 +55,13 @@ serve(async (req) => {
     // Format blocks for the prompt (formatInTimeZone使用)
     const blocksText = sortedBlocks.map((block) => {
       const time = formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH:mm');
+      const categoryLabel = block.category ? `[${getCategoryLabel(block.category)}]` : '';
+      const doneNote = block.is_done ? '[✓]' : '';
       const imageNote = block.images && block.images.length > 0 
         ? ` [📷${block.images.length}枚]` 
         : '';
       const content = block.content || '';
-      return `[${time}]${imageNote} ${content}`.trim();
+      return `[${time}] ${categoryLabel}${doneNote}${imageNote} ${content}`.trim();
     }).join('\n');
 
     const systemPrompt = `あなたは思考ログを整形するアシスタントです。ユーザーが一日の中で書き留めた短いメモやつぶやきを、読みやすい日記形式に整形してください。
@@ -60,6 +74,7 @@ serve(async (req) => {
 5. 最後に「## 今日の3行まとめ」を追加し、その日の要点を3行でまとめる
 6. 元の内容の意味を変えないこと
 7. 日本語で出力すること
+8. カテゴリ情報（[出来事][思ったこと][タスク][あとで読む]）や完了マーク([✓])は参考にしつつ、自然な文章に整形する
 
 出力はMarkdown形式で返してください。`;
 

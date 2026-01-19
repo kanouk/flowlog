@@ -16,29 +16,38 @@ export type Database = {
     Tables: {
       blocks: {
         Row: {
+          category: string
           content: string | null
           created_at: string
+          done_at: string | null
           entry_id: string
           id: string
           images: string[] | null
+          is_done: boolean
           occurred_at: string
           user_id: string
         }
         Insert: {
+          category?: string
           content?: string | null
           created_at?: string
+          done_at?: string | null
           entry_id: string
           id?: string
           images?: string[] | null
+          is_done?: boolean
           occurred_at?: string
           user_id: string
         }
         Update: {
+          category?: string
           content?: string | null
           created_at?: string
+          done_at?: string | null
           entry_id?: string
           id?: string
           images?: string[] | null
+          is_done?: boolean
           occurred_at?: string
           user_id?: string
         }

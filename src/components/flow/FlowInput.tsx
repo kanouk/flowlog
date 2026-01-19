@@ -1,13 +1,20 @@
-import { useState, useRef, KeyboardEvent } from 'react';
+import { useState, useRef, KeyboardEvent, useEffect } from 'react';
 import { Loader2, Send, Clock, ImagePlus, X, Camera } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { AddBlockMode } from '@/hooks/useEntries';
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { toast } from 'sonner';
+import { 
+  BlockCategory, 
+  CATEGORIES, 
+  CATEGORY_CONFIG, 
+  getLastCategory, 
+  setLastCategory 
+} from '@/lib/categoryUtils';
 
 interface FlowInputProps {
-  onSubmit: (content: string, mode: AddBlockMode, images: string[]) => void;
+  onSubmit: (content: string, mode: AddBlockMode, images: string[], category: BlockCategory) => void;
   disabled?: boolean;
   selectedDate: string;
   isToday: boolean;
@@ -19,11 +26,22 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const [isComposing, setIsComposing] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [category, setCategory] = useState<BlockCategory>('event');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
   const { uploadImages, maxImages } = useImageUpload();
+
+  // 初回マウント時にlocalStorageからカテゴリを復元
+  useEffect(() => {
+    setCategory(getLastCategory());
+  }, []);
+
+  const handleCategoryChange = (cat: BlockCategory) => {
+    setCategory(cat);
+    setLastCategory(cat);
+  };
 
   const handleCompositionStart = () => {
     setIsComposing(true);
@@ -52,7 +70,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
         }
       }
 
-      onSubmit(content.trim(), mode, uploadedUrls);
+      onSubmit(content.trim(), mode, uploadedUrls, category);
       
       // リセット
       setContent('');
@@ -125,6 +143,31 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
 
   return (
     <div className="block-card p-6 relative">
+      {/* カテゴリ選択チップ */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {CATEGORIES.map((cat) => {
+          const config = CATEGORY_CONFIG[cat];
+          const Icon = config.icon;
+          const isSelected = category === cat;
+          
+          return (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => handleCategoryChange(cat)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                isSelected 
+                  ? `${config.bgColor} ${config.color} ring-2 ring-offset-1 ring-current`
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {config.label}
+            </button>
+          );
+        })}
+      </div>
+      
       <textarea
         ref={textareaRef}
         value={content}
