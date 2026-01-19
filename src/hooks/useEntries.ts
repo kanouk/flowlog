@@ -62,6 +62,9 @@ export function useEntries() {
   const { user, session } = useAuth();
   const [loading, setLoading] = useState(false);
   const [formatting, setFormatting] = useState(false);
+  
+  // Memoize user.id to prevent unnecessary re-renders from user object changes
+  const userId = user?.id;
 
   /**
    * 空entry削除（クライアント側実装）
@@ -94,12 +97,12 @@ export function useEntries() {
    * dayKey で entry を取得または作成
    */
   const getOrCreateEntryForDate = useCallback(async (dayKey: string) => {
-    if (!user) return null;
+    if (!userId) return null;
 
     const { data: existing } = await supabase
       .from('entries')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('date', dayKey)
       .maybeSingle();
 
@@ -107,7 +110,7 @@ export function useEntries() {
 
     const { data, error } = await supabase
       .from('entries')
-      .insert({ user_id: user.id, date: dayKey })
+      .insert({ user_id: userId, date: dayKey })
       .select()
       .single();
 
@@ -116,19 +119,19 @@ export function useEntries() {
       return null;
     }
     return data as Entry;
-  }, [user]);
+  }, [userId]);
 
   /**
    * 指定日付のブロックを occurred_at 範囲で取得（降順）
    */
   const getBlocksByDate = useCallback(async (selectedDate: string) => {
-    if (!user) return [];
+    if (!userId) return [];
     const { start, end } = getDateRangeUTC(selectedDate);
     
     const { data, error } = await supabase
       .from('blocks')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .gte('occurred_at', start)
       .lt('occurred_at', end)
       .order('occurred_at', { ascending: false })
@@ -139,7 +142,7 @@ export function useEntries() {
       return [];
     }
     return data as unknown as Block[];
-  }, [user]);
+  }, [userId]);
 
   /**
    * カテゴリ横断でブロックを取得（Tasks/Read later用）
@@ -151,7 +154,7 @@ export function useEntries() {
     category: BlockCategory | BlockCategory[],
     options?: GetBlocksByCategoryOptions
   ): Promise<Block[]> => {
-    if (!user) return [];
+    if (!userId) return [];
     
     const categories = Array.isArray(category) ? category : [category];
     const limit = options?.limit || 100;
@@ -159,7 +162,7 @@ export function useEntries() {
     let query = supabase
       .from('blocks')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .in('category', categories);
     
     // タスクの場合のみ、完了済み除外オプション
@@ -198,7 +201,7 @@ export function useEntries() {
     }
     
     return blocks;
-  }, [user]);
+  }, [userId]);
 
   /**
    * ブロック追加（過去日対応 + "今で追加"モード + 画像対応 + カテゴリ対応）
@@ -216,7 +219,7 @@ export function useEntries() {
     images?: string[];
     category?: BlockCategory;
   }) => {
-    if (!user) return { block: null, navigateToDate: null };
+    if (!userId) return { block: null, navigateToDate: null };
 
     setLoading(true);
     try {
@@ -233,7 +236,7 @@ export function useEntries() {
         const { data: lastBlocks } = await supabase
           .from('blocks')
           .select('occurred_at')
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
           .gte('occurred_at', start)
           .lt('occurred_at', end)
           .order('occurred_at', { ascending: false })
@@ -255,7 +258,7 @@ export function useEntries() {
         .from('blocks')
         .insert({
           entry_id: entry.id,
-          user_id: user.id,
+          user_id: userId,
           content: content || null,
           images,
           occurred_at: occurredAt,
@@ -276,7 +279,7 @@ export function useEntries() {
     } finally {
       setLoading(false);
     }
-  }, [user, getOrCreateEntryForDate]);
+  }, [userId, getOrCreateEntryForDate]);
 
   /**
    * ブロック更新（汎用：content, occurred_at, category, is_done, done_at）
@@ -285,7 +288,7 @@ export function useEntries() {
     blockId: string, 
     updates: BlockUpdatePayload
   ) => {
-    if (!user) return null;
+    if (!userId) return null;
 
     if (updates.occurred_at && isFutureDate(updates.occurred_at)) {
       toast.error('未来の日時は指定できません');
@@ -348,7 +351,7 @@ export function useEntries() {
       }
       return null;
     }
-  }, [user, getOrCreateEntryForDate, cleanupEmptyEntry]);
+  }, [userId, getOrCreateEntryForDate, cleanupEmptyEntry]);
 
   /**
    * ブロック更新（後方互換: content + occurred_at）
@@ -446,12 +449,12 @@ export function useEntries() {
    * 全エントリを取得
    */
   const getEntries = useCallback(async () => {
-    if (!user) return [];
+    if (!userId) return [];
 
     const { data, error } = await supabase
       .from('entries')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('date', { ascending: false });
 
     if (error) {
@@ -459,18 +462,18 @@ export function useEntries() {
       return [];
     }
     return data as Entry[];
-  }, [user]);
+  }, [userId]);
 
   /**
    * 特定日付のエントリを取得
    */
   const getEntry = useCallback(async (date: string) => {
-    if (!user) return null;
+    if (!userId) return null;
 
     const { data, error } = await supabase
       .from('entries')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('date', date)
       .maybeSingle();
 
@@ -479,7 +482,7 @@ export function useEntries() {
       return null;
     }
     return data as Entry | null;
-  }, [user]);
+  }, [userId]);
 
   /**
    * URLをサマライズ
