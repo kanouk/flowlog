@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -10,8 +11,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAISettings, AIProvider } from '@/hooks/useAISettings';
-import { Bot, Key, Eye, EyeOff, Loader2, Check, Sparkles, Zap, XCircle, CheckCircle } from 'lucide-react';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { useAISettings, AIProvider, DEFAULT_SYSTEM_PROMPT } from '@/hooks/useAISettings';
+import { Bot, Key, Eye, EyeOff, Loader2, Check, Sparkles, Zap, XCircle, CheckCircle, ChevronDown, RotateCcw, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -37,10 +43,12 @@ export function AISettingsSection() {
   const [openaiKey, setOpenaiKey] = useState('');
   const [anthropicKey, setAnthropicKey] = useState('');
   const [googleKey, setGoogleKey] = useState('');
+  const [customPrompt, setCustomPrompt] = useState('');
   const [showOpenaiKey, setShowOpenaiKey] = useState(false);
   const [showAnthropicKey, setShowAnthropicKey] = useState(false);
   const [showGoogleKey, setShowGoogleKey] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [promptOpen, setPromptOpen] = useState(false);
   
   // Connection test state
   const [testingProvider, setTestingProvider] = useState<AIProvider | null>(null);
@@ -53,6 +61,7 @@ export function AISettingsSection() {
       setOpenaiKey(settings.openai_api_key || '');
       setAnthropicKey(settings.anthropic_api_key || '');
       setGoogleKey(settings.google_api_key || '');
+      setCustomPrompt(settings.custom_system_prompt || '');
     }
   }, [loading, settings]);
 
@@ -62,9 +71,10 @@ export function AISettingsSection() {
       selectedModel !== settings.selected_model ||
       openaiKey !== (settings.openai_api_key || '') ||
       anthropicKey !== (settings.anthropic_api_key || '') ||
-      googleKey !== (settings.google_api_key || '');
+      googleKey !== (settings.google_api_key || '') ||
+      customPrompt !== (settings.custom_system_prompt || '');
     setHasChanges(changed);
-  }, [selectedProvider, selectedModel, openaiKey, anthropicKey, googleKey, settings]);
+  }, [selectedProvider, selectedModel, openaiKey, anthropicKey, googleKey, customPrompt, settings]);
 
   // Clear test result when API key changes
   useEffect(() => {
@@ -125,6 +135,7 @@ export function AISettingsSection() {
       openai_api_key: openaiKey || null,
       anthropic_api_key: anthropicKey || null,
       google_api_key: googleKey || null,
+      custom_system_prompt: customPrompt || null,
     });
   };
 
@@ -301,6 +312,52 @@ export function AISettingsSection() {
           </p>
         )}
       </div>
+
+      {/* Custom Prompt Section */}
+      <Collapsible open={promptOpen} onOpenChange={setPromptOpen}>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" className="w-full justify-between p-0 h-auto hover:bg-transparent">
+            <span className="flex items-center gap-2 text-sm font-medium">
+              <FileText className="h-4 w-4 text-primary" />
+              整形プロンプト
+            </span>
+            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${promptOpen ? 'rotate-180' : ''}`} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-4 space-y-3">
+          <div className="space-y-2">
+            <Label htmlFor="custom-prompt" className="text-sm text-muted-foreground">
+              AIに送信するシステムプロンプトをカスタマイズできます
+            </Label>
+            <Textarea
+              id="custom-prompt"
+              value={customPrompt || DEFAULT_SYSTEM_PROMPT}
+              onChange={(e) => setCustomPrompt(e.target.value)}
+              placeholder={DEFAULT_SYSTEM_PROMPT}
+              className="min-h-[200px] text-sm font-mono"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCustomPrompt('');
+                toast.success('デフォルトプロンプトに戻しました');
+              }}
+              disabled={!customPrompt}
+              className="gap-2"
+            >
+              <RotateCcw className="h-3 w-3" />
+              デフォルトに戻す
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              空にするとデフォルトを使用
+            </p>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Save Button */}
       <Button

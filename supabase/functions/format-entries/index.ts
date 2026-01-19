@@ -24,6 +24,7 @@ interface AISettings {
   google_api_key: string | null;
   selected_provider: string;
   selected_model: string;
+  custom_system_prompt: string | null;
 }
 
 function getCategoryLabel(category: string): string {
@@ -211,7 +212,7 @@ serve(async (req) => {
       return `[${time}] ${categoryLabel}${doneNote}${imageNote} ${content}`.trim();
     }).join('\n');
 
-    const systemPrompt = `あなたは思考ログを整形するアシスタントです。ユーザーが一日の中で書き留めた短いメモやつぶやきを、読みやすい日記形式に整形してください。
+    const DEFAULT_SYSTEM_PROMPT = `あなたは思考ログを整形するアシスタントです。ユーザーが一日の中で書き留めた短いメモやつぶやきを、読みやすい日記形式に整形してください。
 
 以下のルールに従ってください：
 1. 時系列順に並べ替える（入力は既にソート済み）
@@ -224,6 +225,9 @@ serve(async (req) => {
 8. カテゴリ情報（[出来事][思ったこと][タスク][あとで読む]）や完了マーク([✓])は参考にしつつ、自然な文章に整形する
 
 出力はMarkdown形式で返してください。`;
+
+    // Use custom prompt if set, otherwise use default
+    const systemPrompt = aiSettings?.custom_system_prompt || DEFAULT_SYSTEM_PROMPT;
 
     const userPrompt = `以下は${date}のログです。整形してください：
 
