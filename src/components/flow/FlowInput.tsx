@@ -156,6 +156,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   };
 
   const handleCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('Camera capture triggered', e.target.files);
     handleImageSelect(e);
   };
 
@@ -232,50 +233,46 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
       <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
         <div className="flex items-center gap-2">
           {/* 画像選択ボタン */}
-          <label className={`cursor-pointer ${selectedImages.length >= maxImages ? 'opacity-50 cursor-not-allowed' : ''}`}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={handleImageSelect}
-              disabled={selectedImages.length >= maxImages || isSubmitting}
-            />
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              asChild
-              disabled={selectedImages.length >= maxImages}
-            >
-              <span>
-                <ImagePlus className="h-4 w-4" />
-              </span>
-            </Button>
-          </label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleImageSelect}
+            disabled={selectedImages.length >= maxImages || isSubmitting}
+          />
+          <Button 
+            variant="ghost" 
+            size="icon"
+            type="button"
+            disabled={selectedImages.length >= maxImages || isSubmitting}
+            onClick={() => fileInputRef.current?.click()}
+            className={selectedImages.length >= maxImages ? 'opacity-50' : ''}
+          >
+            <ImagePlus className="h-4 w-4" />
+          </Button>
           
           {/* カメラ撮影ボタン */}
-          <label className={`cursor-pointer ${selectedImages.length >= maxImages ? 'opacity-50 cursor-not-allowed' : ''}`}>
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={handleCameraCapture}
-              disabled={selectedImages.length >= maxImages || isSubmitting}
-            />
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              asChild
-              disabled={selectedImages.length >= maxImages}
-            >
-              <span>
-                <Camera className="h-4 w-4" />
-              </span>
-            </Button>
-          </label>
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleCameraCapture}
+            disabled={selectedImages.length >= maxImages || isSubmitting}
+          />
+          <Button 
+            variant="ghost" 
+            size="icon"
+            type="button"
+            disabled={selectedImages.length >= maxImages || isSubmitting}
+            onClick={() => cameraInputRef.current?.click()}
+            className={selectedImages.length >= maxImages ? 'opacity-50' : ''}
+          >
+            <Camera className="h-4 w-4" />
+          </Button>
           {selectedImages.length > 0 && (
             <p className="text-sm text-muted-foreground">
               画像{selectedImages.length}/{maxImages}
