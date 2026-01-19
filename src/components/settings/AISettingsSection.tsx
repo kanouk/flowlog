@@ -17,7 +17,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { useAISettings, AIProvider, DEFAULT_SYSTEM_PROMPT } from '@/hooks/useAISettings';
-import { Bot, Key, Eye, EyeOff, Loader2, Check, Sparkles, Zap, XCircle, CheckCircle, ChevronDown, RotateCcw, FileText } from 'lucide-react';
+import { Bot, Key, Eye, EyeOff, Loader2, Check, Sparkles, Zap, XCircle, CheckCircle, ChevronDown, RotateCcw, FileText, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -36,10 +36,11 @@ const PROVIDER_DESCRIPTIONS: Record<AIProvider, string> = {
 };
 
 export function AISettingsSection() {
-  const { settings, loading, saving, saveSettings, getModelsForProvider } = useAISettings();
+  const { settings, loading, saving, saveSettings, getModelsForProvider, hasApiKeyForProvider } = useAISettings();
   
   const [selectedProvider, setSelectedProvider] = useState<AIProvider>('lovable');
   const [selectedModel, setSelectedModel] = useState('google/gemini-2.5-flash');
+  // API key inputs - always start empty (keys are never fetched from server)
   const [openaiKey, setOpenaiKey] = useState('');
   const [anthropicKey, setAnthropicKey] = useState('');
   const [googleKey, setGoogleKey] = useState('');
@@ -58,23 +59,23 @@ export function AISettingsSection() {
     if (!loading) {
       setSelectedProvider(settings.selected_provider);
       setSelectedModel(settings.selected_model);
-      setOpenaiKey(settings.openai_api_key || '');
-      setAnthropicKey(settings.anthropic_api_key || '');
-      setGoogleKey(settings.google_api_key || '');
       setCustomPrompt(settings.custom_system_prompt || '');
+      // API keys are never fetched - always start empty
+      setOpenaiKey('');
+      setAnthropicKey('');
+      setGoogleKey('');
     }
   }, [loading, settings]);
 
   useEffect(() => {
-    const changed = 
-      selectedProvider !== settings.selected_provider ||
-      selectedModel !== settings.selected_model ||
-      openaiKey !== (settings.openai_api_key || '') ||
-      anthropicKey !== (settings.anthropic_api_key || '') ||
-      googleKey !== (settings.google_api_key || '') ||
-      customPrompt !== (settings.custom_system_prompt || '');
-    setHasChanges(changed);
-  }, [selectedProvider, selectedModel, openaiKey, anthropicKey, googleKey, customPrompt, settings]);
+    // Check for changes - API keys are considered changed if they have any value
+    const providerChanged = selectedProvider !== settings.selected_provider;
+    const modelChanged = selectedModel !== settings.selected_model;
+    const promptChanged = customPrompt !== (settings.custom_system_prompt || '');
+    const hasNewApiKey = openaiKey !== '' || anthropicKey !== '' || googleKey !== '';
+    
+    setHasChanges(providerChanged || modelChanged || promptChanged || hasNewApiKey);
+  }, [selectedProvider, selectedModel, customPrompt, openaiKey, anthropicKey, googleKey, settings]);
 
   // Clear test result when API key changes
   useEffect(() => {
@@ -128,23 +129,48 @@ export function AISettingsSection() {
     }
   };
 
-  const handleSave = async () => {
+  const handleClearApiKey = async (provider: AIProvider) => {
+    const keyField = 
+      provider === 'openai' ? 'openai_api_key' :
+      provider === 'anthropic' ? 'anthropic_api_key' :
+      'google_api_key';
+    
     await saveSettings({
+      [keyField]: null,
+    });
+    
+    // Clear local state
+    if (provider === 'openai') setOpenaiKey('');
+    else if (provider === 'anthropic') setAnthropicKey('');
+    else setGoogleKey('');
+    
+    toast.success('APIキーを削除しました');
+  };
+
+  const handleSave = async () => {
+    const updateData: Record<string, unknown> = {
       selected_provider: selectedProvider,
       selected_model: selectedModel,
-      openai_api_key: openaiKey || null,
-      anthropic_api_key: anthropicKey || null,
-      google_api_key: googleKey || null,
       custom_system_prompt: customPrompt || null,
-    });
+    };
+
+    // Only include API keys if user entered new values
+    if (openaiKey) updateData.openai_api_key = openaiKey;
+    if (anthropicKey) updateData.anthropic_api_key = anthropicKey;
+    if (googleKey) updateData.google_api_key = googleKey;
+
+    const success = await saveSettings(updateData);
+    if (success) {
+      // Clear key inputs after successful save
+      setOpenaiKey('');
+      setAnthropicKey('');
+      setGoogleKey('');
+    }
   };
 
   const availableModels = getModelsForProvider(selectedProvider);
   const needsApiKey = selectedProvider !== 'lovable';
-  const currentApiKey = 
-    selectedProvider === 'openai' ? openaiKey :
-    selectedProvider === 'anthropic' ? anthropicKey :
-    selectedProvider === 'google' ? googleKey : '';
+  const hasCurrentApiKey = hasApiKeyForProvider(selectedProvider);
 
   if (loading) {
     return (
@@ -195,6 +221,27 @@ export function AISettingsSection() {
                     <Key className="h-4 w-4" />
                     APIキー
                   </Label>
+                  
+                  {/* Show saved key status */}
+                  {hasApiKeyForProvider(provider) && (
+                    <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg">
+                      <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
+                        <CheckCircle className="h-4 w-4" />
+                        APIキーが保存されています
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleClearApiKey(provider)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30 gap-1"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        削除
+                      </Button>
+                    </div>
+                  )}
+                  
                   <div className="relative">
                     <Input
                       id={`${provider}-key`}
@@ -214,9 +261,11 @@ export function AISettingsSection() {
                         else setGoogleKey(e.target.value);
                       }}
                       placeholder={
-                        provider === 'openai' ? 'sk-...' :
-                        provider === 'anthropic' ? 'sk-ant-...' :
-                        'AI...'
+                        hasApiKeyForProvider(provider)
+                          ? '新しいキーを入力して上書き...'
+                          : provider === 'openai' ? 'sk-...' :
+                            provider === 'anthropic' ? 'sk-ant-...' :
+                            'AI...'
                       }
                       className="pr-10"
                     />
@@ -306,7 +355,7 @@ export function AISettingsSection() {
             ))}
           </SelectContent>
         </Select>
-        {needsApiKey && !currentApiKey && (
+        {needsApiKey && !hasCurrentApiKey && (
           <p className="text-xs text-amber-600 dark:text-amber-400">
             ⚠️ このプロバイダーを使用するにはAPIキーが必要です
           </p>
