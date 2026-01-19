@@ -10,8 +10,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAISettings, AIProvider, AI_MODELS } from '@/hooks/useAISettings';
-import { Bot, Key, Eye, EyeOff, Loader2, Check, Sparkles } from 'lucide-react';
+import { useAISettings, AIProvider } from '@/hooks/useAISettings';
+import { Bot, Key, Eye, EyeOff, Loader2, Check, Sparkles, Zap, XCircle, CheckCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 const PROVIDER_LABELS: Record<AIProvider, string> = {
   lovable: 'Lovable AI (無料)',
@@ -39,6 +41,10 @@ export function AISettingsSection() {
   const [showAnthropicKey, setShowAnthropicKey] = useState(false);
   const [showGoogleKey, setShowGoogleKey] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  
+  // Connection test state
+  const [testingProvider, setTestingProvider] = useState<AIProvider | null>(null);
+  const [testResult, setTestResult] = useState<{ provider: AIProvider; success: boolean; message: string } | null>(null);
 
   useEffect(() => {
     if (!loading) {
@@ -60,11 +66,55 @@ export function AISettingsSection() {
     setHasChanges(changed);
   }, [selectedProvider, selectedModel, openaiKey, anthropicKey, googleKey, settings]);
 
+  // Clear test result when API key changes
+  useEffect(() => {
+    setTestResult(null);
+  }, [openaiKey, anthropicKey, googleKey]);
+
   const handleProviderChange = (provider: AIProvider) => {
     setSelectedProvider(provider);
     const models = getModelsForProvider(provider);
     if (models.length > 0) {
       setSelectedModel(models[0].id);
+    }
+    setTestResult(null);
+  };
+
+  const handleTestConnection = async (provider: AIProvider) => {
+    const apiKey = 
+      provider === 'openai' ? openaiKey :
+      provider === 'anthropic' ? anthropicKey :
+      provider === 'google' ? googleKey : '';
+
+    if (!apiKey) {
+      toast.error('APIキーを入力してください');
+      return;
+    }
+
+    setTestingProvider(provider);
+    setTestResult(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('test-ai-connection', {
+        body: { provider, api_key: apiKey },
+      });
+
+      if (error) {
+        setTestResult({ provider, success: false, message: error.message });
+      } else {
+        setTestResult({ provider, success: data.success, message: data.message });
+        if (data.success) {
+          toast.success(data.message);
+        } else {
+          toast.error(data.message);
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '接続テストに失敗しました';
+      setTestResult({ provider, success: false, message });
+      toast.error(message);
+    } finally {
+      setTestingProvider(null);
     }
   };
 
@@ -129,7 +179,7 @@ export function AISettingsSection() {
 
               {/* API Key Input (not for lovable) */}
               {provider !== 'lovable' && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <Label htmlFor={`${provider}-key`} className="flex items-center gap-2">
                     <Key className="h-4 w-4" />
                     APIキー
@@ -181,6 +231,48 @@ export function AISettingsSection() {
                     {provider === 'anthropic' && 'console.anthropic.com で取得できます'}
                     {provider === 'google' && 'aistudio.google.com で取得できます'}
                   </p>
+                  
+                  {/* Connection Test Button */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleTestConnection(provider)}
+                      disabled={testingProvider !== null || !(
+                        provider === 'openai' ? openaiKey :
+                        provider === 'anthropic' ? anthropicKey :
+                        googleKey
+                      )}
+                      className="gap-2"
+                    >
+                      {testingProvider === provider ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          テスト中...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="h-3 w-3" />
+                          接続テスト
+                        </>
+                      )}
+                    </Button>
+                    
+                    {/* Test Result */}
+                    {testResult && testResult.provider === provider && (
+                      <div className={`flex items-center gap-1.5 text-xs ${
+                        testResult.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                      }`}>
+                        {testResult.success ? (
+                          <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                        ) : (
+                          <XCircle className="h-4 w-4 flex-shrink-0" />
+                        )}
+                        <span className="break-words">{testResult.message}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </TabsContent>
