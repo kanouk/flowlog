@@ -159,7 +159,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_ai_settings_safe: {
+        Args: never
+        Returns: {
+          created_at: string
+          custom_system_prompt: string
+          has_anthropic_key: boolean
+          has_google_key: boolean
+          has_openai_key: boolean
+          id: string
+          selected_model: string
+          selected_provider: string
+          updated_at: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

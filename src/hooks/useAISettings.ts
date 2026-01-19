@@ -45,14 +45,15 @@ export const AI_MODELS: AIModel[] = [
   { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite', provider: 'google' },
 ];
 
+// Safe settings interface (no API keys exposed to client)
 export interface AISettings {
   id?: string;
-  openai_api_key: string | null;
-  anthropic_api_key: string | null;
-  google_api_key: string | null;
   selected_provider: AIProvider;
   selected_model: string;
   custom_system_prompt: string | null;
+  has_openai_key: boolean;
+  has_anthropic_key: boolean;
+  has_google_key: boolean;
 }
 
 export const DEFAULT_SYSTEM_PROMPT = `あなたは思考ログを整形するアシスタントです。ユーザーが一日の中で書き留めた短いメモやつぶやきを、読みやすい日記形式に整形してください。
@@ -70,13 +71,23 @@ export const DEFAULT_SYSTEM_PROMPT = `あなたは思考ログを整形するア
 出力はMarkdown形式で返してください。`;
 
 const DEFAULT_SETTINGS: AISettings = {
-  openai_api_key: null,
-  anthropic_api_key: null,
-  google_api_key: null,
   selected_provider: 'lovable',
   selected_model: 'google/gemini-2.5-flash',
   custom_system_prompt: null,
+  has_openai_key: false,
+  has_anthropic_key: false,
+  has_google_key: false,
 };
+
+// Settings update interface (for saving - can include new API keys)
+export interface AISettingsUpdate {
+  selected_provider?: AIProvider;
+  selected_model?: string;
+  custom_system_prompt?: string | null;
+  openai_api_key?: string | null;
+  anthropic_api_key?: string | null;
+  google_api_key?: string | null;
+}
 
 export function useAISettings() {
   const { user } = useAuth();
@@ -92,23 +103,22 @@ export function useAISettings() {
     }
 
     try {
+      // Use the secure function that doesn't expose API keys
       const { data, error } = await supabase
-        .from('user_ai_settings')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
+        .rpc('get_user_ai_settings_safe');
 
       if (error) throw error;
 
-      if (data) {
+      if (data && data.length > 0) {
+        const row = data[0];
         setSettings({
-          id: data.id,
-          openai_api_key: data.openai_api_key,
-          anthropic_api_key: data.anthropic_api_key,
-          google_api_key: data.google_api_key,
-          selected_provider: data.selected_provider as AIProvider,
-          selected_model: data.selected_model,
-          custom_system_prompt: data.custom_system_prompt,
+          id: row.id,
+          selected_provider: row.selected_provider as AIProvider,
+          selected_model: row.selected_model,
+          custom_system_prompt: row.custom_system_prompt,
+          has_openai_key: row.has_openai_key,
+          has_anthropic_key: row.has_anthropic_key,
+          has_google_key: row.has_google_key,
         });
       } else {
         setSettings(DEFAULT_SETTINGS);
@@ -125,7 +135,7 @@ export function useAISettings() {
     fetchSettings();
   }, [fetchSettings]);
 
-  const saveSettings = async (newSettings: Partial<AISettings>) => {
+  const saveSettings = async (newSettings: AISettingsUpdate) => {
     if (!user) {
       toast.error('ログインが必要です');
       return false;
@@ -133,25 +143,45 @@ export function useAISettings() {
 
     setSaving(true);
     try {
-      const updatedSettings = { ...settings, ...newSettings };
-      
+      // Build upsert object - only include API keys if explicitly provided
+      type UpsertData = {
+        user_id: string;
+        selected_provider: string;
+        selected_model: string;
+        custom_system_prompt: string | null;
+        openai_api_key?: string | null;
+        anthropic_api_key?: string | null;
+        google_api_key?: string | null;
+      };
+
+      const upsertData: UpsertData = {
+        user_id: user.id,
+        selected_provider: newSettings.selected_provider ?? settings.selected_provider,
+        selected_model: newSettings.selected_model ?? settings.selected_model,
+        custom_system_prompt: newSettings.custom_system_prompt ?? settings.custom_system_prompt ?? null,
+      };
+
+      // Only include API keys if they were explicitly set (not undefined)
+      if (newSettings.openai_api_key !== undefined) {
+        upsertData.openai_api_key = newSettings.openai_api_key;
+      }
+      if (newSettings.anthropic_api_key !== undefined) {
+        upsertData.anthropic_api_key = newSettings.anthropic_api_key;
+      }
+      if (newSettings.google_api_key !== undefined) {
+        upsertData.google_api_key = newSettings.google_api_key;
+      }
+
       const { error } = await supabase
         .from('user_ai_settings')
-        .upsert({
-          user_id: user.id,
-          openai_api_key: updatedSettings.openai_api_key,
-          anthropic_api_key: updatedSettings.anthropic_api_key,
-          google_api_key: updatedSettings.google_api_key,
-          selected_provider: updatedSettings.selected_provider,
-          selected_model: updatedSettings.selected_model,
-          custom_system_prompt: updatedSettings.custom_system_prompt || null,
-        }, {
+        .upsert(upsertData, {
           onConflict: 'user_id',
         });
 
       if (error) throw error;
 
-      setSettings(updatedSettings);
+      // Refetch to get updated has_key flags
+      await fetchSettings();
       toast.success('AI設定を保存しました');
       return true;
     } catch (error) {
@@ -167,22 +197,23 @@ export function useAISettings() {
     return AI_MODELS.filter(model => model.provider === provider);
   };
 
-  const getApiKeyForProvider = (provider: AIProvider): string | null => {
+  const hasApiKeyForProvider = (provider: AIProvider): boolean => {
     switch (provider) {
       case 'openai':
-        return settings.openai_api_key;
+        return settings.has_openai_key;
       case 'anthropic':
-        return settings.anthropic_api_key;
+        return settings.has_anthropic_key;
       case 'google':
-        return settings.google_api_key;
+        return settings.has_google_key;
+      case 'lovable':
+        return true;
       default:
-        return null;
+        return false;
     }
   };
 
   const hasApiKeyForSelectedProvider = (): boolean => {
-    if (settings.selected_provider === 'lovable') return true;
-    return !!getApiKeyForProvider(settings.selected_provider);
+    return hasApiKeyForProvider(settings.selected_provider);
   };
 
   return {
@@ -191,7 +222,7 @@ export function useAISettings() {
     saving,
     saveSettings,
     getModelsForProvider,
-    getApiKeyForProvider,
+    hasApiKeyForProvider,
     hasApiKeyForSelectedProvider,
     refetch: fetchSettings,
   };
