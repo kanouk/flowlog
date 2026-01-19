@@ -104,15 +104,19 @@ export function AISettingsSection() {
       <div className="space-y-4">
         <Label>AIプロバイダー</Label>
         <Tabs value={selectedProvider} onValueChange={(v) => handleProviderChange(v as AIProvider)}>
-          <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full">
+          <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full h-auto gap-1 p-1">
             {(Object.keys(PROVIDER_LABELS) as AIProvider[]).map((provider) => (
               <TabsTrigger 
                 key={provider} 
                 value={provider}
-                className="text-xs md:text-sm"
+                className="text-[11px] md:text-sm px-2 py-2 whitespace-nowrap"
               >
-                {provider === 'lovable' && <Sparkles className="h-3 w-3 mr-1" />}
-                {PROVIDER_LABELS[provider]}
+                {provider === 'lovable' && <Sparkles className="h-3 w-3 mr-1 flex-shrink-0" />}
+                <span className="truncate">
+                  {provider === 'lovable' ? 'Lovable AI' : 
+                   provider === 'openai' ? 'OpenAI' :
+                   provider === 'anthropic' ? 'Claude' : 'Gemini'}
+                </span>
               </TabsTrigger>
             ))}
           </TabsList>
