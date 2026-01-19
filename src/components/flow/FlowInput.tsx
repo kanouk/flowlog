@@ -166,12 +166,17 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setPreviewUrls(prev => prev.filter((_, i) => i !== index));
   };
 
+  const currentConfig = CATEGORY_CONFIG[category];
   const canSubmit = (content.trim().length > 0 || selectedImages.length > 0) && !disabled && !isSubmitting;
 
   return (
-    <div className={`input-card p-6 pl-8 ${!isToday ? 'bg-muted/50' : ''}`}>
-      {/* カテゴリ選択チップ */}
-      <div className="flex gap-2 mb-4">
+    <div className={`relative bg-card border-2 rounded-2xl overflow-hidden ${currentConfig.borderColor} ${!isToday ? 'bg-muted/50' : ''}`}
+         style={{ boxShadow: '0 4px 20px -4px rgba(0,0,0,0.1)' }}>
+      {/* カテゴリカラーのアクセントストライプ */}
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${currentConfig.accentColor}`} />
+      <div className="p-6 pl-8">
+        {/* カテゴリ選択チップ */}
+        <div className="flex gap-2 mb-4">
         {CATEGORIES.map((cat) => {
           const config = CATEGORY_CONFIG[cat];
           const Icon = config.icon;
@@ -299,6 +304,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
             {isToday ? '保存' : 'この日に追加'}
           </Button>
         </div>
+      </div>
       </div>
     </div>
   );
