@@ -11,15 +11,15 @@ export interface AIModel {
   provider: AIProvider;
 }
 
-// 2025年1月時点の最新モデルリスト
+// 2026年1月時点の最新モデルリスト
 export const AI_MODELS: AIModel[] = [
   // Lovable AI (built-in, no API key required)
   { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash (Built-in)', provider: 'lovable' },
   { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro (Built-in)', provider: 'lovable' },
   { id: 'openai/gpt-5-mini', name: 'GPT-5 Mini (Built-in)', provider: 'lovable' },
   
-  // OpenAI Models (2025)
-  { id: 'gpt-5.2', name: 'GPT-5.2', provider: 'openai' },
+  // OpenAI Models (2025-2026)
+  { id: 'gpt-5.2-2025-12-11', name: 'GPT-5.2', provider: 'openai' },
   { id: 'gpt-5', name: 'GPT-5', provider: 'openai' },
   { id: 'gpt-5-mini', name: 'GPT-5 Mini', provider: 'openai' },
   { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai' },
@@ -27,14 +27,17 @@ export const AI_MODELS: AIModel[] = [
   { id: 'o3', name: 'o3 (Reasoning)', provider: 'openai' },
   { id: 'o3-mini', name: 'o3 Mini (Reasoning)', provider: 'openai' },
   
-  // Anthropic Claude Models (2025)
+  // Anthropic Claude Models (2025-2026)
+  { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', provider: 'anthropic' },
+  { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', provider: 'anthropic' },
   { id: 'claude-opus-4', name: 'Claude Opus 4', provider: 'anthropic' },
   { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'anthropic' },
   { id: 'claude-3.7-sonnet', name: 'Claude 3.7 Sonnet', provider: 'anthropic' },
   { id: 'claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', provider: 'anthropic' },
   { id: 'claude-3.5-haiku', name: 'Claude 3.5 Haiku', provider: 'anthropic' },
   
-  // Google Gemini Models (2025)
+  // Google Gemini Models (2025-2026)
+  { id: 'gemini-3-pro-preview', name: 'Gemini 3.0 Pro (Preview)', provider: 'google' },
   { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google' },
   { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google' },
   { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', provider: 'google' },
