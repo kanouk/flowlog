@@ -86,6 +86,10 @@ export function isFutureDate(isoString: string): boolean {
   return parseISO(isoString).getTime() > fiveMinutesFromNow;
 }
 
+export type MiddleOccurredAtResult = 
+  | { success: true; occurredAt: string }
+  | { success: false; reason: string };
+
 /**
  * D&D並び替え用: 前後ブロックから中間時刻を計算（日付境界クランプ付き）
  * 
@@ -100,7 +104,7 @@ export function calculateMiddleOccurredAt(
   prevOccurredAt: string | null,
   nextOccurredAt: string | null,
   selectedDate: string
-): { success: true; occurredAt: string } | { success: false; reason: string } {
+): MiddleOccurredAtResult {
   // 日付範囲を取得（JST 00:00 ～ 翌日 00:00 のUTC）
   const { start, end } = getDateRangeUTC(selectedDate);
   const startMs = parseISO(start).getTime();
