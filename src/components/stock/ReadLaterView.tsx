@@ -1,7 +1,17 @@
 import { useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
-import { Loader2, Bookmark, ExternalLink } from 'lucide-react';
-import { useEntries, Block } from '@/hooks/useEntries';
+import { Loader2, Bookmark, ExternalLink, Sparkles, RefreshCw, FileText } from 'lucide-react';
+import { useEntries, Block, UrlMetadata } from '@/hooks/useEntries';
 import { formatTimeJST, formatDateJST } from '@/lib/dateUtils';
+import { Button } from '@/components/ui/button';
+
+/**
+ * URLを検出して返す
+ */
+function extractFirstUrl(text: string): string | null {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const match = text.match(urlRegex);
+  return match ? match[0] : null;
+}
 
 /**
  * URLを自動リンク化
@@ -32,10 +42,11 @@ function linkifyContent(text: string): ReactNode {
 }
 
 export function ReadLaterView() {
-  const { getBlocksByCategory } = useEntries();
+  const { getBlocksByCategory, summarizeUrl } = useEntries();
   
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
+  const [summarizingIds, setSummarizingIds] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -50,6 +61,27 @@ export function ReadLaterView() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const handleSummarize = useCallback(async (blockId: string, url: string) => {
+    setSummarizingIds(prev => new Set(prev).add(blockId));
+    try {
+      const result = await summarizeUrl(blockId, url);
+      if (result) {
+        // Update local state with the new metadata
+        setBlocks(prev => prev.map(b => 
+          b.id === blockId 
+            ? { ...b, url_metadata: result }
+            : b
+        ));
+      }
+    } finally {
+      setSummarizingIds(prev => {
+        const next = new Set(prev);
+        next.delete(blockId);
+        return next;
+      });
+    }
+  }, [summarizeUrl]);
 
   if (loading) {
     return (
@@ -90,6 +122,9 @@ export function ReadLaterView() {
           {blocks.map((block) => {
             const hasContent = block.content && block.content.trim().length > 0;
             const hasImages = block.images && block.images.length > 0;
+            const extractedUrl = hasContent ? extractFirstUrl(block.content!) : null;
+            const isSummarizing = summarizingIds.has(block.id);
+            const hasUrlMetadata = block.url_metadata !== null;
             
             return (
               <div key={block.id} className="block-card p-4">
@@ -99,6 +134,67 @@ export function ReadLaterView() {
                       <p className="text-foreground leading-relaxed whitespace-pre-wrap">
                         {linkifyContent(block.content!)}
                       </p>
+                    )}
+                    
+                    {/* URL Summary Section */}
+                    {hasUrlMetadata && block.url_metadata && (
+                      <div className="bg-muted/50 p-3 rounded-lg mt-3 border-l-2 border-primary/30">
+                        <div className="flex items-start gap-2 mb-2">
+                          <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                          <span className="text-sm font-medium text-foreground line-clamp-2">
+                            {block.url_metadata.title}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                          {block.url_metadata.summary}
+                        </p>
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-xs text-muted-foreground/70">
+                            {formatDateJST(block.url_metadata.fetched_at)} {formatTimeJST(block.url_metadata.fetched_at)} に取得
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-xs"
+                            onClick={() => handleSummarize(block.id, block.url_metadata!.url)}
+                            disabled={isSummarizing}
+                          >
+                            {isSummarizing ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <>
+                                <RefreshCw className="h-3 w-3 mr-1" />
+                                再取得
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Summarize Button for URLs without metadata */}
+                    {!hasUrlMetadata && extractedUrl && (
+                      <div className="mt-3">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleSummarize(block.id, extractedUrl)}
+                          disabled={isSummarizing}
+                          className="gap-1"
+                        >
+                          {isSummarizing ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              要約を取得中...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-4 w-4" />
+                              要約
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     )}
                     
                     {hasImages && (

@@ -12,6 +12,13 @@ import {
 } from '@/lib/dateUtils';
 import type { BlockCategory } from '@/lib/categoryUtils';
 
+export interface UrlMetadata {
+  url: string;
+  title: string;
+  summary: string;
+  fetched_at: string;
+}
+
 export interface Block {
   id: string;
   entry_id: string;
@@ -23,6 +30,7 @@ export interface Block {
   category: BlockCategory;
   is_done: boolean;
   done_at: string | null;
+  url_metadata: UrlMetadata | null;
 }
 
 export interface Entry {
@@ -130,7 +138,7 @@ export function useEntries() {
       console.error('Error fetching blocks:', error);
       return [];
     }
-    return data as Block[];
+    return data as unknown as Block[];
   }, [user]);
 
   /**
@@ -168,7 +176,7 @@ export function useEntries() {
       return [];
     }
     
-    let blocks = data as Block[];
+    let blocks = data as unknown as Block[];
     
     // タスクの場合、クライアント側で並び替え: is_done ASC, then occurred_at DESC (for uncompleted), done_at DESC (for completed)
     if (categories.length === 1 && categories[0] === 'task') {
@@ -260,7 +268,7 @@ export function useEntries() {
       
       const navigateToDate = mode === 'toNow' && !isToday ? today : null;
       
-      return { block: data as Block, navigateToDate };
+      return { block: data as unknown as Block, navigateToDate };
     } catch (error) {
       console.error('Error adding block:', error);
       toast.error('ブロックの保存に失敗しました');
@@ -329,7 +337,7 @@ export function useEntries() {
         await cleanupEmptyEntry(oldEntryId);
       }
       
-      return data as Block;
+      return data as unknown as Block;
     } catch (error: unknown) {
       console.error('Error updating block:', error);
       const errMsg = error instanceof Error ? error.message : '';
@@ -473,6 +481,39 @@ export function useEntries() {
     return data as Entry | null;
   }, [user]);
 
+  /**
+   * URLをサマライズ
+   */
+  const summarizeUrl = useCallback(async (blockId: string, url: string): Promise<UrlMetadata | null> => {
+    if (!session) return null;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('summarize-url', {
+        body: { blockId, url },
+      });
+
+      if (error) throw error;
+
+      if (!data.success) {
+        throw new Error(data.error || '要約の生成に失敗しました');
+      }
+
+      toast.success('要約を取得しました');
+      return data.url_metadata as UrlMetadata;
+    } catch (error: unknown) {
+      console.error('Error summarizing URL:', error);
+      const errMsg = error instanceof Error ? error.message : '';
+      if (errMsg.includes('429')) {
+        toast.error('レート制限に達しました。しばらくしてから再試行してください。');
+      } else if (errMsg.includes('402')) {
+        toast.error('クレジットが不足しています。');
+      } else {
+        toast.error(errMsg || '要約の生成に失敗しました');
+      }
+      return null;
+    }
+  }, [session]);
+
   return {
     loading,
     formatting,
@@ -486,5 +527,6 @@ export function useEntries() {
     formatEntry,
     getEntries,
     getEntry,
+    summarizeUrl,
   };
 }

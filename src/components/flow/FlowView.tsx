@@ -78,6 +78,7 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
       category,
       is_done: false,
       done_at: null,
+      url_metadata: null,
     };
     
     if (mode !== 'toNow' || isToday) {

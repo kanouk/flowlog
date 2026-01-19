@@ -85,6 +85,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       category,
       is_done: false,
       done_at: null,
+      url_metadata: null,
     };
     
     // toNowモードでなければローカルに追加（降順ソート）
