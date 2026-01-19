@@ -87,14 +87,10 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     }
   };
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // モバイルではEnterで送信しない（改行として動作）
-    if (isMobile) return;
-    
-    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-      e.preventDefault();
-      handleSubmitWithMode('toSelectedDate');
-    }
+  // Enterは常に改行、保存はボタンのみ（モバイルでも分かりやすく）
+  const handleKeyDown = (_e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // キーボードショートカットでの保存を無効化
+    // 保存はボタンのみで行う
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
