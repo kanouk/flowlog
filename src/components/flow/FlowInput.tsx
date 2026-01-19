@@ -20,6 +20,8 @@ interface FlowInputProps {
   isToday: boolean;
 }
 
+const DRAFT_KEY_PREFIX = 'flowlog_draft_';
+
 export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInputProps) {
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,6 +39,32 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   useEffect(() => {
     setCategory(getLastCategory());
   }, []);
+
+  // 下書きをsessionStorageから復元
+  useEffect(() => {
+    const draft = sessionStorage.getItem(`${DRAFT_KEY_PREFIX}${selectedDate}`);
+    if (draft) {
+      setContent(draft);
+      // textareaの高さを調整
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+          textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+        }
+      }, 0);
+    } else {
+      setContent('');
+    }
+  }, [selectedDate]);
+
+  // 入力内容をsessionStorageに保存
+  useEffect(() => {
+    if (content) {
+      sessionStorage.setItem(`${DRAFT_KEY_PREFIX}${selectedDate}`, content);
+    } else {
+      sessionStorage.removeItem(`${DRAFT_KEY_PREFIX}${selectedDate}`);
+    }
+  }, [content, selectedDate]);
 
   const handleCategoryChange = (cat: BlockCategory) => {
     setCategory(cat);
@@ -74,6 +102,8 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
       
       // リセット
       setContent('');
+      // 送信成功時に下書きをクリア
+      sessionStorage.removeItem(`${DRAFT_KEY_PREFIX}${selectedDate}`);
       setSelectedImages([]);
       previewUrls.forEach(url => URL.revokeObjectURL(url));
       setPreviewUrls([]);
