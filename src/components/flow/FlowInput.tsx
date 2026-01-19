@@ -1,5 +1,5 @@
 import { useState, useRef, KeyboardEvent, useEffect } from 'react';
-import { Loader2, Send, Clock, ImagePlus, X, Camera } from 'lucide-react';
+import { Loader2, Send, ImagePlus, X, Camera } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { AddBlockMode } from '@/hooks/useEntries';
@@ -288,18 +288,6 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
           )}
           
-          {/* 過去日の場合: 「今で追加」ボタン */}
-          {!isToday && (
-            <Button 
-              variant="outline"
-              size="sm"
-              onClick={() => handleSubmitWithMode('toNow')}
-              disabled={!canSubmit}
-            >
-              <Clock className="h-4 w-4 mr-1" />
-              今で追加
-            </Button>
-          )}
           
           {/* 常に表示: メインボタン */}
           <Button 
