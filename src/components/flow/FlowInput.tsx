@@ -168,7 +168,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const canSubmit = (content.trim().length > 0 || selectedImages.length > 0) && !disabled && !isSubmitting;
 
   return (
-    <div className="block-card p-6 relative">
+    <div className="input-card p-6 pl-8">
       {/* カテゴリ選択チップ */}
       <div className="flex gap-2 mb-4">
         {CATEGORIES.map((cat) => {
