@@ -119,6 +119,7 @@ export type Database = {
         Row: {
           anthropic_api_key: string | null
           created_at: string
+          custom_system_prompt: string | null
           google_api_key: string | null
           id: string
           openai_api_key: string | null
@@ -130,6 +131,7 @@ export type Database = {
         Insert: {
           anthropic_api_key?: string | null
           created_at?: string
+          custom_system_prompt?: string | null
           google_api_key?: string | null
           id?: string
           openai_api_key?: string | null
@@ -141,6 +143,7 @@ export type Database = {
         Update: {
           anthropic_api_key?: string | null
           created_at?: string
+          custom_system_prompt?: string | null
           google_api_key?: string | null
           id?: string
           openai_api_key?: string | null

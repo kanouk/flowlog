@@ -52,7 +52,22 @@ export interface AISettings {
   google_api_key: string | null;
   selected_provider: AIProvider;
   selected_model: string;
+  custom_system_prompt: string | null;
 }
+
+export const DEFAULT_SYSTEM_PROMPT = `あなたは思考ログを整形するアシスタントです。ユーザーが一日の中で書き留めた短いメモやつぶやきを、読みやすい日記形式に整形してください。
+
+以下のルールに従ってください：
+1. 時系列順に並べ替える（入力は既にソート済み）
+2. 口語体を自然な文章に軽く整形する（過剰な文学表現は避ける）
+3. 朝（5:00-10:59）、昼（11:00-14:59）、夕方（15:00-17:59）、夜（18:00-4:59）でセクション分けする
+4. 各セクションは「## 朝」のようなMarkdown見出しで始める
+5. 最後に「## 今日の3行まとめ」を追加し、その日の要点を3行でまとめる
+6. 元の内容の意味を変えないこと
+7. 日本語で出力すること
+8. カテゴリ情報（[出来事][思ったこと][タスク][あとで読む]）や完了マーク([✓])は参考にしつつ、自然な文章に整形する
+
+出力はMarkdown形式で返してください。`;
 
 const DEFAULT_SETTINGS: AISettings = {
   openai_api_key: null,
@@ -60,6 +75,7 @@ const DEFAULT_SETTINGS: AISettings = {
   google_api_key: null,
   selected_provider: 'lovable',
   selected_model: 'google/gemini-2.5-flash',
+  custom_system_prompt: null,
 };
 
 export function useAISettings() {
@@ -92,6 +108,7 @@ export function useAISettings() {
           google_api_key: data.google_api_key,
           selected_provider: data.selected_provider as AIProvider,
           selected_model: data.selected_model,
+          custom_system_prompt: data.custom_system_prompt,
         });
       } else {
         setSettings(DEFAULT_SETTINGS);
@@ -127,6 +144,7 @@ export function useAISettings() {
           google_api_key: updatedSettings.google_api_key,
           selected_provider: updatedSettings.selected_provider,
           selected_model: updatedSettings.selected_model,
+          custom_system_prompt: updatedSettings.custom_system_prompt || null,
         }, {
           onConflict: 'user_id',
         });
