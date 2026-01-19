@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { Loader2, Sparkles, BookOpen, CalendarDays } from 'lucide-react';
+import { Loader2, Sparkles, BookOpen, CalendarDays, ArrowLeft } from 'lucide-react';
 import { useEntries, Block, Entry, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
 import { parseTimestamp, formatTimeJST, getTodayKey } from '@/lib/dateUtils';
 import { CATEGORY_CONFIG, BlockCategory } from '@/lib/categoryUtils';
 import { DateSelector } from '@/components/flow/DateSelector';
 import { toast } from 'sonner';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface JournalViewProps {
   entries: Entry[];
@@ -27,8 +28,23 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
   const [entry, setEntry] = useState<Entry | null>(null);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showContent, setShowContent] = useState(false);
+  const isMobile = useIsMobile();
   const today = getTodayKey();
   const isToday = selectedDate === today;
+
+  // Handle mobile date selection
+  const handleMobileDateSelect = (date: string) => {
+    onDateSelect(date);
+    if (isMobile) {
+      setShowContent(true);
+    }
+  };
+
+  // Handle back to date selection (mobile)
+  const handleBackToDateSelection = () => {
+    setShowContent(false);
+  };
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -98,6 +114,182 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
 
   const formattedDate = format(new Date(selectedDate), 'M月d日（E）', { locale: ja });
 
+  // Date Header component
+  const DateHeader = () => (
+    <div className={`flex items-center gap-4 p-5 rounded-xl border ${isToday ? 'bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20' : 'bg-muted/30 border-border'}`}>
+      <div className={`flex items-center justify-center w-12 h-12 rounded-xl ${isToday ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>
+        <BookOpen className="h-6 w-6" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <h2 className="text-xl md:text-2xl font-semibold text-foreground truncate">
+          {isToday ? '今日の日記' : `${formattedDate}の日記`}
+        </h2>
+        {entry?.summary && (
+          <p className="text-muted-foreground mt-1 text-sm truncate">
+            {entry.summary}
+          </p>
+        )}
+      </div>
+      {filteredBlocks.length > 0 && (
+        <Button
+          onClick={handleFormat}
+          disabled={formatting}
+          variant="outline"
+          size="sm"
+          className="gap-2 flex-shrink-0"
+        >
+          {formatting ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="hidden sm:inline">整形中...</span>
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4" />
+              <span className="hidden sm:inline">整形する</span>
+            </>
+          )}
+        </Button>
+      )}
+    </div>
+  );
+
+  // Journal Content component
+  const JournalContent = () => (
+    <>
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : filteredBlocks.length === 0 ? (
+        <div className="text-center py-12">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+            <BookOpen className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <p className="text-muted-foreground">日記がありません</p>
+          <p className="text-sm text-muted-foreground/70 mt-1">
+            出来事や思ったことを記録すると、ここに表示されます
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* Block List (ascending) */}
+          {filteredBlocks.map((block) => {
+            const config = CATEGORY_CONFIG[block.category as BlockCategory];
+            const Icon = config?.icon;
+            const hasContent = block.content && block.content.trim().length > 0;
+            const hasImages = block.images && block.images.length > 0;
+            
+            return (
+              <div key={block.id} className="block-card p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-1">
+                    {hasContent && (
+                      <p className="text-foreground leading-relaxed whitespace-pre-wrap">
+                        {block.content}
+                      </p>
+                    )}
+                    
+                    {hasImages && (
+                      <div className={`grid gap-2 ${hasContent ? 'mt-3' : ''} ${block.images!.length === 1 ? 'grid-cols-1 max-w-xs' : block.images!.length === 2 ? 'grid-cols-2 max-w-sm' : 'grid-cols-3 max-w-md'}`}>
+                        {block.images!.map((url, i) => (
+                          <img
+                            key={i}
+                            src={url}
+                            alt=""
+                            className="w-full aspect-square object-cover rounded-md border border-border"
+                          />
+                        ))}
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${config?.bgColor} ${config?.color}`}>
+                        {Icon && <Icon className="h-3 w-3" />}
+                        {config?.label}
+                      </span>
+                      <span className="timestamp-badge">
+                        {formatTimeJST(block.occurred_at)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* AI Formatted Content */}
+          {sections.length > 0 && (
+            <div className="space-y-6 mt-8 pt-6 border-t border-border">
+              <h3 className="text-lg font-medium text-foreground flex items-center gap-2">
+                ✨ AI整形版
+              </h3>
+              {sections.map((section, index) => (
+                <div key={index} className="block-card p-5">
+                  <h4 className="text-lg font-medium text-primary mb-3 flex items-center gap-2">
+                    {section.title === '今日の3行まとめ' && (
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary/10">
+                        ✨
+                      </span>
+                    )}
+                    {section.title === '朝' && '🌅'}
+                    {section.title === '昼' && '☀️'}
+                    {section.title === '夕方' && '🌇'}
+                    {section.title === '夜' && '🌙'}
+                    {section.title}
+                  </h4>
+                  <div className="prose prose-sm max-w-none text-foreground/90">
+                    {section.body.split('\n').map((line, i) => (
+                      <p key={i} className="mb-2 last:mb-0 leading-relaxed">
+                        {line.replace(/^[-*]\s*/, '• ')}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+
+  // Mobile: Step-based UI
+  if (isMobile) {
+    return showContent ? (
+      <div className="space-y-4">
+        {/* Back button */}
+        <button 
+          onClick={handleBackToDateSelection}
+          className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span className="text-sm font-medium">日付を選択</span>
+        </button>
+        
+        {/* Date Header and Content */}
+        <DateHeader />
+        <JournalContent />
+      </div>
+    ) : (
+      <div className="space-y-4">
+        {/* Date selection header */}
+        <div className="flex items-center gap-2 pb-4 border-b border-border">
+          <CalendarDays className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">日付を選択してください</span>
+        </div>
+        
+        {/* Date Selector */}
+        <DateSelector 
+          entries={entries} 
+          onSelect={handleMobileDateSelect}
+          selectedDate={selectedDate}
+        />
+      </div>
+    );
+  }
+
+  // Desktop: Two-column layout
   return (
     <div className="grid md:grid-cols-[240px_1fr] gap-6">
       {/* Date List Sidebar */}
@@ -115,138 +307,8 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
 
       {/* Journal Content */}
       <div className="space-y-6">
-        {/* Date Header */}
-        <div className={`flex items-center gap-4 p-5 rounded-xl border ${isToday ? 'bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20' : 'bg-muted/30 border-border'}`}>
-          <div className={`flex items-center justify-center w-12 h-12 rounded-xl ${isToday ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>
-            <BookOpen className="h-6 w-6" />
-          </div>
-          <div className="flex-1">
-            <h2 className="text-2xl font-semibold text-foreground">
-              {isToday ? '今日の日記' : `${formattedDate}の日記`}
-            </h2>
-            {entry?.summary && (
-              <p className="text-muted-foreground mt-1 text-sm">
-                {entry.summary}
-              </p>
-            )}
-          </div>
-          {filteredBlocks.length > 0 && (
-            <Button
-              onClick={handleFormat}
-              disabled={formatting}
-              variant="outline"
-              size="sm"
-              className="gap-2"
-            >
-              {formatting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  整形中...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" />
-                  整形する
-                </>
-              )}
-            </Button>
-          )}
-        </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : filteredBlocks.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
-              <BookOpen className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <p className="text-muted-foreground">日記がありません</p>
-            <p className="text-sm text-muted-foreground/70 mt-1">
-              出来事や思ったことを記録すると、ここに表示されます
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {/* Block List (ascending) */}
-            {filteredBlocks.map((block) => {
-              const config = CATEGORY_CONFIG[block.category as BlockCategory];
-              const Icon = config?.icon;
-              const hasContent = block.content && block.content.trim().length > 0;
-              const hasImages = block.images && block.images.length > 0;
-              
-              return (
-                <div key={block.id} className="block-card p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1">
-                      {hasContent && (
-                        <p className="text-foreground leading-relaxed whitespace-pre-wrap">
-                          {block.content}
-                        </p>
-                      )}
-                      
-                      {hasImages && (
-                        <div className={`grid gap-2 ${hasContent ? 'mt-3' : ''} ${block.images!.length === 1 ? 'grid-cols-1 max-w-xs' : block.images!.length === 2 ? 'grid-cols-2 max-w-sm' : 'grid-cols-3 max-w-md'}`}>
-                          {block.images!.map((url, i) => (
-                            <img
-                              key={i}
-                              src={url}
-                              alt=""
-                              className="w-full aspect-square object-cover rounded-md border border-border"
-                            />
-                          ))}
-                        </div>
-                      )}
-                      
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${config?.bgColor} ${config?.color}`}>
-                          {Icon && <Icon className="h-3 w-3" />}
-                          {config?.label}
-                        </span>
-                        <span className="timestamp-badge">
-                          {formatTimeJST(block.occurred_at)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* AI Formatted Content */}
-            {sections.length > 0 && (
-              <div className="space-y-6 mt-8 pt-6 border-t border-border">
-                <h3 className="text-lg font-medium text-foreground flex items-center gap-2">
-                  ✨ AI整形版
-                </h3>
-                {sections.map((section, index) => (
-                  <div key={index} className="block-card p-5">
-                    <h4 className="text-lg font-medium text-primary mb-3 flex items-center gap-2">
-                      {section.title === '今日の3行まとめ' && (
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary/10">
-                          ✨
-                        </span>
-                      )}
-                      {section.title === '朝' && '🌅'}
-                      {section.title === '昼' && '☀️'}
-                      {section.title === '夕方' && '🌇'}
-                      {section.title === '夜' && '🌙'}
-                      {section.title}
-                    </h4>
-                    <div className="prose prose-sm max-w-none text-foreground/90">
-                      {section.body.split('\n').map((line, i) => (
-                        <p key={i} className="mb-2 last:mb-0 leading-relaxed">
-                          {line.replace(/^[-*]\s*/, '• ')}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        <DateHeader />
+        <JournalContent />
       </div>
     </div>
   );
