@@ -294,10 +294,16 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
           />
           
           {/* セクションヘッダー + 整形ボタン */}
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-muted-foreground">
-              {isToday ? '今日のログ' : 'この日のログ'}
-            </h3>
+          <div className="flex items-center justify-between pb-3 border-b border-border">
+            <div className="flex items-center gap-2">
+              <div className="w-1 h-5 rounded-full bg-primary/60" />
+              <h3 className="text-base font-medium text-foreground">
+                {isToday ? '今日のログ' : 'この日のログ'}
+              </h3>
+              <span className="text-xs text-muted-foreground">
+                {blocks.length > 0 ? `${blocks.length}件` : ''}
+              </span>
+            </div>
             
             {blocks.length > 0 && (
               <Button
