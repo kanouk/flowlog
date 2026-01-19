@@ -12,6 +12,7 @@ interface AISettings {
   google_api_key: string | null;
   selected_provider: string;
   selected_model: string;
+  custom_summarize_prompt: string | null;
 }
 
 interface UrlMetadata {
@@ -258,8 +259,8 @@ serve(async (req) => {
       ? markdown.substring(0, maxContentLength) + '\n\n... (以下省略)'
       : markdown;
 
-    // System prompt for summarization
-    const systemPrompt = `あなたはウェブページの内容を簡潔にまとめるアシスタントです。
+    // Default system prompt for summarization
+    const defaultSummarizePrompt = `あなたはウェブページの内容を簡潔にまとめるアシスタントです。
 以下のルールに従ってください：
 1. ページの主要な内容を日本語で3-5行にまとめる
 2. 重要なポイントを簡潔に整理する
@@ -267,6 +268,9 @@ serve(async (req) => {
 4. 客観的な要約を心がける
 5. 箇条書きは使わず、自然な文章でまとめる
 6. マークダウン記法は使わず、プレーンテキストで出力する`;
+
+    // Use custom prompt if set, otherwise use default
+    const systemPrompt = aiSettings?.custom_summarize_prompt || defaultSummarizePrompt;
 
     const userPrompt = `以下のウェブページの内容を要約してください：
 
