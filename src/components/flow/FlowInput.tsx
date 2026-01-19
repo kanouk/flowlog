@@ -246,10 +246,11 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
               </span>
             </Button>
           </label>
-          <p className="text-sm text-muted-foreground">
-            {isMobile ? '改行可能 • ボタンで保存' : 'Enterで保存 • Shift+Enterで改行'}
-            {selectedImages.length > 0 && ` • 画像${selectedImages.length}/${maxImages}`}
-          </p>
+          {selectedImages.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              画像{selectedImages.length}/{maxImages}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {isSubmitting && (
