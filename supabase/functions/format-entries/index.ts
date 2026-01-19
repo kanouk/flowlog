@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { parseISO } from "npm:date-fns@3";
 import { formatInTimeZone } from "npm:date-fns-tz@3";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,6 +18,14 @@ interface Block {
   is_done?: boolean;
 }
 
+interface AISettings {
+  openai_api_key: string | null;
+  anthropic_api_key: string | null;
+  google_api_key: string | null;
+  selected_provider: string;
+  selected_model: string;
+}
+
 function getCategoryLabel(category: string): string {
   const labels: Record<string, string> = {
     event: '出来事',
@@ -25,6 +34,119 @@ function getCategoryLabel(category: string): string {
     read_later: 'あとで読む',
   };
   return labels[category] || category;
+}
+
+async function callOpenAI(apiKey: string, model: string, systemPrompt: string, userPrompt: string): Promise<string> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
+async function callAnthropic(apiKey: string, model: string, systemPrompt: string, userPrompt: string): Promise<string> {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [
+        { role: 'user', content: userPrompt }
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Anthropic API error: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.content?.[0]?.text || '';
+}
+
+async function callGoogle(apiKey: string, model: string, systemPrompt: string, userPrompt: string): Promise<string> {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: systemPrompt }]
+      },
+      contents: [{
+        parts: [{ text: userPrompt }]
+      }],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Google AI API error: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+async function callLovableAI(model: string, systemPrompt: string, userPrompt: string): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) {
+    throw new Error('LOVABLE_API_KEY is not configured');
+  }
+
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    if (response.status === 429) {
+      throw new Error('RATE_LIMIT');
+    }
+    if (response.status === 402) {
+      throw new Error('CREDITS_EXHAUSTED');
+    }
+    const errorText = await response.text();
+    throw new Error(`Lovable AI error: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
 }
 
 serve(async (req) => {
@@ -42,10 +164,35 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+    // Get user's AI settings
+    const authHeader = req.headers.get('Authorization');
+    let aiSettings: AISettings | null = null;
+
+    if (authHeader) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } }
+      });
+
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        const { data: settings } = await supabase
+          .from('user_ai_settings')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        if (settings) {
+          aiSettings = settings as AISettings;
+        }
+      }
     }
+
+    // Default to Lovable AI
+    const provider = aiSettings?.selected_provider || 'lovable';
+    const model = aiSettings?.selected_model || 'google/gemini-2.5-flash';
 
     // Sort blocks by occurred_at (parseISO使用)
     const sortedBlocks = [...blocks].sort(
@@ -82,45 +229,58 @@ serve(async (req) => {
 
 ${blocksText}`;
 
-    console.log('Calling AI gateway for formatting...');
+    console.log('Calling AI for formatting...');
+    console.log('Provider:', provider);
+    console.log('Model:', model);
     console.log('Blocks count:', blocks.length);
     console.log('Date:', date);
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-      }),
-    });
+    let formattedContent: string;
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: 'レート制限に達しました。しばらくしてから再試行してください。' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+    try {
+      switch (provider) {
+        case 'openai':
+          if (!aiSettings?.openai_api_key) {
+            throw new Error('OpenAI APIキーが設定されていません');
+          }
+          formattedContent = await callOpenAI(aiSettings.openai_api_key, model, systemPrompt, userPrompt);
+          break;
+        
+        case 'anthropic':
+          if (!aiSettings?.anthropic_api_key) {
+            throw new Error('Anthropic APIキーが設定されていません');
+          }
+          formattedContent = await callAnthropic(aiSettings.anthropic_api_key, model, systemPrompt, userPrompt);
+          break;
+        
+        case 'google':
+          if (!aiSettings?.google_api_key) {
+            throw new Error('Google APIキーが設定されていません');
+          }
+          formattedContent = await callGoogle(aiSettings.google_api_key, model, systemPrompt, userPrompt);
+          break;
+        
+        default:
+          // Lovable AI (default)
+          formattedContent = await callLovableAI(model, systemPrompt, userPrompt);
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: 'クレジットが不足しています。' }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === 'RATE_LIMIT') {
+          return new Response(
+            JSON.stringify({ error: 'レート制限に達しました。しばらくしてから再試行してください。' }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        if (error.message === 'CREDITS_EXHAUSTED') {
+          return new Response(
+            JSON.stringify({ error: 'クレジットが不足しています。' }),
+            { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
-      const errorText = await response.text();
-      console.error('AI gateway error:', response.status, errorText);
-      throw new Error(`AI gateway error: ${response.status}`);
+      throw error;
     }
-
-    const data = await response.json();
-    const formattedContent = data.choices?.[0]?.message?.content;
 
     if (!formattedContent) {
       throw new Error('No content in AI response');

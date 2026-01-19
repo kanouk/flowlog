@@ -115,6 +115,42 @@ export type Database = {
         }
         Relationships: []
       }
+      user_ai_settings: {
+        Row: {
+          anthropic_api_key: string | null
+          created_at: string
+          google_api_key: string | null
+          id: string
+          openai_api_key: string | null
+          selected_model: string
+          selected_provider: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          anthropic_api_key?: string | null
+          created_at?: string
+          google_api_key?: string | null
+          id?: string
+          openai_api_key?: string | null
+          selected_model?: string
+          selected_provider?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          anthropic_api_key?: string | null
+          created_at?: string
+          google_api_key?: string | null
+          id?: string
+          openai_api_key?: string | null
+          selected_model?: string
+          selected_provider?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

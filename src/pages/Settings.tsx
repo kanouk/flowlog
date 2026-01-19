@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, User, LogOut, Loader2 } from 'lucide-react';
+import { AISettingsSection } from '@/components/settings/AISettingsSection';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -49,6 +50,9 @@ export default function Settings() {
 
       {/* Main content */}
       <main className="container max-w-2xl mx-auto px-4 py-8 space-y-6">
+        {/* AI Settings section */}
+        <AISettingsSection />
+
         {/* Account section */}
         <section className="glass-card rounded-2xl p-6 space-y-4">
           <h2 className="text-lg font-medium flex items-center gap-2">
