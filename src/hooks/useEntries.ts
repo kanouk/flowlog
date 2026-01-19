@@ -45,6 +45,11 @@ export interface BlockUpdatePayload {
   done_at?: string | null;
 }
 
+export interface GetBlocksByCategoryOptions {
+  limit?: number;
+  includeCompleted?: boolean; // for tasks
+}
+
 export function useEntries() {
   const { user, session } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -126,6 +131,65 @@ export function useEntries() {
       return [];
     }
     return data as Block[];
+  }, [user]);
+
+  /**
+   * カテゴリ横断でブロックを取得（Tasks/Read later用）
+   * - entry_id依存なし（横断ビュー用）
+   * - task: is_done ASC, occurred_at DESC
+   * - read_later: occurred_at DESC
+   */
+  const getBlocksByCategory = useCallback(async (
+    category: BlockCategory | BlockCategory[],
+    options?: GetBlocksByCategoryOptions
+  ): Promise<Block[]> => {
+    if (!user) return [];
+    
+    const categories = Array.isArray(category) ? category : [category];
+    const limit = options?.limit || 100;
+    
+    let query = supabase
+      .from('blocks')
+      .select('*')
+      .eq('user_id', user.id)
+      .in('category', categories);
+    
+    // タスクの場合のみ、完了済み除外オプション
+    if (categories.includes('task') && options?.includeCompleted === false) {
+      query = query.eq('is_done', false);
+    }
+    
+    const { data, error } = await query
+      .order('occurred_at', { ascending: false })
+      .limit(limit);
+    
+    if (error) {
+      console.error('Error fetching blocks by category:', error);
+      return [];
+    }
+    
+    let blocks = data as Block[];
+    
+    // タスクの場合、クライアント側で並び替え: is_done ASC, then occurred_at DESC (for uncompleted), done_at DESC (for completed)
+    if (categories.length === 1 && categories[0] === 'task') {
+      blocks = blocks.sort((a, b) => {
+        // 未完了を先に
+        if (a.is_done !== b.is_done) {
+          return a.is_done ? 1 : -1;
+        }
+        // 同じ状態の場合
+        if (a.is_done && b.is_done) {
+          // 完了済み: done_at DESC
+          const aTime = a.done_at ? parseTimestamp(a.done_at).getTime() : parseTimestamp(a.occurred_at).getTime();
+          const bTime = b.done_at ? parseTimestamp(b.done_at).getTime() : parseTimestamp(b.occurred_at).getTime();
+          return bTime - aTime;
+        }
+        // 未完了: occurred_at DESC
+        return parseTimestamp(b.occurred_at).getTime() - parseTimestamp(a.occurred_at).getTime();
+      });
+    }
+    
+    return blocks;
   }, [user]);
 
   /**
@@ -413,6 +477,7 @@ export function useEntries() {
     loading,
     formatting,
     getBlocksByDate,
+    getBlocksByCategory,
     getOrCreateEntryForDate,
     addBlockWithDate,
     updateBlock,
