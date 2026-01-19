@@ -25,6 +25,7 @@ export type Database = {
           images: string[] | null
           is_done: boolean
           occurred_at: string
+          url_metadata: Json | null
           user_id: string
         }
         Insert: {
@@ -37,6 +38,7 @@ export type Database = {
           images?: string[] | null
           is_done?: boolean
           occurred_at?: string
+          url_metadata?: Json | null
           user_id: string
         }
         Update: {
@@ -49,6 +51,7 @@ export type Database = {
           images?: string[] | null
           is_done?: boolean
           occurred_at?: string
+          url_metadata?: Json | null
           user_id?: string
         }
         Relationships: [
