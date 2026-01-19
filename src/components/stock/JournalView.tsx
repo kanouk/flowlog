@@ -6,7 +6,7 @@ import { useEntries, Block, Entry, BlockUpdatePayload } from '@/hooks/useEntries
 import { Button } from '@/components/ui/button';
 import { parseTimestamp, formatTimeJST, getTodayKey } from '@/lib/dateUtils';
 import { CATEGORY_CONFIG, BlockCategory } from '@/lib/categoryUtils';
-import { DateList } from '@/components/flow/DateList';
+import { DateSelector } from '@/components/flow/DateSelector';
 import { toast } from 'sonner';
 
 interface JournalViewProps {
@@ -106,7 +106,7 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
           <CalendarDays className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium">日付一覧</span>
         </div>
-        <DateList 
+        <DateSelector 
           entries={entries} 
           onSelect={onDateSelect}
           selectedDate={selectedDate}
