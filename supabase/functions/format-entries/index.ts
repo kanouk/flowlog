@@ -30,7 +30,7 @@ interface AISettings {
 function getCategoryLabel(category: string): string {
   const labels: Record<string, string> = {
     event: '出来事',
-    thought: '思ったこと',
+    thought: 'メモ',
     task: 'タスク',
     read_later: 'あとで読む',
   };
@@ -212,7 +212,7 @@ serve(async (req) => {
       return `[${time}] ${categoryLabel}${doneNote}${imageNote} ${content}`.trim();
     }).join('\n');
 
-    const DEFAULT_SYSTEM_PROMPT = `あなたは思考ログを整形するアシスタントです。ユーザーが一日の中で書き留めた短いメモやつぶやきを、読みやすい日記形式に整形してください。
+    const DEFAULT_SYSTEM_PROMPT = `あなたは日記を整形するアシスタントです。ユーザーが一日の中で記録した「出来事」を、読みやすい日記形式に整形してください。
 
 以下のルールに従ってください：
 1. 時系列順に並べ替える（入力は既にソート済み）
@@ -222,7 +222,7 @@ serve(async (req) => {
 5. 最後に「## 今日の3行まとめ」を追加し、その日の要点を3行でまとめる
 6. 元の内容の意味を変えないこと
 7. 日本語で出力すること
-8. カテゴリ情報（[出来事][思ったこと][タスク][あとで読む]）や完了マーク([✓])は参考にしつつ、自然な文章に整形する
+8. 入力には[出来事]のブロックのみが含まれます。自然な日記文に整形してください
 
 出力はMarkdown形式で返してください。`;
 
