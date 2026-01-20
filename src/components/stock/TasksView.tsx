@@ -89,28 +89,30 @@ export function TasksView() {
 
   return (
     <div className="space-y-6">
-      {/* Header - シンプルなデザイン */}
-      <div className="flex items-center justify-between p-5 rounded-xl bg-card border border-border">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-orange-500/10 text-orange-500">
-            <CheckSquare className="h-6 w-6" />
+      {/* Header */}
+      <div className="p-4 sm:p-5 rounded-xl bg-card border border-border">
+        {/* Title Row */}
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-orange-500/10 text-orange-500">
+            <CheckSquare className="h-5 w-5 sm:h-6 sm:w-6" />
           </div>
-          <div>
-            <h2 className="text-2xl font-semibold text-foreground">タスク</h2>
-            <p className="text-sm text-muted-foreground">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-xl sm:text-2xl font-semibold text-foreground">タスク</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground">
               未完了 {incompleteCount}件 / 完了 {completedCount}件
             </p>
           </div>
         </div>
         
         {/* Filters */}
-        <div className="flex flex-col gap-2">
+        <div className="mt-4 space-y-2">
+          {/* Status Filter */}
           <div className="flex gap-2">
             <Button
               variant={filter === 'all' ? 'default' : 'outline'}
               size="sm"
               onClick={() => setFilter('all')}
-              className={filter === 'all' ? 'bg-orange-500 hover:bg-orange-600' : ''}
+              className={`flex-1 sm:flex-none ${filter === 'all' ? 'bg-orange-500 hover:bg-orange-600' : ''}`}
             >
               すべて
             </Button>
@@ -118,19 +120,22 @@ export function TasksView() {
               variant={filter === 'incomplete' ? 'default' : 'outline'}
               size="sm"
               onClick={() => setFilter('incomplete')}
-              className={filter === 'incomplete' ? 'bg-orange-500 hover:bg-orange-600' : ''}
+              className={`flex-1 sm:flex-none ${filter === 'incomplete' ? 'bg-orange-500 hover:bg-orange-600' : ''}`}
             >
               未完了のみ
             </Button>
           </div>
-          <div className="flex gap-1 flex-wrap">
+          
+          {/* Tag Filter - Grid layout */}
+          <div className="grid grid-cols-4 gap-1.5">
             <Button
               variant={tagFilter === 'all' ? 'default' : 'outline'}
               size="sm"
               onClick={() => setTagFilter('all')}
-              className={`h-7 text-xs ${tagFilter === 'all' ? 'bg-gray-500 hover:bg-gray-600' : ''}`}
+              className={`h-8 text-xs px-2 ${tagFilter === 'all' ? 'bg-gray-500 hover:bg-gray-600' : ''}`}
             >
-              全タグ
+              <span className="sm:hidden">全</span>
+              <span className="hidden sm:inline">全タグ</span>
             </Button>
             {TAGS.map((t) => {
               const config = TAG_CONFIG[t];
@@ -141,10 +146,10 @@ export function TasksView() {
                   variant={tagFilter === t ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setTagFilter(t)}
-                  className={`h-7 text-xs ${tagFilter === t ? `${config.bgColor} ${config.color}` : ''}`}
+                  className={`h-8 text-xs px-2 ${tagFilter === t ? `${config.bgColor} ${config.color}` : ''}`}
                 >
-                  <Icon className="h-3 w-3 mr-1" />
-                  {config.label}
+                  <Icon className="h-3.5 w-3.5 sm:mr-1" />
+                  <span className="hidden sm:inline">{config.label}</span>
                 </Button>
               );
             })}
