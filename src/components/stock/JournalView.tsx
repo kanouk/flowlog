@@ -174,9 +174,9 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
 
   // Desktop: Two-column layout
   return (
-    <div className="grid md:grid-cols-[240px_1fr] gap-6">
+    <div className="grid md:grid-cols-[240px_1fr] gap-6 w-full overflow-hidden">
       {/* Date List Sidebar */}
-      <aside className="rounded-2xl p-4 h-fit sticky top-24 bg-card border border-border">
+      <aside className="rounded-2xl p-4 h-fit sticky top-24 bg-card border border-border max-w-[240px] overflow-hidden">
         <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border">
           <CalendarDays className="h-4 w-4 text-blue-500" />
           <span className="text-sm font-medium">日付一覧</span>
@@ -189,7 +189,7 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
       </aside>
 
       {/* Journal Content */}
-      <div className="space-y-6">
+      <div className="space-y-6 min-w-0 overflow-hidden">
         <DateHeader />
         <JournalContent />
       </div>
