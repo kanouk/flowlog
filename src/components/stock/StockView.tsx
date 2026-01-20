@@ -1,12 +1,16 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { BookOpen, ListTodo, Bookmark, Brain } from 'lucide-react';
 import { Entry } from '@/hooks/useEntries';
 import { JournalView } from './JournalView';
 import { TasksView } from './TasksView';
 import { ReadLaterView } from './ReadLaterView';
 import { MemosView } from './MemosView';
+import { useTabSwipe } from '@/hooks/useTabSwipe';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 type StockSubTab = 'journal' | 'tasks' | 'memos' | 'readLater';
+
+const TAB_ORDER: StockSubTab[] = ['journal', 'tasks', 'memos', 'readLater'];
 
 interface StockViewProps {
   entries: Entry[];
@@ -36,6 +40,30 @@ const TAB_COLORS: Record<StockSubTab, { active: string; hover: string }> = {
 
 export function StockView({ entries, selectedDate, onDateSelect }: StockViewProps) {
   const [subTab, setSubTab] = useState<StockSubTab>('journal');
+  const isMobile = useIsMobile();
+
+  // 次のタブへ移動
+  const goToNextTab = useCallback(() => {
+    const currentIndex = TAB_ORDER.indexOf(subTab);
+    if (currentIndex < TAB_ORDER.length - 1) {
+      setSubTab(TAB_ORDER[currentIndex + 1]);
+    }
+  }, [subTab]);
+
+  // 前のタブへ移動
+  const goToPrevTab = useCallback(() => {
+    const currentIndex = TAB_ORDER.indexOf(subTab);
+    if (currentIndex > 0) {
+      setSubTab(TAB_ORDER[currentIndex - 1]);
+    }
+  }, [subTab]);
+
+  // モバイルでのみスワイプを有効化
+  useTabSwipe({
+    onSwipeLeft: goToNextTab,
+    onSwipeRight: goToPrevTab,
+    enabled: isMobile,
+  });
 
   const tabClass = (tab: StockSubTab) => {
     const colors = TAB_COLORS[tab];
