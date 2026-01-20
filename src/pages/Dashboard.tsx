@@ -8,7 +8,7 @@ import { DateSelector } from '@/components/flow/DateSelector';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { LogOut, Calendar, Settings, Menu, ChevronLeft, PenLine, FileText } from 'lucide-react';
+import { LogOut, Calendar, Settings, Menu, PenLine, FileText } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import { getTodayKey } from '@/lib/dateUtils';
 import { useSwipeGesture } from '@/hooks/useSwipeGesture';
@@ -133,17 +133,6 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-2">
-            {activeTab === 'flow' && selectedDate !== today && (
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={handleBackToToday}
-                className="gap-1"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                今日に戻る
-              </Button>
-            )}
             <Button
               variant="ghost"
               size="icon"
