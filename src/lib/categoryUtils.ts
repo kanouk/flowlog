@@ -23,7 +23,7 @@ export const CATEGORY_CONFIG: Record<BlockCategory, CategoryConfig> = {
     icon: CalendarDays,
   },
   thought: { 
-    label: '思ったこと', 
+    label: 'メモ', 
     color: 'text-purple-600 dark:text-purple-400', 
     bgColor: 'bg-purple-100 dark:bg-purple-900/30',
     borderColor: 'border-purple-300 dark:border-purple-700',
@@ -51,7 +51,7 @@ export const CATEGORY_CONFIG: Record<BlockCategory, CategoryConfig> = {
   },
 };
 
-export const CATEGORIES: BlockCategory[] = ['event', 'thought', 'task', 'read_later'];
+export const CATEGORIES: BlockCategory[] = ['event', 'task', 'thought', 'read_later'];
 
 const LAST_CATEGORY_KEY = 'flowlog_last_category';
 
@@ -72,7 +72,7 @@ export function setLastCategory(category: BlockCategory): void {
 export function getCategoryLabel(category: string): string {
   const labels: Record<string, string> = {
     event: '出来事',
-    thought: '思ったこと',
+    thought: 'メモ',
     task: 'タスク',
     read_later: 'あとで読む',
   };

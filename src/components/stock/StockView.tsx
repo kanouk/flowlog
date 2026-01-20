@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { BookOpen, ListTodo, Bookmark } from 'lucide-react';
+import { BookOpen, ListTodo, Bookmark, Brain } from 'lucide-react';
 import { Entry } from '@/hooks/useEntries';
 import { JournalView } from './JournalView';
 import { TasksView } from './TasksView';
 import { ReadLaterView } from './ReadLaterView';
+import { MemosView } from './MemosView';
 
-type StockSubTab = 'journal' | 'tasks' | 'readLater';
+type StockSubTab = 'journal' | 'tasks' | 'memos' | 'readLater';
 
 interface StockViewProps {
   entries: Entry[];
@@ -26,7 +27,7 @@ export function StockView({ entries, selectedDate, onDateSelect }: StockViewProp
   return (
     <div className="space-y-6">
       {/* Sub Tabs */}
-      <div className="flex gap-2 border-b border-border pb-3">
+      <div className="flex gap-2 border-b border-border pb-3 overflow-x-auto">
         <button onClick={() => setSubTab('journal')} className={tabClass('journal')}>
           <BookOpen className="h-4 w-4" />
           日記
@@ -34,6 +35,10 @@ export function StockView({ entries, selectedDate, onDateSelect }: StockViewProp
         <button onClick={() => setSubTab('tasks')} className={tabClass('tasks')}>
           <ListTodo className="h-4 w-4" />
           タスク
+        </button>
+        <button onClick={() => setSubTab('memos')} className={tabClass('memos')}>
+          <Brain className="h-4 w-4" />
+          メモ
         </button>
         <button onClick={() => setSubTab('readLater')} className={tabClass('readLater')}>
           <Bookmark className="h-4 w-4" />
@@ -52,6 +57,10 @@ export function StockView({ entries, selectedDate, onDateSelect }: StockViewProp
       
       {subTab === 'tasks' && (
         <TasksView />
+      )}
+      
+      {subTab === 'memos' && (
+        <MemosView />
       )}
       
       {subTab === 'readLater' && (

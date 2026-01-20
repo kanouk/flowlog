@@ -1,11 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { Sparkles, Loader2, CalendarDays, Sun } from 'lucide-react';
+import { Loader2, CalendarDays, Sun } from 'lucide-react';
 import { FlowInput } from '@/components/flow/FlowInput';
 import { BlockList } from '@/components/flow/BlockList';
 import { useEntries, Block, Entry, AddBlockMode, BlockUpdatePayload } from '@/hooks/useEntries';
-import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDateJST, calculateMiddleOccurredAt } from '@/lib/dateUtils';
 import { BlockCategory } from '@/lib/categoryUtils';
@@ -73,6 +72,26 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
   };
 
   /**
+   * 自動日記生成（出来事ブロックのみ）
+   */
+  const triggerAutoFormat = useCallback(async (targetDate: string) => {
+    try {
+      const entryData = await getEntry(targetDate);
+      const blocksData = await getBlocksByDate(targetDate);
+      
+      // 「出来事」カテゴリのブロックのみ抽出
+      const eventBlocks = blocksData.filter(b => b.category === 'event');
+      
+      if (entryData && eventBlocks.length > 0) {
+        await formatEntry(entryData.id, eventBlocks, targetDate);
+      }
+    } catch (error) {
+      console.error('Auto format error:', error);
+      // 自動整形のエラーは静かに処理（トースト不要）
+    }
+  }, [getEntry, getBlocksByDate, formatEntry]);
+
+  /**
    * ブロック追加（楽観的更新 + 遷移処理 + 画像対応 + カテゴリ対応 + 自動サマライズ）
    */
   const handleAddBlock = async (content: string, mode: AddBlockMode, images: string[] = [], category: BlockCategory = 'event') => {
@@ -125,6 +144,12 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
           });
         }
       }
+
+      // 「出来事」カテゴリの場合、自動日記生成
+      if (category === 'event') {
+        const targetDate = navigateToDate || selectedDate;
+        triggerAutoFormat(targetDate);
+      }
     } else {
       setBlocks(prev => prev.filter(b => b.id !== tempId));
     }
@@ -134,9 +159,18 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
    * ブロック削除
    */
   const handleDeleteBlock = async (blockId: string) => {
+    // 削除前にブロックのカテゴリを確認
+    const blockToDelete = blocks.find(b => b.id === blockId);
+    const wasEvent = blockToDelete?.category === 'event';
+    
     const success = await deleteBlock(blockId);
     if (success) {
       setBlocks(prev => prev.filter(b => b.id !== blockId));
+      
+      // 「出来事」カテゴリの場合、自動日記再生成
+      if (wasEvent) {
+        triggerAutoFormat(selectedDate);
+      }
     }
   };
 
@@ -145,6 +179,9 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
    */
   const handleUpdateBlock = async (blockId: string, updates: BlockUpdatePayload) => {
     const originalBlocks = [...blocks];
+    const blockToUpdate = blocks.find(b => b.id === blockId);
+    const isEvent = blockToUpdate?.category === 'event';
+    
     setBlocks(prev => prev.map(b => 
       b.id === blockId ? { ...b, ...updates } : b
     ));
@@ -158,9 +195,23 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
       if (newDayKey !== selectedDate) {
         setBlocks(prev => prev.filter(b => b.id !== blockId));
         toast.success(`${formatDateJST(updates.occurred_at)}に移動しました`);
+        
+        // 「出来事」カテゴリの場合、両方の日の日記を再生成
+        if (isEvent) {
+          triggerAutoFormat(selectedDate);
+          triggerAutoFormat(newDayKey);
+        }
       } else {
         setBlocks(prev => sortBlocksDesc(prev));
+        
+        // 「出来事」カテゴリの場合、日記を再生成
+        if (isEvent) {
+          triggerAutoFormat(selectedDate);
+        }
       }
+    } else if (isEvent && (updates.content !== undefined)) {
+      // 内容更新の場合も日記を再生成
+      triggerAutoFormat(selectedDate);
     }
   };
 
@@ -193,6 +244,8 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
     }
 
     const newOccurredAt = result.occurredAt;
+    const blockToMove = blocks.find(b => b.id === activeId);
+    const isEvent = blockToMove?.category === 'event';
 
     const updated = await updateBlock(activeId, { occurred_at: newOccurredAt });
     
@@ -202,28 +255,12 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
       setBlocks(prev => sortBlocksDesc(
         prev.map(b => b.id === activeId ? { ...b, occurred_at: newOccurredAt } : b)
       ));
+      
+      // 「出来事」カテゴリの場合、日記を再生成
+      if (isEvent) {
+        triggerAutoFormat(selectedDate);
+      }
     }
-  };
-
-  /**
-   * エントリ整形
-   */
-  const handleFormat = async () => {
-    if (blocks.length === 0) return;
-    
-    let currentEntry = entry;
-    if (!currentEntry) {
-      const entryData = await getEntry(selectedDate);
-      currentEntry = entryData;
-      setEntry(entryData);
-    }
-    
-    if (!currentEntry) {
-      toast.error('エントリが見つかりません');
-      return;
-    }
-    
-    await formatEntry(currentEntry.id, blocks, selectedDate);
   };
 
   const formattedDate = format(new Date(selectedDate), 'M月d日（E）', { locale: ja });
@@ -273,7 +310,7 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
         isToday={isToday}
       />
       
-      {/* Section Header + Format Button */}
+      {/* Section Header */}
       <div className="flex items-center justify-between pb-3 border-b border-border">
         <div className="flex items-center gap-2">
           <div className="w-1 h-5 rounded-full bg-primary/60" />
@@ -285,26 +322,12 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
           </span>
         </div>
         
-        {blocks.length > 0 && (
-          <Button
-            onClick={handleFormat}
-            disabled={formatting}
-            variant="outline"
-            size="sm"
-            className="gap-2"
-          >
-            {formatting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                整形中...
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4" />
-                整形する
-              </>
-            )}
-          </Button>
+        {/* 自動整形中のインジケータ */}
+        {formatting && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            日記生成中...
+          </div>
         )}
       </div>
       
