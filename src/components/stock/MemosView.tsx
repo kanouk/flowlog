@@ -2,14 +2,11 @@ import { useEffect, useState, useCallback } from 'react';
 import { Loader2, Brain } from 'lucide-react';
 import { useEntries, Block } from '@/hooks/useEntries';
 import { formatTimeJST, formatDateJST } from '@/lib/dateUtils';
-import { CATEGORY_CONFIG } from '@/lib/categoryUtils';
 
 export function MemosView() {
   const { getBlocksByCategory } = useEntries();
   const [memos, setMemos] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const config = CATEGORY_CONFIG.thought;
 
   const loadMemos = useCallback(async () => {
     setLoading(true);
@@ -35,9 +32,9 @@ export function MemosView() {
 
   return (
     <div className="space-y-6">
-      {/* Header with category color */}
-      <div className={`flex items-center gap-4 p-5 rounded-xl border ${config.bgColor} ${config.borderColor}`}>
-        <div className={`flex items-center justify-center w-12 h-12 rounded-xl bg-purple-500/20 ${config.color}`}>
+      {/* Header - シンプルなデザイン */}
+      <div className="flex items-center gap-4 p-5 rounded-xl bg-card border border-border">
+        <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-purple-500/10 text-purple-500">
           <Brain className="h-6 w-6" />
         </div>
         <div>
@@ -51,8 +48,8 @@ export function MemosView() {
       {/* Memos List */}
       {memos.length === 0 ? (
         <div className="text-center py-12">
-          <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${config.bgColor} mb-4`}>
-            <Brain className={`w-8 h-8 ${config.color}`} />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
+            <Brain className="w-8 h-8 text-purple-500" />
           </div>
           <p className="text-muted-foreground">メモがありません</p>
           <p className="text-sm text-muted-foreground/70 mt-1">
@@ -68,10 +65,10 @@ export function MemosView() {
             return (
               <div 
                 key={memo.id} 
-                className={`p-4 rounded-xl border ${config.bgColor} ${config.borderColor}`}
+                className="p-4 rounded-xl bg-card border border-border"
               >
                 <div className="flex items-start gap-3">
-                  <div className={`flex items-center justify-center w-8 h-8 rounded-lg bg-purple-500/20 ${config.color} flex-shrink-0`}>
+                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex-shrink-0">
                     <Brain className="h-4 w-4" />
                   </div>
                   

@@ -3,7 +3,6 @@ import { Loader2, CheckSquare, Square, CheckSquare as CheckSquareIcon } from 'lu
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
 import { formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
-import { CATEGORY_CONFIG } from '@/lib/categoryUtils';
 import { toast } from 'sonner';
 
 type TaskFilter = 'all' | 'incomplete';
@@ -14,8 +13,6 @@ export function TasksView() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<TaskFilter>('all');
-
-  const config = CATEGORY_CONFIG.task;
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -85,10 +82,10 @@ export function TasksView() {
 
   return (
     <div className="space-y-6">
-      {/* Header with category color */}
-      <div className={`flex items-center justify-between p-5 rounded-xl border ${config.bgColor} ${config.borderColor}`}>
+      {/* Header - シンプルなデザイン */}
+      <div className="flex items-center justify-between p-5 rounded-xl bg-card border border-border">
         <div className="flex items-center gap-4">
-          <div className={`flex items-center justify-center w-12 h-12 rounded-xl bg-orange-500/20 ${config.color}`}>
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-orange-500/10 text-orange-500">
             <CheckSquare className="h-6 w-6" />
           </div>
           <div>
@@ -123,8 +120,8 @@ export function TasksView() {
       {/* Task List */}
       {filteredBlocks.length === 0 ? (
         <div className="text-center py-12">
-          <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${config.bgColor} mb-4`}>
-            <CheckSquare className={`w-8 h-8 ${config.color}`} />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-orange-500/10 mb-4">
+            <CheckSquare className="w-8 h-8 text-orange-500" />
           </div>
           <p className="text-muted-foreground">
             {filter === 'incomplete' ? '未完了のタスクはありません' : 'タスクがありません'}
@@ -145,7 +142,7 @@ export function TasksView() {
                 className={`p-4 rounded-xl border transition-all ${
                   block.is_done 
                     ? 'bg-muted/30 border-border opacity-60' 
-                    : `${config.bgColor} ${config.borderColor}`
+                    : 'bg-card border-border'
                 }`}
               >
                 <div className="flex items-start gap-3">
@@ -155,9 +152,9 @@ export function TasksView() {
                     className="mt-0.5 flex-shrink-0"
                   >
                     {block.is_done ? (
-                      <CheckSquareIcon className={`h-5 w-5 ${config.color}`} />
+                      <CheckSquareIcon className="h-5 w-5 text-orange-500" />
                     ) : (
-                      <Square className={`h-5 w-5 text-muted-foreground hover:${config.color} transition-colors`} />
+                      <Square className="h-5 w-5 text-muted-foreground hover:text-orange-500 transition-colors" />
                     )}
                   </button>
                   
