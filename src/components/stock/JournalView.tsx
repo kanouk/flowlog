@@ -4,6 +4,7 @@ import { ja } from 'date-fns/locale';
 import { Loader2, BookOpen, CalendarDays, ArrowLeft } from 'lucide-react';
 import { useEntries, Entry } from '@/hooks/useEntries';
 import { getTodayKey } from '@/lib/dateUtils';
+import { CATEGORY_CONFIG } from '@/lib/categoryUtils';
 import { DateSelector } from '@/components/flow/DateSelector';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -22,6 +23,9 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
   const isMobile = useIsMobile();
   const today = getTodayKey();
   const isToday = selectedDate === today;
+
+  // 日記は「出来事」カテゴリの色を使用
+  const config = CATEGORY_CONFIG.event;
 
   // Handle mobile date selection
   const handleMobileDateSelect = (date: string) => {
@@ -66,10 +70,10 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
 
   const formattedDate = format(new Date(selectedDate), 'M月d日（E）', { locale: ja });
 
-  // Date Header component
+  // Date Header component with category color
   const DateHeader = () => (
-    <div className={`flex items-center gap-4 p-5 rounded-xl border ${isToday ? 'bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20' : 'bg-muted/30 border-border'}`}>
-      <div className={`flex items-center justify-center w-12 h-12 rounded-xl ${isToday ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>
+    <div className={`flex items-center gap-4 p-5 rounded-xl border ${config.bgColor} ${config.borderColor}`}>
+      <div className={`flex items-center justify-center w-12 h-12 rounded-xl bg-blue-500/20 ${config.color}`}>
         <BookOpen className="h-6 w-6" />
       </div>
       <div className="flex-1 min-w-0">
@@ -90,12 +94,12 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
     <>
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
         </div>
       ) : !entry?.formatted_content ? (
         <div className="text-center py-12">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
-            <BookOpen className="w-8 h-8 text-muted-foreground" />
+          <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${config.bgColor} mb-4`}>
+            <BookOpen className={`w-8 h-8 ${config.color}`} />
           </div>
           <p className="text-muted-foreground">日記がまだ生成されていません</p>
           <p className="text-sm text-muted-foreground/70 mt-1">
@@ -103,12 +107,15 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {sections.map((section, index) => (
-            <div key={index} className="block-card p-5">
-              <h4 className="text-lg font-medium text-primary mb-3 flex items-center gap-2">
+            <div 
+              key={index} 
+              className={`p-5 rounded-xl border ${config.bgColor} ${config.borderColor}`}
+            >
+              <h4 className={`text-lg font-medium ${config.color} mb-3 flex items-center gap-2`}>
                 {section.title === '今日の3行まとめ' && (
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary/10">
+                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500/20">
                     ✨
                   </span>
                 )}
@@ -139,7 +146,7 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
         {/* Back button */}
         <button 
           onClick={handleBackToDateSelection}
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+          className={`flex items-center gap-2 ${config.color} hover:opacity-80 transition-colors`}
         >
           <ArrowLeft className="h-4 w-4" />
           <span className="text-sm font-medium">日付を選択</span>
@@ -152,8 +159,8 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
     ) : (
       <div className="space-y-4">
         {/* Date selection header */}
-        <div className="flex items-center gap-2 pb-4 border-b border-border">
-          <CalendarDays className="h-4 w-4 text-muted-foreground" />
+        <div className={`flex items-center gap-2 pb-4 border-b ${config.borderColor}`}>
+          <CalendarDays className={`h-4 w-4 ${config.color}`} />
           <span className="text-sm font-medium">日付を選択してください</span>
         </div>
         
@@ -171,9 +178,9 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
   return (
     <div className="grid md:grid-cols-[240px_1fr] gap-6">
       {/* Date List Sidebar */}
-      <aside className="glass-card rounded-2xl p-4 h-fit sticky top-24">
-        <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border">
-          <CalendarDays className="h-4 w-4 text-muted-foreground" />
+      <aside className={`rounded-2xl p-4 h-fit sticky top-24 border ${config.bgColor} ${config.borderColor}`}>
+        <div className={`flex items-center gap-2 mb-4 pb-4 border-b ${config.borderColor}`}>
+          <CalendarDays className={`h-4 w-4 ${config.color}`} />
           <span className="text-sm font-medium">日付一覧</span>
         </div>
         <DateSelector 

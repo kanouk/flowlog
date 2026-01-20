@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
+import { useEffect, useState, useCallback, ReactNode } from 'react';
 import { Loader2, Bookmark, ExternalLink, Sparkles, RefreshCw, FileText } from 'lucide-react';
-import { useEntries, Block, UrlMetadata } from '@/hooks/useEntries';
+import { useEntries, Block } from '@/hooks/useEntries';
 import { formatTimeJST, formatDateJST } from '@/lib/dateUtils';
+import { CATEGORY_CONFIG } from '@/lib/categoryUtils';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -30,7 +31,7 @@ function linkifyContent(text: string): ReactNode {
           href={part} 
           target="_blank" 
           rel="noopener noreferrer"
-          className="text-primary hover:underline inline-flex items-center gap-1"
+          className="text-green-600 dark:text-green-400 hover:underline inline-flex items-center gap-1"
         >
           {part}
           <ExternalLink className="h-3 w-3 inline-block" />
@@ -47,6 +48,8 @@ export function ReadLaterView() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
   const [summarizingIds, setSummarizingIds] = useState<Set<string>>(new Set());
+
+  const config = CATEGORY_CONFIG.read_later;
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -86,16 +89,16 @@ export function ReadLaterView() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="h-8 w-8 animate-spin text-green-500" />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-green-500/15 text-green-600 dark:text-green-400">
+      {/* Header with category color */}
+      <div className={`flex items-center gap-4 p-5 rounded-xl border ${config.bgColor} ${config.borderColor}`}>
+        <div className={`flex items-center justify-center w-12 h-12 rounded-xl bg-green-500/20 ${config.color}`}>
           <Bookmark className="h-6 w-6" />
         </div>
         <div>
@@ -109,12 +112,12 @@ export function ReadLaterView() {
       {/* Read Later List */}
       {blocks.length === 0 ? (
         <div className="text-center py-12">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
-            <Bookmark className="w-8 h-8 text-muted-foreground" />
+          <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${config.bgColor} mb-4`}>
+            <Bookmark className={`w-8 h-8 ${config.color}`} />
           </div>
           <p className="text-muted-foreground">あとで読むものがありません</p>
           <p className="text-sm text-muted-foreground/70 mt-1">
-            あとで読むカテゴリで記録すると、ここに表示されます
+            Flowであとで読むを追加すると、ここに表示されます
           </p>
         </div>
       ) : (
@@ -127,8 +130,15 @@ export function ReadLaterView() {
             const hasUrlMetadata = block.url_metadata !== null;
             
             return (
-              <div key={block.id} className="block-card p-4">
+              <div 
+                key={block.id} 
+                className={`p-4 rounded-xl border ${config.bgColor} ${config.borderColor}`}
+              >
                 <div className="flex items-start gap-3">
+                  <div className={`flex items-center justify-center w-8 h-8 rounded-lg bg-green-500/20 ${config.color} flex-shrink-0`}>
+                    <Bookmark className="h-4 w-4" />
+                  </div>
+                  
                   <div className="flex-1">
                     {hasContent && (
                       <p className="text-foreground leading-relaxed whitespace-pre-wrap">
@@ -138,9 +148,9 @@ export function ReadLaterView() {
                     
                     {/* URL Summary Section */}
                     {hasUrlMetadata && block.url_metadata && (
-                      <div className="bg-muted/50 p-3 rounded-lg mt-3 border-l-2 border-primary/30">
+                      <div className="bg-green-500/10 p-3 rounded-lg mt-3 border-l-2 border-green-500/50">
                         <div className="flex items-start gap-2 mb-2">
-                          <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                          <FileText className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
                           <span className="text-sm font-medium text-foreground line-clamp-2">
                             {block.url_metadata.title}
                           </span>
@@ -155,7 +165,7 @@ export function ReadLaterView() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-6 px-2 text-xs"
+                            className="h-6 px-2 text-xs text-green-600 dark:text-green-400 hover:bg-green-500/10"
                             onClick={() => handleSummarize(block.id, block.url_metadata!.url)}
                             disabled={isSummarizing}
                           >
@@ -180,7 +190,7 @@ export function ReadLaterView() {
                           variant="outline"
                           onClick={() => handleSummarize(block.id, extractedUrl)}
                           disabled={isSummarizing}
-                          className="gap-1"
+                          className="gap-1 border-green-500/50 text-green-600 dark:text-green-400 hover:bg-green-500/10"
                         >
                           {isSummarizing ? (
                             <>
@@ -212,6 +222,7 @@ export function ReadLaterView() {
                     
                     <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
                       <span>{formatDateJST(block.occurred_at)}</span>
+                      <span>•</span>
                       <span>{formatTimeJST(block.occurred_at)}</span>
                     </div>
                   </div>
