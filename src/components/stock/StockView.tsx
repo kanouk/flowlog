@@ -14,15 +14,37 @@ interface StockViewProps {
   onDateSelect: (date: string) => void;
 }
 
+// タブとカテゴリ色のマッピング
+const TAB_COLORS: Record<StockSubTab, { active: string; hover: string }> = {
+  journal: { 
+    active: 'bg-blue-500 text-white', 
+    hover: 'hover:bg-blue-500/10 hover:text-blue-600' 
+  },
+  tasks: { 
+    active: 'bg-orange-500 text-white', 
+    hover: 'hover:bg-orange-500/10 hover:text-orange-600' 
+  },
+  memos: { 
+    active: 'bg-purple-500 text-white', 
+    hover: 'hover:bg-purple-500/10 hover:text-purple-600' 
+  },
+  readLater: { 
+    active: 'bg-green-500 text-white', 
+    hover: 'hover:bg-green-500/10 hover:text-green-600' 
+  },
+};
+
 export function StockView({ entries, selectedDate, onDateSelect }: StockViewProps) {
   const [subTab, setSubTab] = useState<StockSubTab>('journal');
 
-  const tabClass = (tab: StockSubTab) => 
-    `flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+  const tabClass = (tab: StockSubTab) => {
+    const colors = TAB_COLORS[tab];
+    return `flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
       subTab === tab 
-        ? 'bg-primary text-primary-foreground' 
-        : 'text-muted-foreground hover:bg-muted'
+        ? colors.active
+        : `text-muted-foreground ${colors.hover}`
     }`;
+  };
 
   return (
     <div className="space-y-6">
