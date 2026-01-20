@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { Loader2, CalendarDays, Sun } from 'lucide-react';
+import { Loader2, CalendarDays, Sun, ChevronLeft } from 'lucide-react';
 import { FlowInput } from '@/components/flow/FlowInput';
 import { BlockList } from '@/components/flow/BlockList';
 import { useEntries, Block, Entry, AddBlockMode, BlockUpdatePayload } from '@/hooks/useEntries';
@@ -301,6 +301,17 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
             </p>
           )}
         </div>
+        
+        {/* 今日に戻るボタン（過去日のみ表示） */}
+        {!isToday && (
+          <button
+            onClick={() => onNavigateToDate?.(today)}
+            className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            今日に戻る
+          </button>
+        )}
       </div>
 
       {/* Input Form */}
