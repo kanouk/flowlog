@@ -498,6 +498,11 @@ export function useEntries() {
       if (error) throw error;
 
       if (!data.success) {
+        // Handle specific error codes
+        if (data.code === 'UNSUPPORTED_SITE') {
+          toast.info(data.error || 'このサイトは要約に対応していません');
+          return null;
+        }
         throw new Error(data.error || '要約の生成に失敗しました');
       }
 
@@ -506,6 +511,13 @@ export function useEntries() {
     } catch (error: unknown) {
       console.error('Error summarizing URL:', error);
       const errMsg = error instanceof Error ? error.message : '';
+      
+      // Check for unsupported site in error message
+      if (errMsg.includes('対応していません') || errMsg.includes('UNSUPPORTED_SITE')) {
+        toast.info(errMsg || 'このサイトは要約に対応していません');
+        return null;
+      }
+      
       if (errMsg.includes('429')) {
         toast.error('レート制限に達しました。しばらくしてから再試行してください。');
       } else if (errMsg.includes('402')) {
