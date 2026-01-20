@@ -196,6 +196,15 @@ export function BlockList({
     setEditTime('');
   };
 
+  const setToCurrentTime = (blockId: string) => {
+    if (!onUpdate) return;
+    
+    const now = new Date();
+    onUpdate(blockId, { occurred_at: now.toISOString() });
+    cancelEditingDateTime();
+    toast.success('現在時刻に変更しました');
+  };
+
   const saveEditingDateTime = (blockId: string) => {
     if (!editDayKey || !editTime || !onUpdate) {
       cancelEditingDateTime();
@@ -376,7 +385,7 @@ export function BlockList({
                               />
                               
                               {isEditingDateTime ? (
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <Popover>
                                     <PopoverTrigger asChild>
                                       <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
@@ -400,6 +409,15 @@ export function BlockList({
                                     onChange={(e) => setEditTime(e.target.value)}
                                     className="h-7 w-24 text-xs"
                                   />
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() => setToCurrentTime(block.id)}
+                                  >
+                                    <Clock className="h-3 w-3 mr-1" />
+                                    今
+                                  </Button>
                                   <Button
                                     variant="ghost"
                                     size="icon"
