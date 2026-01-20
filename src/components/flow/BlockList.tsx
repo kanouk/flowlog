@@ -8,7 +8,7 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { formatTimeJST, getOccurredAtDayKey, createOccurredAt, isFutureDate, parseTimestamp } from '@/lib/dateUtils';
 import { toast } from 'sonner';
-import { BlockCategory, CATEGORIES, CATEGORY_CONFIG } from '@/lib/categoryUtils';
+import { BlockCategory, BlockTag, CATEGORIES, CATEGORY_CONFIG, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -75,6 +75,109 @@ function CategoryBadge({
               </button>
             );
           })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// タグバッジコンポーネント
+function TagBadge({ 
+  tag, 
+  editable,
+  onTagChange 
+}: { 
+  tag: BlockTag | null; 
+  editable: boolean;
+  onTagChange?: (t: BlockTag | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (!tag && !editable) return null;
+
+  if (!tag) {
+    // 編集可能だがタグなし: タグ追加ボタンを表示
+    return (
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full text-muted-foreground hover:bg-muted transition-colors">
+            +タグ
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-2 bg-popover" align="start">
+          <div className="flex flex-col gap-1">
+            {TAGS.map((t) => {
+              const tagConfig = TAG_CONFIG[t];
+              const TagIcon = tagConfig.icon;
+              return (
+                <button
+                  key={t}
+                  onClick={() => {
+                    onTagChange?.(t);
+                    setOpen(false);
+                  }}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded text-sm text-left hover:bg-muted ${tagConfig.color}`}
+                >
+                  <TagIcon className="h-4 w-4" />
+                  {tagConfig.label}
+                </button>
+              );
+            })}
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  }
+
+  const config = TAG_CONFIG[tag];
+  const Icon = config.icon;
+
+  if (!editable) {
+    return (
+      <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full ${config.bgColor} ${config.color}`}>
+        <Icon className="h-3 w-3" />
+      </span>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full cursor-pointer hover:opacity-80 transition-opacity ${config.bgColor} ${config.color}`}>
+          <Icon className="h-3 w-3" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-2 bg-popover" align="start">
+        <div className="flex flex-col gap-1">
+          {TAGS.map((t) => {
+            const tagConfig = TAG_CONFIG[t];
+            const TagIcon = tagConfig.icon;
+            return (
+              <button
+                key={t}
+                onClick={() => {
+                  onTagChange?.(t === tag ? null : t);
+                  setOpen(false);
+                }}
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded text-sm text-left ${
+                  t === tag ? tagConfig.bgColor : 'hover:bg-muted'
+                } ${tagConfig.color}`}
+              >
+                <TagIcon className="h-4 w-4" />
+                {tagConfig.label}
+              </button>
+            );
+          })}
+          <button
+            onClick={() => {
+              onTagChange?.(null);
+              setOpen(false);
+            }}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded text-sm text-left text-muted-foreground hover:bg-muted"
+          >
+            <X className="h-4 w-4" />
+            タグを外す
+          </button>
         </div>
       </PopoverContent>
     </Popover>
@@ -376,12 +479,17 @@ export function BlockList({
                               </div>
                             )}
                             
-                            {/* カテゴリバッジ + タイムスタンプ */}
+                            {/* カテゴリバッジ + タグバッジ + タイムスタンプ */}
                             <div className="flex items-center gap-2 mt-2 flex-wrap">
                               <CategoryBadge 
                                 category={block.category} 
                                 editable={editable && !isTemporary}
                                 onCategoryChange={(cat) => handleCategoryChange(block.id, cat)}
+                              />
+                              <TagBadge
+                                tag={block.tag}
+                                editable={editable && !isTemporary}
+                                onTagChange={(t) => onUpdate?.(block.id, { tag: t })}
                               />
                               
                               {isEditingDateTime ? (

@@ -7,14 +7,19 @@ import { useImageUpload } from '@/hooks/useImageUpload';
 import { toast } from 'sonner';
 import { 
   BlockCategory, 
+  BlockTag,
   CATEGORIES, 
   CATEGORY_CONFIG, 
+  TAGS,
+  TAG_CONFIG,
   getLastCategory, 
-  setLastCategory 
+  setLastCategory,
+  getLastTag,
+  setLastTag,
 } from '@/lib/categoryUtils';
 
 interface FlowInputProps {
-  onSubmit: (content: string, mode: AddBlockMode, images: string[], category: BlockCategory) => void;
+  onSubmit: (content: string, mode: AddBlockMode, images: string[], category: BlockCategory, tag: BlockTag | null) => void;
   disabled?: boolean;
   selectedDate: string;
   isToday: boolean;
@@ -29,15 +34,17 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [category, setCategory] = useState<BlockCategory>('event');
+  const [tag, setTag] = useState<BlockTag | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
   const { uploadImages, maxImages } = useImageUpload();
 
-  // 初回マウント時にlocalStorageからカテゴリを復元
+  // 初回マウント時にlocalStorageからカテゴリとタグを復元
   useEffect(() => {
     setCategory(getLastCategory());
+    setTag(getLastTag());
   }, []);
 
   // 下書きをsessionStorageから復元
@@ -71,6 +78,13 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setLastCategory(cat);
   };
 
+  const handleTagChange = (t: BlockTag) => {
+    // 同じタグをタップしたら解除
+    const newTag = tag === t ? null : t;
+    setTag(newTag);
+    setLastTag(newTag);
+  };
+
   const handleCompositionStart = () => {
     setIsComposing(true);
   };
@@ -98,7 +112,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
         }
       }
 
-      onSubmit(content.trim(), mode, uploadedUrls, category);
+      onSubmit(content.trim(), mode, uploadedUrls, category, tag);
       
       // リセット
       setContent('');
@@ -176,29 +190,54 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${currentConfig.accentColor}`} />
       <div className="p-6 pl-8">
         {/* カテゴリ選択チップ */}
+        <div className="flex gap-2 mb-3 flex-wrap">
+          {CATEGORIES.map((cat) => {
+            const config = CATEGORY_CONFIG[cat];
+            const Icon = config.icon;
+            const isSelected = category === cat;
+            
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => handleCategoryChange(cat)}
+                className={`inline-flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  isSelected 
+                    ? `${config.bgColor} ${config.color} ring-2 ring-offset-1 ring-current`
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{config.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* タグ選択チップ */}
         <div className="flex gap-2 mb-4">
-        {CATEGORIES.map((cat) => {
-          const config = CATEGORY_CONFIG[cat];
-          const Icon = config.icon;
-          const isSelected = category === cat;
-          
-          return (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => handleCategoryChange(cat)}
-              className={`inline-flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                isSelected 
-                  ? `${config.bgColor} ${config.color} ring-2 ring-offset-1 ring-current`
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{config.label}</span>
-            </button>
-          );
-        })}
-      </div>
+          {TAGS.map((t) => {
+            const config = TAG_CONFIG[t];
+            const Icon = config.icon;
+            const isSelected = tag === t;
+            
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => handleTagChange(t)}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-all ${
+                  isSelected 
+                    ? `${config.bgColor} ${config.color} ring-1 ring-current`
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                <Icon className="h-3 w-3" />
+                <span className="hidden sm:inline">{config.label}</span>
+              </button>
+            );
+          })}
+        </div>
       
       <textarea
         ref={textareaRef}

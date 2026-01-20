@@ -25,6 +25,7 @@ export type Database = {
           images: string[] | null
           is_done: boolean
           occurred_at: string
+          tag: string | null
           url_metadata: Json | null
           user_id: string
         }
@@ -38,6 +39,7 @@ export type Database = {
           images?: string[] | null
           is_done?: boolean
           occurred_at?: string
+          tag?: string | null
           url_metadata?: Json | null
           user_id: string
         }
@@ -51,6 +53,7 @@ export type Database = {
           images?: string[] | null
           is_done?: boolean
           occurred_at?: string
+          tag?: string | null
           url_metadata?: Json | null
           user_id?: string
         }

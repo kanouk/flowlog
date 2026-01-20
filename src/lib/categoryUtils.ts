@@ -1,6 +1,7 @@
-import { CalendarDays, Brain, CheckSquare, Bookmark, LucideIcon } from 'lucide-react';
+import { CalendarDays, Brain, CheckSquare, Bookmark, Briefcase, Users, User, LucideIcon } from 'lucide-react';
 
 export type BlockCategory = 'event' | 'thought' | 'task' | 'read_later';
+export type BlockTag = 'work' | 'family' | 'private';
 
 export interface CategoryConfig {
   label: string;
@@ -9,6 +10,13 @@ export interface CategoryConfig {
   borderColor: string;
   accentColor: string;
   buttonColor: string;
+  icon: LucideIcon;
+}
+
+export interface TagConfig {
+  label: string;
+  color: string;
+  bgColor: string;
   icon: LucideIcon;
 }
 
@@ -51,12 +59,35 @@ export const CATEGORY_CONFIG: Record<BlockCategory, CategoryConfig> = {
   },
 };
 
+export const TAG_CONFIG: Record<BlockTag, TagConfig> = {
+  work: {
+    label: '仕事',
+    color: 'text-blue-600 dark:text-blue-400',
+    bgColor: 'bg-blue-100 dark:bg-blue-900/30',
+    icon: Briefcase,
+  },
+  family: {
+    label: '家族',
+    color: 'text-orange-600 dark:text-orange-400',
+    bgColor: 'bg-orange-100 dark:bg-orange-900/30',
+    icon: Users,
+  },
+  private: {
+    label: 'プライベート',
+    color: 'text-purple-600 dark:text-purple-400',
+    bgColor: 'bg-purple-100 dark:bg-purple-900/30',
+    icon: User,
+  },
+};
+
 export const CATEGORIES: BlockCategory[] = ['event', 'task', 'thought', 'read_later'];
+export const TAGS: BlockTag[] = ['work', 'family', 'private'];
 
 const LAST_CATEGORY_KEY = 'flowlog_last_category';
+const LAST_TAG_KEY = 'flowlog_last_tag';
 
 export function getLastCategory(): BlockCategory {
-  if (typeof window === 'undefined') return 'event'; // SSRガード
+  if (typeof window === 'undefined') return 'event';
   const stored = localStorage.getItem(LAST_CATEGORY_KEY);
   if (stored && CATEGORIES.includes(stored as BlockCategory)) {
     return stored as BlockCategory;
@@ -67,6 +98,24 @@ export function getLastCategory(): BlockCategory {
 export function setLastCategory(category: BlockCategory): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(LAST_CATEGORY_KEY, category);
+}
+
+export function getLastTag(): BlockTag | null {
+  if (typeof window === 'undefined') return null;
+  const stored = localStorage.getItem(LAST_TAG_KEY);
+  if (stored && TAGS.includes(stored as BlockTag)) {
+    return stored as BlockTag;
+  }
+  return null;
+}
+
+export function setLastTag(tag: BlockTag | null): void {
+  if (typeof window === 'undefined') return;
+  if (tag) {
+    localStorage.setItem(LAST_TAG_KEY, tag);
+  } else {
+    localStorage.removeItem(LAST_TAG_KEY);
+  }
 }
 
 export function getCategoryLabel(category: string): string {
