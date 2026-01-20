@@ -18,10 +18,12 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
   
   const [entry, setEntry] = useState<Entry | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showContent, setShowContent] = useState(false);
   const isMobile = useIsMobile();
   const today = getTodayKey();
   const isToday = selectedDate === today;
+  
+  // モバイルでは今日の場合はデフォルトでコンテンツを表示
+  const [showContent, setShowContent] = useState(isToday);
 
   // Handle mobile date selection
   const handleMobileDateSelect = (date: string) => {
