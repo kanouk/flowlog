@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDateJST, calculateMiddleOccurredAt } from '@/lib/dateUtils';
-import { BlockCategory } from '@/lib/categoryUtils';
+import { BlockCategory, BlockTag } from '@/lib/categoryUtils';
 import { arrayMove } from '@dnd-kit/sortable';
 
 interface FlowEditorProps {
@@ -69,9 +69,9 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
   }, [loadData]);
 
   /**
-   * ブロック追加（楽観的更新 + 遷移処理 + 画像対応 + カテゴリ対応）
+   * ブロック追加（楽観的更新 + 遷移処理 + 画像対応 + カテゴリ対応 + タグ対応）
    */
-  const handleAddBlock = async (content: string, mode: AddBlockMode, images: string[] = [], category: BlockCategory = 'event') => {
+  const handleAddBlock = async (content: string, mode: AddBlockMode, images: string[] = [], category: BlockCategory = 'event', tag: BlockTag | null = null) => {
     // 楽観的更新: 仮のブロックを即座にUIに追加
     const tempId = `temp-${Date.now()}`;
     const optimisticBlock: Block = {
@@ -83,6 +83,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       occurred_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
       category,
+      tag,
       is_done: false,
       done_at: null,
       url_metadata: null,
@@ -100,6 +101,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       mode,
       images,
       category,
+      tag,
     });
     
     if (savedBlock) {

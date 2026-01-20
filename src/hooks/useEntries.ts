@@ -10,7 +10,7 @@ import {
   getOccurredAtDayKey,
   isFutureDate,
 } from '@/lib/dateUtils';
-import type { BlockCategory } from '@/lib/categoryUtils';
+import type { BlockCategory, BlockTag } from '@/lib/categoryUtils';
 
 export interface UrlMetadata {
   url: string;
@@ -28,6 +28,7 @@ export interface Block {
   occurred_at: string;
   created_at: string;
   category: BlockCategory;
+  tag: BlockTag | null;
   is_done: boolean;
   done_at: string | null;
   url_metadata: UrlMetadata | null;
@@ -49,6 +50,7 @@ export interface BlockUpdatePayload {
   content?: string;
   occurred_at?: string;
   category?: BlockCategory;
+  tag?: BlockTag | null;
   is_done?: boolean;
   done_at?: string | null;
 }
@@ -204,7 +206,7 @@ export function useEntries() {
   }, [userId]);
 
   /**
-   * ブロック追加（過去日対応 + "今で追加"モード + 画像対応 + カテゴリ対応）
+   * ブロック追加（過去日対応 + "今で追加"モード + 画像対応 + カテゴリ対応 + タグ対応）
    */
   const addBlockWithDate = useCallback(async ({ 
     content, 
@@ -212,12 +214,14 @@ export function useEntries() {
     mode,
     images = [],
     category = 'event',
+    tag = null,
   }: { 
     content: string; 
     selectedDate: string; 
     mode: AddBlockMode; 
     images?: string[];
     category?: BlockCategory;
+    tag?: BlockTag | null;
   }) => {
     if (!userId) return { block: null, navigateToDate: null };
 
@@ -263,6 +267,7 @@ export function useEntries() {
           images,
           occurred_at: occurredAt,
           category,
+          tag,
         })
         .select()
         .single();
@@ -304,13 +309,16 @@ export function useEntries() {
       
       const oldEntryId = currentBlock?.entry_id;
       
-      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'is_done' | 'done_at'>> = {};
+      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at'>> = {};
       
       if (updates.content !== undefined) {
         updateData.content = updates.content;
       }
       if (updates.category !== undefined) {
         updateData.category = updates.category;
+      }
+      if (updates.tag !== undefined) {
+        updateData.tag = updates.tag;
       }
       if (updates.is_done !== undefined) {
         updateData.is_done = updates.is_done;

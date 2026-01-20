@@ -7,7 +7,7 @@ import { BlockList } from '@/components/flow/BlockList';
 import { useEntries, Block, Entry, AddBlockMode, BlockUpdatePayload } from '@/hooks/useEntries';
 import { toast } from 'sonner';
 import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDateJST, calculateMiddleOccurredAt } from '@/lib/dateUtils';
-import { BlockCategory } from '@/lib/categoryUtils';
+import { BlockCategory, BlockTag } from '@/lib/categoryUtils';
 import { arrayMove } from '@dnd-kit/sortable';
 
 interface FlowViewProps {
@@ -92,9 +92,9 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
   }, [getEntry, getBlocksByDate, formatEntry]);
 
   /**
-   * ブロック追加（楽観的更新 + 遷移処理 + 画像対応 + カテゴリ対応 + 自動サマライズ）
+   * ブロック追加（楽観的更新 + 遷移処理 + 画像対応 + カテゴリ対応 + タグ対応 + 自動サマライズ）
    */
-  const handleAddBlock = async (content: string, mode: AddBlockMode, images: string[] = [], category: BlockCategory = 'event') => {
+  const handleAddBlock = async (content: string, mode: AddBlockMode, images: string[] = [], category: BlockCategory = 'event', tag: BlockTag | null = null) => {
     const tempId = `temp-${Date.now()}`;
     const optimisticBlock: Block = {
       id: tempId,
@@ -105,6 +105,7 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
       occurred_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
       category,
+      tag,
       is_done: false,
       done_at: null,
       url_metadata: null,
@@ -120,6 +121,7 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
       mode,
       images,
       category,
+      tag,
     });
     
     if (savedBlock) {

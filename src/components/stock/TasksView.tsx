@@ -3,9 +3,11 @@ import { Loader2, CheckSquare, Square, CheckSquare as CheckSquareIcon } from 'lu
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
 import { formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
+import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { toast } from 'sonner';
 
 type TaskFilter = 'all' | 'incomplete';
+type TagFilter = 'all' | BlockTag;
 
 export function TasksView() {
   const { getBlocksByCategory, updateBlock } = useEntries();
@@ -13,6 +15,7 @@ export function TasksView() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<TaskFilter>('all');
+  const [tagFilter, setTagFilter] = useState<TagFilter>('all');
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -29,11 +32,15 @@ export function TasksView() {
   }, [loadData]);
 
   const filteredBlocks = useMemo(() => {
+    let result = blocks;
     if (filter === 'incomplete') {
-      return blocks.filter(b => !b.is_done);
+      result = result.filter(b => !b.is_done);
     }
-    return blocks;
-  }, [blocks, filter]);
+    if (tagFilter !== 'all') {
+      result = result.filter(b => b.tag === tagFilter);
+    }
+    return result;
+  }, [blocks, filter, tagFilter]);
 
   const handleTaskToggle = async (block: Block) => {
     const newIsDone = !block.is_done;
@@ -96,24 +103,52 @@ export function TasksView() {
           </div>
         </div>
         
-        {/* Filter */}
-        <div className="flex gap-2">
-          <Button
-            variant={filter === 'all' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setFilter('all')}
-            className={filter === 'all' ? 'bg-orange-500 hover:bg-orange-600' : ''}
-          >
-            すべて
-          </Button>
-          <Button
-            variant={filter === 'incomplete' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setFilter('incomplete')}
-            className={filter === 'incomplete' ? 'bg-orange-500 hover:bg-orange-600' : ''}
-          >
-            未完了のみ
-          </Button>
+        {/* Filters */}
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <Button
+              variant={filter === 'all' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFilter('all')}
+              className={filter === 'all' ? 'bg-orange-500 hover:bg-orange-600' : ''}
+            >
+              すべて
+            </Button>
+            <Button
+              variant={filter === 'incomplete' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFilter('incomplete')}
+              className={filter === 'incomplete' ? 'bg-orange-500 hover:bg-orange-600' : ''}
+            >
+              未完了のみ
+            </Button>
+          </div>
+          <div className="flex gap-1 flex-wrap">
+            <Button
+              variant={tagFilter === 'all' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setTagFilter('all')}
+              className={`h-7 text-xs ${tagFilter === 'all' ? 'bg-gray-500 hover:bg-gray-600' : ''}`}
+            >
+              全タグ
+            </Button>
+            {TAGS.map((t) => {
+              const config = TAG_CONFIG[t];
+              const Icon = config.icon;
+              return (
+                <Button
+                  key={t}
+                  variant={tagFilter === t ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setTagFilter(t)}
+                  className={`h-7 text-xs ${tagFilter === t ? `${config.bgColor} ${config.color}` : ''}`}
+                >
+                  <Icon className="h-3 w-3 mr-1" />
+                  {config.label}
+                </Button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -180,7 +215,12 @@ export function TasksView() {
                       </div>
                     )}
                     
-                    <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground flex-wrap">
+                      {block.tag && (
+                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full ${TAG_CONFIG[block.tag].bgColor} ${TAG_CONFIG[block.tag].color}`}>
+                          {(() => { const Icon = TAG_CONFIG[block.tag].icon; return <Icon className="h-3 w-3" />; })()}
+                        </span>
+                      )}
                       <span>{formatDateJST(block.occurred_at)}</span>
                       <span>•</span>
                       <span>{formatTimeJST(block.occurred_at)}</span>
