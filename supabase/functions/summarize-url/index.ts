@@ -135,6 +135,32 @@ async function callLovableAI(model: string, systemPrompt: string, userPrompt: st
   return data.choices?.[0]?.message?.content || '';
 }
 
+// サポートされていないドメインのリスト
+const UNSUPPORTED_DOMAINS = [
+  'x.com',
+  'twitter.com',
+  'instagram.com',
+  'facebook.com',
+  'linkedin.com',
+  'tiktok.com',
+];
+
+function isUnsupportedUrl(url: string): { unsupported: boolean; domain?: string } {
+  try {
+    const parsedUrl = new URL(url.startsWith('http') ? url : `https://${url}`);
+    const hostname = parsedUrl.hostname.replace(/^www\./, '');
+    
+    for (const domain of UNSUPPORTED_DOMAINS) {
+      if (hostname === domain || hostname.endsWith(`.${domain}`)) {
+        return { unsupported: true, domain };
+      }
+    }
+    return { unsupported: false };
+  } catch {
+    return { unsupported: false };
+  }
+}
+
 async function fetchWithFirecrawl(url: string): Promise<{ markdown: string; title: string }> {
   const apiKey = Deno.env.get('FIRECRAWL_API_KEY');
   if (!apiKey) {
@@ -145,6 +171,12 @@ async function fetchWithFirecrawl(url: string): Promise<{ markdown: string; titl
   let formattedUrl = url.trim();
   if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
     formattedUrl = `https://${formattedUrl}`;
+  }
+
+  // Check for unsupported domains
+  const { unsupported, domain } = isUnsupportedUrl(formattedUrl);
+  if (unsupported) {
+    throw new Error(`UNSUPPORTED_SITE:${domain}`);
   }
 
   console.log('Fetching URL with Firecrawl:', formattedUrl);
@@ -166,6 +198,10 @@ async function fetchWithFirecrawl(url: string): Promise<{ markdown: string; titl
 
   if (!response.ok) {
     console.error('Firecrawl API error:', data);
+    // Handle Firecrawl's unsupported site error
+    if (data.error && data.error.includes('not currently supported')) {
+      throw new Error('UNSUPPORTED_SITE:このサイト');
+    }
     throw new Error(data.error || `ページの取得に失敗しました (${response.status})`);
   }
 
@@ -365,6 +401,20 @@ ${truncatedContent}`;
 
   } catch (error) {
     console.error('Error in summarize-url function:', error);
+    
+    // Handle unsupported site error with user-friendly message
+    if (error instanceof Error && error.message.startsWith('UNSUPPORTED_SITE:')) {
+      const site = error.message.replace('UNSUPPORTED_SITE:', '');
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: `${site}はサマリー取得に対応していません`,
+          code: 'UNSUPPORTED_SITE'
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
     return new Response(
       JSON.stringify({ 
         success: false, 
