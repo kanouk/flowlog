@@ -84,7 +84,7 @@ export function StockView({ entries, selectedDate, onDateSelect }: StockViewProp
 
   const tabClass = (tab: StockSubTab) => {
     const colors = TAB_COLORS[tab];
-    return `flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+    return `flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
       subTab === tab 
         ? colors.active
         : `text-muted-foreground ${colors.hover}`
@@ -99,23 +99,23 @@ export function StockView({ entries, selectedDate, onDateSelect }: StockViewProp
 
   return (
     <div className="space-y-6">
-      {/* Sub Tabs */}
-      <div className="flex gap-2 border-b border-border pb-3 overflow-x-auto">
+      {/* Sub Tabs - モバイルではアイコンのみ */}
+      <div className="flex gap-1 sm:gap-2 border-b border-border pb-3">
         <button onClick={() => switchTab('journal')} className={tabClass('journal')}>
-          <BookOpen className="h-4 w-4" />
-          日記
+          <BookOpen className="h-4 w-4 flex-shrink-0" />
+          <span className="hidden sm:inline">日記</span>
         </button>
         <button onClick={() => switchTab('tasks')} className={tabClass('tasks')}>
-          <ListTodo className="h-4 w-4" />
-          タスク
+          <ListTodo className="h-4 w-4 flex-shrink-0" />
+          <span className="hidden sm:inline">タスク</span>
         </button>
         <button onClick={() => switchTab('memos')} className={tabClass('memos')}>
-          <Brain className="h-4 w-4" />
-          メモ
+          <Brain className="h-4 w-4 flex-shrink-0" />
+          <span className="hidden sm:inline">メモ</span>
         </button>
         <button onClick={() => switchTab('readLater')} className={tabClass('readLater')}>
-          <Bookmark className="h-4 w-4" />
-          あとで読む
+          <Bookmark className="h-4 w-4 flex-shrink-0" />
+          <span className="hidden sm:inline">あとで読む</span>
         </button>
       </div>
 

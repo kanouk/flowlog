@@ -155,13 +155,13 @@ export default function Dashboard() {
       <div className="container max-w-4xl mx-auto px-4 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="flow" className="gap-2">
-              <PenLine className="h-4 w-4" />
-              Flow
+            <TabsTrigger value="flow" className="gap-1.5 whitespace-nowrap">
+              <PenLine className="h-4 w-4 flex-shrink-0" />
+              <span className="text-sm">Flow</span>
             </TabsTrigger>
-            <TabsTrigger value="stock" className="gap-2">
-              <FileText className="h-4 w-4" />
-              Stock
+            <TabsTrigger value="stock" className="gap-1.5 whitespace-nowrap">
+              <FileText className="h-4 w-4 flex-shrink-0" />
+              <span className="text-sm">Stock</span>
             </TabsTrigger>
           </TabsList>
 
