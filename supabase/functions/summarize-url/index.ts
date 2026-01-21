@@ -20,6 +20,8 @@ interface UrlMetadata {
   title: string;
   summary: string;
   fetched_at: string;
+  error?: boolean;
+  error_message?: string;
 }
 
 async function callOpenAI(apiKey: string, model: string, systemPrompt: string, userPrompt: string): Promise<string> {
@@ -405,11 +407,20 @@ ${truncatedContent}`;
     // Handle unsupported site error with user-friendly message
     if (error instanceof Error && error.message.startsWith('UNSUPPORTED_SITE:')) {
       const site = error.message.replace('UNSUPPORTED_SITE:', '');
+      const errorMetadata: UrlMetadata = {
+        url: '',
+        title: '',
+        summary: '',
+        fetched_at: new Date().toISOString(),
+        error: true,
+        error_message: `${site}はサマリー取得に対応していません`
+      };
       return new Response(
         JSON.stringify({ 
           success: false, 
           error: `${site}はサマリー取得に対応していません`,
-          code: 'UNSUPPORTED_SITE'
+          code: 'UNSUPPORTED_SITE',
+          url_metadata: errorMetadata
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
