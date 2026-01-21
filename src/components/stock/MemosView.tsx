@@ -109,8 +109,7 @@ export function MemosView() {
         </div>
         
         {/* Tag Filter Dropdown */}
-        <div className="mt-4 flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">タグ:</span>
+        <div className="mt-4">
           <TagFilterDropdown
             value={tagFilter === 'all' ? null : tagFilter}
             onChange={handleTagChange}
