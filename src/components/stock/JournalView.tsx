@@ -197,20 +197,6 @@ export function JournalView({ entries, selectedDate, onDateSelect, blocks: exter
 
   const formattedDate = format(new Date(selectedDate), 'M月d日（E）', { locale: ja });
 
-  // Copy to clipboard
-  const handleCopy = useCallback(async () => {
-    if (!entry?.formatted_content) return;
-    
-    try {
-      await navigator.clipboard.writeText(entry.formatted_content);
-      setCopied(true);
-      toast.success('クリップボードにコピーしました');
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error('コピーに失敗しました');
-    }
-  }, [entry?.formatted_content]);
-
   // Score color helper
   const getScoreStyle = (score: number) => {
     if (score === 100) return { bg: 'bg-green-100 dark:bg-green-900/40', text: 'text-green-700 dark:text-green-300', label: 'パーフェクト！', glow: true };
@@ -232,6 +218,40 @@ export function JournalView({ entries, selectedDate, onDateSelect, blocks: exter
       default: return null;
     }
   };
+
+  // Create a Map of blocks by ID for efficient lookup in photo markers
+  const blocksById = useMemo(() => {
+    const map = new Map<string, Block>();
+    blocks.forEach(b => map.set(b.id, b));
+    return map;
+  }, [blocks]);
+
+  // Helper function to replace photo markers with URLs for clipboard copy
+  const processContentForClipboard = useCallback((content: string): string => {
+    PHOTO_MARKER_PATTERN.lastIndex = 0;
+    return content.replace(PHOTO_MARKER_PATTERN, (match, blockId) => {
+      const block = blocksById.get(blockId);
+      if (block?.images && block.images.length > 0) {
+        return block.images.join('\n');
+      }
+      return '';
+    });
+  }, [blocksById]);
+
+  // Copy to clipboard
+  const handleCopy = useCallback(async () => {
+    if (!entry?.formatted_content) return;
+    
+    try {
+      const processedContent = processContentForClipboard(entry.formatted_content);
+      await navigator.clipboard.writeText(processedContent);
+      setCopied(true);
+      toast.success('クリップボードにコピーしました');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('コピーに失敗しました');
+    }
+  }, [entry?.formatted_content, processContentForClipboard]);
 
   // Date Header component with score
   const DateHeader = () => {
@@ -303,13 +323,6 @@ export function JournalView({ entries, selectedDate, onDateSelect, blocks: exter
       </div>
     );
   };
-
-  // Create a Map of blocks by ID for efficient lookup in photo markers
-  const blocksById = useMemo(() => {
-    const map = new Map<string, Block>();
-    blocks.forEach(b => map.set(b.id, b));
-    return map;
-  }, [blocks]);
 
   // Journal Content component - プレーンなデザイン
   const JournalContent = () => {
