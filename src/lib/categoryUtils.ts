@@ -100,16 +100,12 @@ export function setLastCategory(category: BlockCategory): void {
   localStorage.setItem(LAST_CATEGORY_KEY, category);
 }
 
-export function getLastTag(): BlockTag | null {
+export function getLastTag(): string | null {
   if (typeof window === 'undefined') return null;
-  const stored = localStorage.getItem(LAST_TAG_KEY);
-  if (stored && TAGS.includes(stored as BlockTag)) {
-    return stored as BlockTag;
-  }
-  return null;
+  return localStorage.getItem(LAST_TAG_KEY);
 }
 
-export function setLastTag(tag: BlockTag | null): void {
+export function setLastTag(tag: string | null): void {
   if (typeof window === 'undefined') return;
   if (tag) {
     localStorage.setItem(LAST_TAG_KEY, tag);

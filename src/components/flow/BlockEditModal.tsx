@@ -1,26 +1,19 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { X, Trash2, ImagePlus, Camera, Clock, Calendar, Plus, Tag as TagIcon } from 'lucide-react';
+import { X, Trash2, ImagePlus, Camera, Clock, Calendar } from 'lucide-react';
 import { Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { useImageUpload } from '@/hooks/useImageUpload';
+import { useCustomTags } from '@/hooks/useCustomTags';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { TagDropdown } from './TagDropdown';
 import { toast } from 'sonner';
 import { 
   BlockCategory, 
-  BlockTag, 
   CATEGORIES, 
   CATEGORY_CONFIG, 
-  TAGS, 
-  TAG_CONFIG 
 } from '@/lib/categoryUtils';
 import { 
   formatTimeJST, 
@@ -51,7 +44,7 @@ export function BlockEditModal({
   
   // Category & Tag
   const [category, setCategory] = useState<BlockCategory>(block.category);
-  const [tag, setTag] = useState<BlockTag | null>(block.tag);
+  const [tag, setTag] = useState<string | null>(block.tag);
   
   // Images
   const [existingImages, setExistingImages] = useState<string[]>(block.images || []);
@@ -70,6 +63,7 @@ export function BlockEditModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const { uploadImages, deleteImages, maxImages } = useImageUpload();
+  const { customTags } = useCustomTags();
   
   // Reset state when modal opens with new block
   useEffect(() => {
@@ -213,7 +207,7 @@ export function BlockEditModal({
         updates.category = category;
       }
       if (tag !== block.tag) {
-        updates.tag = tag;
+        updates.tag = tag as any;
       }
       if (newOccurredAt !== block.occurred_at) {
         updates.occurred_at = newOccurredAt;
@@ -305,42 +299,11 @@ export function BlockEditModal({
               <span className="text-sm text-muted-foreground">画像 ({totalImages}/{maxImages})</span>
               <div className="flex gap-1 items-center">
                 {/* タグドロップダウン */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
-                      {tag ? (
-                        <>
-                          {(() => {
-                            const config = TAG_CONFIG[tag];
-                            const Icon = config.icon;
-                            return <Icon className="h-3.5 w-3.5" />;
-                          })()}
-                          <span>{TAG_CONFIG[tag].label}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="h-3.5 w-3.5" />
-                          <span>タグなし</span>
-                        </>
-                      )}
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="bg-popover">
-                    <DropdownMenuItem onClick={() => setTag(null)}>
-                      タグなし
-                    </DropdownMenuItem>
-                    {TAGS.map((t) => {
-                      const config = TAG_CONFIG[t];
-                      const Icon = config.icon;
-                      return (
-                        <DropdownMenuItem key={t} onClick={() => setTag(t)} className="gap-2">
-                          <Icon className="h-4 w-4" />
-                          {config.label}
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <TagDropdown 
+                  value={tag} 
+                  onChange={setTag} 
+                  customTags={customTags} 
+                />
                 
                 <input
                   ref={fileInputRef}
