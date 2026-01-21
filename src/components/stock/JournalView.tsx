@@ -174,7 +174,7 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
       <DateHeader />
       
       {/* Two-column layout */}
-      <div className="grid md:grid-cols-[240px_1fr] gap-6 w-full overflow-hidden">
+      <div className="grid md:grid-cols-[240px_1fr] gap-6 w-full overflow-hidden items-start">
         {/* Date List Sidebar */}
         <aside className="rounded-2xl p-4 h-fit sticky top-24 bg-card border border-border max-w-[240px] overflow-hidden">
           <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border">
