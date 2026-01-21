@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { X, Trash2, ImagePlus, Camera, Clock, Calendar } from 'lucide-react';
+import { X, Trash2, ImagePlus, Camera, Clock, Calendar, Plus, Tag as TagIcon } from 'lucide-react';
 import { Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { 
   BlockCategory, 
@@ -280,30 +286,6 @@ export function BlockEditModal({
             })}
           </div>
           
-          {/* Tag chips */}
-          <div className="flex gap-2 flex-wrap">
-            {TAGS.map((t) => {
-              const config = TAG_CONFIG[t];
-              const Icon = config.icon;
-              const isSelected = tag === t;
-              
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setTag(tag === t ? null : t)}
-                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-all ${
-                    isSelected 
-                      ? `${config.bgColor} ${config.color} ring-1 ring-current`
-                      : 'bg-muted/50 text-muted-foreground hover:bg-muted/80'
-                  }`}
-                >
-                  <Icon className="h-3 w-3" />
-                  {config.label}
-                </button>
-              );
-            })}
-          </div>
           
           {/* Textarea */}
           <textarea
@@ -321,7 +303,45 @@ export function BlockEditModal({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">画像 ({totalImages}/{maxImages})</span>
-              <div className="flex gap-1">
+              <div className="flex gap-1 items-center">
+                {/* タグドロップダウン */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 px-2">
+                      {tag ? (
+                        <>
+                          {(() => {
+                            const config = TAG_CONFIG[tag];
+                            const Icon = config.icon;
+                            return <Icon className="h-3.5 w-3.5 mr-1" />;
+                          })()}
+                          {TAG_CONFIG[tag].label}
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-3.5 w-3.5 mr-1" />
+                          タグなし
+                        </>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="bg-popover">
+                    <DropdownMenuItem onClick={() => setTag(null)}>
+                      タグなし
+                    </DropdownMenuItem>
+                    {TAGS.map((t) => {
+                      const config = TAG_CONFIG[t];
+                      const Icon = config.icon;
+                      return (
+                        <DropdownMenuItem key={t} onClick={() => setTag(t)}>
+                          <Icon className="h-4 w-4 mr-2" />
+                          {config.label}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                
                 <input
                   ref={fileInputRef}
                   type="file"
