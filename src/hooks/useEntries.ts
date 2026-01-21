@@ -60,6 +60,30 @@ export interface GetBlocksByCategoryOptions {
   includeCompleted?: boolean; // for tasks
 }
 
+// 時刻更新情報
+export interface TimeUpdate {
+  block_id: string;
+  old_time: string;
+  new_time: string;
+  reason: string;
+}
+
+// 時刻質問情報
+export interface TimeQuestion {
+  block_id: string;
+  content_preview: string;
+  question: string;
+}
+
+// formatEntry のレスポンス型
+export interface FormatEntryResponse {
+  formatted_content: string;
+  summary: string;
+  time_updates?: TimeUpdate[];
+  needs_clarification?: boolean;
+  questions?: TimeQuestion[];
+}
+
 export function useEntries() {
   const { user, session } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -403,9 +427,9 @@ export function useEntries() {
   }, [cleanupEmptyEntry]);
 
   /**
-   * エントリを整形
+   * エントリを整形（時刻推測 + 日記生成）
    */
-  const formatEntry = useCallback(async (entryId: string, blocks: Block[], date: string) => {
+  const formatEntry = useCallback(async (entryId: string, blocks: Block[], date: string): Promise<FormatEntryResponse | null> => {
     if (!session) return null;
 
     setFormatting(true);
@@ -413,6 +437,7 @@ export function useEntries() {
       const { data, error } = await supabase.functions.invoke('format-entries', {
         body: {
           blocks: blocks.map(b => ({ 
+            id: b.id,
             content: b.content, 
             occurred_at: b.occurred_at,
             images: b.images,
@@ -435,8 +460,14 @@ export function useEntries() {
 
       if (updateError) throw updateError;
 
-      toast.success('整形が完了しました');
-      return data;
+      // 時刻更新があった場合のみトースト表示
+      if (data.time_updates && data.time_updates.length > 0) {
+        toast.success(`${data.time_updates.length}件の時刻を自動調整しました`);
+      } else {
+        toast.success('整形が完了しました');
+      }
+      
+      return data as FormatEntryResponse;
     } catch (error: unknown) {
       console.error('Error formatting entry:', error);
       const errMsg = error instanceof Error ? error.message : '';
@@ -500,39 +531,31 @@ export function useEntries() {
 
     try {
       const { data, error } = await supabase.functions.invoke('summarize-url', {
-        body: { blockId, url },
+        body: { url },
       });
 
       if (error) throw error;
 
-      if (!data.success) {
-        // Handle specific error codes
-        if (data.code === 'UNSUPPORTED_SITE') {
-          toast.info(data.error || 'このサイトは要約に対応していません');
-          return null;
-        }
-        throw new Error(data.error || '要約の生成に失敗しました');
-      }
+      if (data?.title && data?.summary) {
+        const metadata: UrlMetadata = {
+          url,
+          title: data.title,
+          summary: data.summary,
+          fetched_at: new Date().toISOString(),
+        };
 
-      toast.success('要約を取得しました');
-      return data.url_metadata as UrlMetadata;
-    } catch (error: unknown) {
+        // DBに保存
+        await supabase
+          .from('blocks')
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .update({ url_metadata: metadata as any })
+          .eq('id', blockId);
+
+        return metadata;
+      }
+      return null;
+    } catch (error) {
       console.error('Error summarizing URL:', error);
-      const errMsg = error instanceof Error ? error.message : '';
-      
-      // Check for unsupported site in error message
-      if (errMsg.includes('対応していません') || errMsg.includes('UNSUPPORTED_SITE')) {
-        toast.info(errMsg || 'このサイトは要約に対応していません');
-        return null;
-      }
-      
-      if (errMsg.includes('429')) {
-        toast.error('レート制限に達しました。しばらくしてから再試行してください。');
-      } else if (errMsg.includes('402')) {
-        toast.error('クレジットが不足しています。');
-      } else {
-        toast.error(errMsg || '要約の生成に失敗しました');
-      }
       return null;
     }
   }, [session]);
@@ -540,9 +563,10 @@ export function useEntries() {
   return {
     loading,
     formatting,
+    cleanupEmptyEntry,
+    getOrCreateEntryForDate,
     getBlocksByDate,
     getBlocksByCategory,
-    getOrCreateEntryForDate,
     addBlockWithDate,
     updateBlock,
     updateBlockWithOccurredAt,
