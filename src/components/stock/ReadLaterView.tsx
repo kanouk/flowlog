@@ -1,11 +1,13 @@
 import { useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
-import { Loader2, Bookmark, ExternalLink, Sparkles, RefreshCw, FileText } from 'lucide-react';
+import { Loader2, Bookmark, ExternalLink, Sparkles, RefreshCw, FileText, Circle, CheckCircle2 } from 'lucide-react';
 import { useEntries, Block } from '@/hooks/useEntries';
 import { formatTimeJST, formatDateJST } from '@/lib/dateUtils';
 import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 type TagFilter = 'all' | BlockTag;
+type ReadFilter = 'all' | 'unread' | 'read';
 
 /**
  * URLを検出して返す
@@ -45,17 +47,19 @@ function linkifyContent(text: string): ReactNode {
 }
 
 export function ReadLaterView() {
-  const { getBlocksByCategory, summarizeUrl } = useEntries();
+  const { getBlocksByCategory, summarizeUrl, updateBlock } = useEntries();
   
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
   const [summarizingIds, setSummarizingIds] = useState<Set<string>>(new Set());
   const [tagFilter, setTagFilter] = useState<TagFilter>('all');
+  const [readFilter, setReadFilter] = useState<ReadFilter>('all');
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getBlocksByCategory('read_later', { limit: 200 });
+      const data = await getBlocksByCategory('read_later', { limit: 200, includeCompleted: true });
       setBlocks(data);
     } finally {
       setLoading(false);
@@ -67,9 +71,22 @@ export function ReadLaterView() {
   }, [loadData]);
 
   const filteredBlocks = useMemo(() => {
-    if (tagFilter === 'all') return blocks;
-    return blocks.filter(b => b.tag === tagFilter);
-  }, [blocks, tagFilter]);
+    let result = blocks;
+    
+    // Tag filter
+    if (tagFilter !== 'all') {
+      result = result.filter(b => b.tag === tagFilter);
+    }
+    
+    // Read filter
+    if (readFilter === 'read') {
+      result = result.filter(b => b.is_done);
+    } else if (readFilter === 'unread') {
+      result = result.filter(b => !b.is_done);
+    }
+    
+    return result;
+  }, [blocks, tagFilter, readFilter]);
 
   const handleSummarize = useCallback(async (blockId: string, url: string) => {
     setSummarizingIds(prev => new Set(prev).add(blockId));
@@ -92,6 +109,33 @@ export function ReadLaterView() {
     }
   }, [summarizeUrl]);
 
+  const handleToggleRead = useCallback(async (blockId: string, newIsDone: boolean) => {
+    setTogglingIds(prev => new Set(prev).add(blockId));
+    try {
+      const result = await updateBlock(blockId, { 
+        is_done: newIsDone,
+        done_at: newIsDone ? new Date().toISOString() : null
+      });
+      if (result) {
+        setBlocks(prev => prev.map(b => 
+          b.id === blockId 
+            ? { ...b, is_done: newIsDone, done_at: newIsDone ? new Date().toISOString() : null }
+            : b
+        ));
+      }
+    } finally {
+      setTogglingIds(prev => {
+        const next = new Set(prev);
+        next.delete(blockId);
+        return next;
+      });
+    }
+  }, [updateBlock]);
+
+  // Stats
+  const unreadCount = blocks.filter(b => !b.is_done).length;
+  const readCount = blocks.filter(b => b.is_done).length;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -112,13 +156,45 @@ export function ReadLaterView() {
           <div className="flex-1 min-w-0">
             <h2 className="text-xl sm:text-2xl font-semibold text-foreground">あとで読む</h2>
             <p className="text-xs sm:text-sm text-muted-foreground">
-              {filteredBlocks.length}件{tagFilter !== 'all' && ` / 全${blocks.length}件`}
+              {filteredBlocks.length}件表示 / 未読 {unreadCount}件 ・ 既読 {readCount}件
             </p>
           </div>
         </div>
         
-        {/* Tag Filter */}
+        {/* Read Filter */}
         <div className="mt-4">
+          <div className="grid grid-cols-3 gap-1.5 mb-3">
+            <Button
+              variant={readFilter === 'all' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setReadFilter('all')}
+              className={cn("h-8 text-xs px-2", readFilter === 'all' && 'bg-gray-500 hover:bg-gray-600')}
+            >
+              すべて
+            </Button>
+            <Button
+              variant={readFilter === 'unread' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setReadFilter('unread')}
+              className={cn("h-8 text-xs px-2", readFilter === 'unread' && 'bg-green-500 hover:bg-green-600')}
+            >
+              <Circle className="h-3 w-3 mr-1" />
+              未読
+            </Button>
+            <Button
+              variant={readFilter === 'read' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setReadFilter('read')}
+              className={cn("h-8 text-xs px-2", readFilter === 'read' && 'bg-gray-400 hover:bg-gray-500')}
+            >
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              既読
+            </Button>
+          </div>
+        </div>
+        
+        {/* Tag Filter */}
+        <div className="mt-2">
           <div className="grid grid-cols-4 gap-1.5">
             <Button
               variant={tagFilter === 'all' ? 'default' : 'outline'}
@@ -156,7 +232,7 @@ export function ReadLaterView() {
             <Bookmark className="w-8 h-8 text-green-500" />
           </div>
           <p className="text-muted-foreground">
-            {tagFilter !== 'all' ? '該当するものがありません' : 'あとで読むものがありません'}
+            {tagFilter !== 'all' || readFilter !== 'all' ? '該当するものがありません' : 'あとで読むものがありません'}
           </p>
           <p className="text-sm text-muted-foreground/70 mt-1">
             Flowであとで読むを追加すると、ここに表示されます
@@ -170,20 +246,43 @@ export function ReadLaterView() {
             const extractedUrl = hasContent ? extractFirstUrl(block.content!) : null;
             const isSummarizing = summarizingIds.has(block.id);
             const hasUrlMetadata = block.url_metadata !== null;
+            const isToggling = togglingIds.has(block.id);
             
             return (
               <div 
                 key={block.id} 
-                className="p-4 rounded-xl bg-card border border-border"
+                className={cn(
+                  "p-4 rounded-xl bg-card border border-border transition-opacity",
+                  block.is_done && "opacity-60"
+                )}
               >
                 <div className="flex items-start gap-3">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-green-500/10 text-green-500 flex-shrink-0">
-                    <Bookmark className="h-4 w-4" />
-                  </div>
+                  {/* Read/Unread Toggle Button */}
+                  <button
+                    onClick={() => handleToggleRead(block.id, !block.is_done)}
+                    disabled={isToggling}
+                    className={cn(
+                      "flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors",
+                      block.is_done 
+                        ? "bg-gray-500/10 text-gray-500 hover:bg-gray-500/20" 
+                        : "bg-green-500/10 text-green-500 hover:bg-green-500/20"
+                    )}
+                  >
+                    {isToggling ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : block.is_done ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                      <Circle className="h-4 w-4" />
+                    )}
+                  </button>
                   
                   <div className="flex-1">
                     {hasContent && (
-                      <p className="text-foreground leading-relaxed whitespace-pre-wrap">
+                      <p className={cn(
+                        "text-foreground leading-relaxed whitespace-pre-wrap",
+                        block.is_done && "line-through"
+                      )}>
                         {linkifyContent(block.content!)}
                       </p>
                     )}

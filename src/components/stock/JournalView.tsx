@@ -1,12 +1,15 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { Loader2, BookOpen, CalendarDays, ArrowLeft, Trophy } from 'lucide-react';
+import { Loader2, BookOpen, CalendarDays, ArrowLeft, Trophy, Sunrise, Sun, Sunset, Moon, Sparkles, Copy, Check } from 'lucide-react';
 import { useEntries, Entry } from '@/hooks/useEntries';
 import { getTodayKey } from '@/lib/dateUtils';
 import { DateSelector } from '@/components/flow/DateSelector';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface JournalViewProps {
   entries: Entry[];
@@ -25,6 +28,11 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
   
   // モバイルでは今日の場合はデフォルトでコンテンツを表示
   const [showContent, setShowContent] = useState(isToday);
+  
+  // Score animation state
+  const [displayScore, setDisplayScore] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const scoreAnimationRef = useRef<NodeJS.Timeout | null>(null);
 
   // Handle mobile date selection
   const handleMobileDateSelect = (date: string) => {
@@ -41,6 +49,7 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setDisplayScore(0);
     try {
       const entryData = await getEntry(selectedDate);
       setEntry(entryData);
@@ -52,6 +61,34 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Score count-up animation
+  useEffect(() => {
+    if (entry?.score !== null && entry?.score !== undefined && !loading) {
+      const target = entry.score;
+      const duration = 1000;
+      const steps = 30;
+      const increment = target / steps;
+      const stepTime = duration / steps;
+      let current = 0;
+      
+      if (scoreAnimationRef.current) {
+        clearInterval(scoreAnimationRef.current);
+      }
+      
+      scoreAnimationRef.current = setInterval(() => {
+        current = Math.min(current + increment, target);
+        setDisplayScore(Math.round(current));
+        if (current >= target) {
+          if (scoreAnimationRef.current) clearInterval(scoreAnimationRef.current);
+        }
+      }, stepTime);
+      
+      return () => {
+        if (scoreAnimationRef.current) clearInterval(scoreAnimationRef.current);
+      };
+    }
+  }, [entry?.score, loading]);
 
   // AI formatted content sections
   const sections = useMemo(() => {
@@ -69,18 +106,47 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
 
   const formattedDate = format(new Date(selectedDate), 'M月d日（E）', { locale: ja });
 
+  // Copy to clipboard
+  const handleCopy = useCallback(async () => {
+    if (!entry?.formatted_content) return;
+    
+    try {
+      await navigator.clipboard.writeText(entry.formatted_content);
+      setCopied(true);
+      toast.success('クリップボードにコピーしました');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('コピーに失敗しました');
+    }
+  }, [entry?.formatted_content]);
+
   // Score color helper
   const getScoreStyle = (score: number) => {
-    if (score === 100) return { bg: 'bg-green-100 dark:bg-green-900/40', text: 'text-green-700 dark:text-green-300', label: 'パーフェクト！' };
-    if (score >= 80) return { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-700 dark:text-blue-300', label: '' };
-    if (score >= 60) return { bg: 'bg-amber-100 dark:bg-amber-900/40', text: 'text-amber-700 dark:text-amber-300', label: '' };
-    return { bg: 'bg-red-100 dark:bg-red-900/40', text: 'text-red-700 dark:text-red-300', label: '' };
+    if (score === 100) return { bg: 'bg-green-100 dark:bg-green-900/40', text: 'text-green-700 dark:text-green-300', label: 'パーフェクト！', glow: true };
+    if (score >= 90) return { bg: 'bg-emerald-100 dark:bg-emerald-900/40', text: 'text-emerald-700 dark:text-emerald-300', label: '', glow: true };
+    if (score >= 80) return { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-700 dark:text-blue-300', label: '', glow: false };
+    if (score >= 60) return { bg: 'bg-amber-100 dark:bg-amber-900/40', text: 'text-amber-700 dark:text-amber-300', label: '', glow: false };
+    return { bg: 'bg-red-100 dark:bg-red-900/40', text: 'text-red-700 dark:text-red-300', label: '', glow: false };
+  };
+
+  // Section icon helper
+  const getSectionIcon = (title: string) => {
+    switch (title) {
+      case '朝': return <Sunrise className="h-5 w-5 text-orange-400" />;
+      case '昼': return <Sun className="h-5 w-5 text-yellow-500" />;
+      case '夕方': return <Sunset className="h-5 w-5 text-orange-500" />;
+      case '夜': return <Moon className="h-5 w-5 text-indigo-400" />;
+      case '今日の3行まとめ': return <Sparkles className="h-5 w-5 text-blue-500" />;
+      default: return null;
+    }
   };
 
   // Date Header component with score
   const DateHeader = () => {
     const hasScore = entry?.score !== null && entry?.score !== undefined;
     const scoreStyle = hasScore ? getScoreStyle(entry!.score!) : null;
+    const isPerfect = entry?.score === 100;
+    const isHighScore = (entry?.score || 0) >= 90;
 
     return (
       <div className="flex items-center gap-4 p-5 rounded-xl bg-card border border-border">
@@ -93,15 +159,37 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
           </h2>
         </div>
         
-        {/* Score Badge */}
+        {/* Copy Button */}
+        {entry?.formatted_content && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleCopy}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+          </Button>
+        )}
+        
+        {/* Score Badge with Animation */}
         {hasScore && scoreStyle && (
           <Popover>
             <PopoverTrigger asChild>
               <button 
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${scoreStyle.bg} ${scoreStyle.text} font-bold text-sm hover:opacity-80 transition-opacity cursor-pointer`}
+                className={cn(
+                  "relative flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-sm hover:opacity-80 transition-all cursor-pointer",
+                  scoreStyle.bg,
+                  scoreStyle.text,
+                  isPerfect && "animate-bounce",
+                  isHighScore && scoreStyle.glow && "shadow-lg"
+                )}
               >
-                <Trophy className="h-4 w-4" />
-                <span>{entry!.score}点</span>
+                {/* Glow effect for high scores */}
+                {isHighScore && scoreStyle.glow && (
+                  <div className="absolute inset-0 rounded-full bg-gradient-to-r from-green-400/30 via-emerald-300/30 to-green-400/30 blur-sm animate-pulse -z-10" />
+                )}
+                <Trophy className={cn("h-4 w-4", isPerfect && "animate-pulse")} />
+                <span className="tabular-nums">{displayScore}点</span>
                 {scoreStyle.label && <span className="text-xs font-medium ml-1">{scoreStyle.label}</span>}
               </button>
             </PopoverTrigger>
@@ -149,15 +237,9 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
               className="p-5 rounded-xl bg-card border border-border"
             >
               <h4 className="text-lg font-medium text-foreground mb-3 flex items-center gap-2">
-                {section.title === '今日の3行まとめ' && (
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500/10 text-sm">
-                    ✨
-                  </span>
-                )}
-                {section.title === '朝' && '🌅'}
-                {section.title === '昼' && '☀️'}
-                {section.title === '夕方' && '🌇'}
-                {section.title === '夜' && '🌙'}
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-muted">
+                  {getSectionIcon(section.title)}
+                </span>
                 {section.title}
               </h4>
               <div className="prose prose-sm max-w-none text-foreground/90">
