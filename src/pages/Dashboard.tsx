@@ -81,6 +81,11 @@ export default function Dashboard() {
     setSearchParams({});
   };
 
+  const handleLogoClick = () => {
+    setSearchParams({});
+    setActiveTab('flow');
+  };
+
   const handleSignOut = async () => {
     await signOut();
     navigate('/auth');
@@ -126,10 +131,13 @@ export default function Dashboard() {
               </Sheet>
             )}
             
-            <div className="flex items-center gap-2">
+            <button 
+              onClick={handleLogoClick}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            >
               <img src={logoImage} alt="FlowLog" className="h-7 w-7" />
               <h1 className="text-xl font-semibold text-gradient">FlowLog</h1>
-            </div>
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
