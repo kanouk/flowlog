@@ -176,16 +176,18 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
       {/* Two-column layout */}
       <div className="grid md:grid-cols-[240px_1fr] gap-6 w-full overflow-hidden items-start">
         {/* Date List Sidebar */}
-        <aside className="rounded-2xl p-4 h-fit sticky top-24 bg-card border border-border max-w-[240px] overflow-hidden">
-          <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border">
-            <CalendarDays className="h-4 w-4 text-blue-500" />
-            <span className="text-sm font-medium">日付一覧</span>
+        <aside className="rounded-2xl p-4 h-fit bg-card border border-border max-w-[240px] overflow-hidden self-start">
+          <div className="sticky top-24">
+            <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border">
+              <CalendarDays className="h-4 w-4 text-blue-500" />
+              <span className="text-sm font-medium">日付一覧</span>
+            </div>
+            <DateSelector 
+              entries={entries} 
+              onSelect={onDateSelect}
+              selectedDate={selectedDate}
+            />
           </div>
-          <DateSelector 
-            entries={entries} 
-            onSelect={onDateSelect}
-            selectedDate={selectedDate}
-          />
         </aside>
 
         {/* Journal Content */}
