@@ -305,20 +305,17 @@ export function BlockEditModal({
             })}
           </div>
           
-          {/* Accent stripe + Textarea */}
-          <div className="relative">
-            <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l ${currentConfig.accentColor}`} />
-            <textarea
-              ref={textareaRef}
-              value={content}
-              onChange={handleTextareaChange}
-              onKeyDown={handleKeyDown}
-              onCompositionStart={() => setIsComposing(true)}
-              onCompositionEnd={() => setIsComposing(false)}
-              placeholder="内容を入力..."
-              className="w-full min-h-[160px] bg-muted/30 border border-input rounded-md pl-4 pr-3 py-3 text-foreground leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
+          {/* Textarea */}
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={handleTextareaChange}
+            onKeyDown={handleKeyDown}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
+            placeholder="内容を入力..."
+            className="w-full min-h-[160px] bg-muted/30 border border-input rounded-md px-3 py-3 text-foreground leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+          />
           
           {/* Images */}
           <div className="space-y-2">
