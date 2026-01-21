@@ -354,13 +354,6 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
               {isToday ? '保存' : 'この日に追加'}
             </Button>
           </div>
-          
-          {/* デスクトップのみ: ショートカットヒント */}
-          {!isMobile && (
-            <span className="text-[10px] text-muted-foreground/70 leading-tight">
-              {typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}+↵
-            </span>
-          )}
         </div>
       </div>
       </div>
