@@ -73,6 +73,8 @@ export type Database = {
           date: string
           formatted_content: string | null
           id: string
+          score: number | null
+          score_details: string | null
           summary: string | null
           updated_at: string
           user_id: string
@@ -82,6 +84,8 @@ export type Database = {
           date?: string
           formatted_content?: string | null
           id?: string
+          score?: number | null
+          score_details?: string | null
           summary?: string | null
           updated_at?: string
           user_id: string
@@ -91,6 +95,8 @@ export type Database = {
           date?: string
           formatted_content?: string | null
           id?: string
+          score?: number | null
+          score_details?: string | null
           summary?: string | null
           updated_at?: string
           user_id?: string
@@ -124,12 +130,14 @@ export type Database = {
       user_ai_settings: {
         Row: {
           anthropic_api_key: string | null
+          behavior_rules: string | null
           created_at: string
           custom_summarize_prompt: string | null
           custom_system_prompt: string | null
           google_api_key: string | null
           id: string
           openai_api_key: string | null
+          score_enabled: boolean
           selected_model: string
           selected_provider: string
           updated_at: string
@@ -137,12 +145,14 @@ export type Database = {
         }
         Insert: {
           anthropic_api_key?: string | null
+          behavior_rules?: string | null
           created_at?: string
           custom_summarize_prompt?: string | null
           custom_system_prompt?: string | null
           google_api_key?: string | null
           id?: string
           openai_api_key?: string | null
+          score_enabled?: boolean
           selected_model?: string
           selected_provider?: string
           updated_at?: string
@@ -150,12 +160,14 @@ export type Database = {
         }
         Update: {
           anthropic_api_key?: string | null
+          behavior_rules?: string | null
           created_at?: string
           custom_summarize_prompt?: string | null
           custom_system_prompt?: string | null
           google_api_key?: string | null
           id?: string
           openai_api_key?: string | null
+          score_enabled?: boolean
           selected_model?: string
           selected_provider?: string
           updated_at?: string
