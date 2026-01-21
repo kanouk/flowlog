@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Trash2, Pencil, GripVertical, Square, CheckSquare as CheckSquareIcon } from 'lucide-react';
+import { icons } from 'lucide-react';
 import { Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { formatTimeJST, getOccurredAtDayKey } from '@/lib/dateUtils';
-import { BlockCategory, BlockTag, CATEGORY_CONFIG, TAG_CONFIG } from '@/lib/categoryUtils';
+import { formatTimeJST } from '@/lib/dateUtils';
+import { BlockCategory, BlockTag, CATEGORY_CONFIG, TAG_CONFIG, TAGS } from '@/lib/categoryUtils';
+import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -20,6 +22,19 @@ interface BlockListProps {
   selectedDate?: string;
 }
 
+// アイコン名をPascalCaseに変換
+function kebabToPascal(str: string): string {
+  return str.split('-').map(part => 
+    part.charAt(0).toUpperCase() + part.slice(1)
+  ).join('');
+}
+
+// アイコンコンポーネントを取得
+function getIconComponent(iconName: string) {
+  const pascalName = kebabToPascal(iconName);
+  return (icons as Record<string, React.ComponentType<{ className?: string }>>)[pascalName];
+}
+
 // カテゴリバッジコンポーネント（表示専用）
 function CategoryBadge({ category }: { category: BlockCategory }) {
   const config = CATEGORY_CONFIG[category];
@@ -33,18 +48,39 @@ function CategoryBadge({ category }: { category: BlockCategory }) {
   );
 }
 
-// タグバッジコンポーネント（表示専用）
-function TagBadge({ tag }: { tag: BlockTag | null }) {
+// Check if value is a base tag
+function isBaseTag(value: string | null): value is BlockTag {
+  return value !== null && TAGS.includes(value as BlockTag);
+}
+
+// タグバッジコンポーネント（表示専用）- カスタムタグ対応
+function TagBadge({ tag, customTags }: { tag: string | null; customTags: ReturnType<typeof useCustomTags>['customTags'] }) {
   if (!tag) return null;
 
-  const config = TAG_CONFIG[tag];
-  const Icon = config.icon;
+  // Check if it's a base tag
+  if (isBaseTag(tag)) {
+    const config = TAG_CONFIG[tag];
+    const Icon = config.icon;
+    return (
+      <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full ${config.bgColor} ${config.color}`}>
+        <Icon className="h-3 w-3" />
+      </span>
+    );
+  }
 
-  return (
-    <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full ${config.bgColor} ${config.color}`}>
-      <Icon className="h-3 w-3" />
-    </span>
-  );
+  // Check if it's a custom tag
+  const customTag = customTags.find(t => t.id === tag);
+  if (customTag) {
+    const colorConfig = TAG_COLORS[customTag.color];
+    const IconComponent = getIconComponent(customTag.icon);
+    return (
+      <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full ${colorConfig.bg} ${colorConfig.text}`}>
+        {IconComponent && <IconComponent className="h-3 w-3" />}
+      </span>
+    );
+  }
+
+  return null;
 }
 
 // ソート可能なブロックアイテム
@@ -96,6 +132,7 @@ export function BlockList({
 }: BlockListProps) {
   const [modalImage, setModalImage] = useState<string | null>(null);
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
+  const { customTags } = useCustomTags();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { 
@@ -229,7 +266,7 @@ export function BlockList({
                         {/* カテゴリバッジ + タグバッジ + タイムスタンプ */}
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                           <CategoryBadge category={block.category} />
-                          <TagBadge tag={block.tag} />
+                          <TagBadge tag={block.tag} customTags={customTags} />
                           <span className="timestamp-badge">
                             {formatTimeJST(block.occurred_at)}
                           </span>

@@ -1,23 +1,16 @@
 import { useState, useRef, KeyboardEvent, useEffect } from 'react';
-import { Loader2, Send, ImagePlus, X, Camera, Plus, Tag as TagIcon } from 'lucide-react';
+import { Loader2, Send, ImagePlus, X, Camera } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { AddBlockMode } from '@/hooks/useEntries';
 import { useImageUpload } from '@/hooks/useImageUpload';
+import { useCustomTags } from '@/hooks/useCustomTags';
 import { toast } from 'sonner';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { TagDropdown } from './TagDropdown';
 import { 
   BlockCategory, 
-  BlockTag,
   CATEGORIES, 
   CATEGORY_CONFIG, 
-  TAGS,
-  TAG_CONFIG,
   getLastCategory, 
   setLastCategory,
   getLastTag,
@@ -25,7 +18,7 @@ import {
 } from '@/lib/categoryUtils';
 
 interface FlowInputProps {
-  onSubmit: (content: string, mode: AddBlockMode, images: string[], category: BlockCategory, tag: BlockTag | null) => void;
+  onSubmit: (content: string, mode: AddBlockMode, images: string[], category: BlockCategory, tag: string | null) => void;
   disabled?: boolean;
   selectedDate: string;
   isToday: boolean;
@@ -40,12 +33,13 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [category, setCategory] = useState<BlockCategory>('event');
-  const [tag, setTag] = useState<BlockTag | null>(null);
+  const [tag, setTag] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
   const { uploadImages, maxImages } = useImageUpload();
+  const { customTags } = useCustomTags();
 
   // 初回マウント時にlocalStorageからカテゴリとタグを復元
   useEffect(() => {
@@ -84,7 +78,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setLastCategory(cat);
   };
 
-  const handleTagChange = (t: BlockTag | null) => {
+  const handleTagChange = (t: string | null) => {
     setTag(t);
     setLastTag(t);
   };
@@ -309,42 +303,11 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
           </button>
           
           {/* タグドロップダウン */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
-                {tag ? (
-                  <>
-                    {(() => {
-                      const config = TAG_CONFIG[tag];
-                      const Icon = config.icon;
-                      return <Icon className="h-3.5 w-3.5" />;
-                    })()}
-                    <span>{TAG_CONFIG[tag].label}</span>
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>タグなし</span>
-                  </>
-                )}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="bg-popover">
-              <DropdownMenuItem onClick={() => handleTagChange(null)}>
-                タグなし
-              </DropdownMenuItem>
-              {TAGS.map((t) => {
-                const config = TAG_CONFIG[t];
-                const Icon = config.icon;
-                return (
-                  <DropdownMenuItem key={t} onClick={() => handleTagChange(t)} className="gap-2">
-                    <Icon className="h-4 w-4" />
-                    {config.label}
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <TagDropdown 
+            value={tag} 
+            onChange={handleTagChange} 
+            customTags={customTags} 
+          />
           
           {selectedImages.length > 0 && (
             <p className="text-sm text-muted-foreground">
