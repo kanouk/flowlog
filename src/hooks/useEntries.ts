@@ -560,7 +560,7 @@ export function useEntries() {
 
     try {
       const { data, error } = await supabase.functions.invoke('summarize-url', {
-        body: { url },
+        body: { url, blockId },
       });
 
       if (error) throw error;
