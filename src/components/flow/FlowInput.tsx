@@ -337,21 +337,30 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          {isSubmitting && (
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-          )}
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            {isSubmitting && (
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            )}
+            
+            {/* 常に表示: メインボタン */}
+            <Button 
+              size="sm"
+              onClick={() => handleSubmitWithMode('toSelectedDate')}
+              disabled={!canSubmit}
+              className={`${currentConfig.buttonColor} disabled:opacity-50`}
+            >
+              <Send className="h-4 w-4 mr-1" />
+              {isToday ? '保存' : 'この日に追加'}
+            </Button>
+          </div>
           
-          {/* 常に表示: メインボタン */}
-          <Button 
-            size="sm"
-            onClick={() => handleSubmitWithMode('toSelectedDate')}
-            disabled={!canSubmit}
-            className={`${currentConfig.buttonColor} disabled:opacity-50`}
-          >
-            <Send className="h-4 w-4 mr-1" />
-            {isToday ? '保存' : 'この日に追加'}
-          </Button>
+          {/* デスクトップのみ: ショートカットヒント */}
+          {!isMobile && (
+            <span className="text-xs text-muted-foreground">
+              {typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'} + Enter
+            </span>
+          )}
         </div>
       </div>
       </div>
