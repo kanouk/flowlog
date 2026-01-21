@@ -131,10 +131,20 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     }
   };
 
-  // Enterは常に改行、保存はボタンのみ（モバイルでも分かりやすく）
-  const handleKeyDown = (_e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // キーボードショートカットでの保存を無効化
-    // 保存はボタンのみで行う
+  // デスクトップ: Cmd/Ctrl + Enter で保存
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // IME入力中は無視
+    if (isComposing) return;
+    
+    // Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux) で送信
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      const hasContent = content.trim().length > 0;
+      const hasImages = selectedImages.length > 0;
+      if ((hasContent || hasImages) && !disabled && !isSubmitting) {
+        handleSubmitWithMode('toSelectedDate');
+      }
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
