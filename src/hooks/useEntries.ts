@@ -17,6 +17,8 @@ export interface UrlMetadata {
   title: string;
   summary: string;
   fetched_at: string;
+  error?: boolean;
+  error_message?: string;
 }
 
 export interface Block {

@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { Loader2, BookOpen, CalendarDays, ArrowLeft, Trophy, Sunrise, Sun, Sunset, Moon, Sparkles, Copy, Check } from 'lucide-react';
-import { useEntries, Entry } from '@/hooks/useEntries';
+import { Loader2, BookOpen, CalendarDays, ArrowLeft, Trophy, Sunrise, Sun, Sunset, Moon, Sparkles, Copy, Check, Camera } from 'lucide-react';
+import { useEntries, Entry, Block } from '@/hooks/useEntries';
 import { getTodayKey } from '@/lib/dateUtils';
 import { DateSelector } from '@/components/flow/DateSelector';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -10,17 +10,103 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 
 interface JournalViewProps {
   entries: Entry[];
   selectedDate: string;
   onDateSelect: (date: string) => void;
+  blocks?: Block[]; // blocks for photo display
 }
 
-export function JournalView({ entries, selectedDate, onDateSelect }: JournalViewProps) {
-  const { getEntry } = useEntries();
+// Photo pattern regex to detect photo markers in text
+const PHOTO_PATTERN = /[（\(](?:📷|写真(?:あり)?)\d*枚?[）\)]/g;
+
+// PhotoMarker component - displays camera icon that opens photo dialog
+interface PhotoMarkerProps {
+  images: string[];
+}
+
+function PhotoMarker({ images }: PhotoMarkerProps) {
+  if (!images || images.length === 0) return null;
+  
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button 
+          className="inline-flex items-center gap-0.5 mx-1 px-1.5 py-0.5 rounded-md bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-colors cursor-pointer align-middle"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Camera className="h-3.5 w-3.5" />
+          {images.length > 1 && (
+            <span className="text-xs font-medium">{images.length}</span>
+          )}
+        </button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl p-4">
+        <div className={cn(
+          "grid gap-2",
+          images.length === 1 ? "grid-cols-1" : "grid-cols-2"
+        )}>
+          {images.map((url, i) => (
+            <img
+              key={i}
+              src={url}
+              alt={`写真 ${i + 1}`}
+              className="w-full rounded-lg object-contain max-h-[70vh]"
+            />
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Helper function to render text with photo markers replaced by PhotoMarker components
+function renderContentWithPhotoMarkers(
+  text: string, 
+  imageBlocks: Block[], 
+  photoIndexRef: { current: number }
+): ReactNode[] {
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+  
+  // Reset regex state
+  PHOTO_PATTERN.lastIndex = 0;
+  
+  while ((match = PHOTO_PATTERN.exec(text)) !== null) {
+    // Add text before the match
+    if (match.index > lastIndex) {
+      parts.push(<span key={`text-${lastIndex}`}>{text.substring(lastIndex, match.index)}</span>);
+    }
+    
+    // Add PhotoMarker component if we have images
+    const block = imageBlocks[photoIndexRef.current];
+    if (block?.images && block.images.length > 0) {
+      parts.push(<PhotoMarker key={`photo-${photoIndexRef.current}`} images={block.images} />);
+      photoIndexRef.current++;
+    } else {
+      // No more images, just show the original text
+      parts.push(<span key={`marker-${match.index}`}>{match[0]}</span>);
+    }
+    
+    lastIndex = match.index + match[0].length;
+  }
+  
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push(<span key={`text-end`}>{text.substring(lastIndex)}</span>);
+  }
+  
+  return parts.length > 0 ? parts : [<span key="full">{text}</span>];
+}
+
+export function JournalView({ entries, selectedDate, onDateSelect, blocks: externalBlocks = [] }: JournalViewProps) {
+  const { getEntry, getBlocksByDate } = useEntries();
   
   const [entry, setEntry] = useState<Entry | null>(null);
+  const [journalBlocks, setJournalBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
   const isMobile = useIsMobile();
   const today = getTodayKey();
@@ -51,12 +137,19 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
     setLoading(true);
     setDisplayScore(0);
     try {
-      const entryData = await getEntry(selectedDate);
+      const [entryData, blocksData] = await Promise.all([
+        getEntry(selectedDate),
+        getBlocksByDate(selectedDate)
+      ]);
       setEntry(entryData);
+      setJournalBlocks(blocksData);
     } finally {
       setLoading(false);
     }
-  }, [selectedDate, getEntry]);
+  }, [selectedDate, getEntry, getBlocksByDate]);
+  
+  // Use external blocks if provided, otherwise use internally fetched blocks
+  const blocks = externalBlocks.length > 0 ? externalBlocks : journalBlocks;
 
   useEffect(() => {
     loadData();
@@ -212,49 +305,70 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
     );
   };
 
+  // Get blocks with images for photo markers
+  const imageBlocks = useMemo(() => {
+    return blocks.filter(b => b.images && b.images.length > 0);
+  }, [blocks]);
+
   // Journal Content component - プレーンなデザイン
-  const JournalContent = () => (
-    <>
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-        </div>
-      ) : !entry?.formatted_content ? (
-        <div className="text-center py-12">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-500/10 mb-4">
-            <BookOpen className="w-8 h-8 text-blue-500" />
+  const JournalContent = () => {
+    // Create a ref object to track photo index across sections
+    const photoIndexRef = useRef({ current: 0 });
+    // Reset the index when content changes
+    photoIndexRef.current = { current: 0 };
+    
+    return (
+      <>
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
           </div>
-          <p className="text-muted-foreground">日記がまだ生成されていません</p>
-          <p className="text-sm text-muted-foreground/70 mt-1">
-            Flowで出来事を記録すると、自動的に日記が生成されます
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {sections.map((section, index) => (
-            <div 
-              key={index} 
-              className="p-5 rounded-xl bg-card border border-border"
-            >
-              <h4 className="text-lg font-medium text-foreground mb-3 flex items-center gap-2">
-                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-muted">
-                  {getSectionIcon(section.title)}
-                </span>
-                {section.title}
-              </h4>
-              <div className="prose prose-sm max-w-none text-foreground/90">
-                {section.body.split('\n').map((line, i) => (
-                  <p key={i} className="mb-2 last:mb-0 leading-relaxed">
-                    {line.replace(/^[-*]\s*/, '• ')}
-                  </p>
-                ))}
-              </div>
+        ) : !entry?.formatted_content ? (
+          <div className="text-center py-12">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-500/10 mb-4">
+              <BookOpen className="w-8 h-8 text-blue-500" />
             </div>
-          ))}
-        </div>
-      )}
-    </>
-  );
+            <p className="text-muted-foreground">日記がまだ生成されていません</p>
+            <p className="text-sm text-muted-foreground/70 mt-1">
+              Flowで出来事を記録すると、自動的に日記が生成されます
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {sections.map((section, index) => (
+              <div 
+                key={index} 
+                className="p-5 rounded-xl bg-card border border-border"
+              >
+                <h4 className="text-lg font-medium text-foreground mb-3 flex items-center gap-2">
+                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-muted">
+                    {getSectionIcon(section.title)}
+                  </span>
+                  {section.title}
+                </h4>
+                <div className="prose prose-sm max-w-none text-foreground/90">
+                  {section.body.split('\n').map((line, i) => {
+                    const processedLine = line.replace(/^[-*]\s*/, '• ');
+                    const hasPhotoMarker = PHOTO_PATTERN.test(processedLine);
+                    PHOTO_PATTERN.lastIndex = 0; // Reset regex
+                    
+                    return (
+                      <p key={i} className="mb-2 last:mb-0 leading-relaxed">
+                        {hasPhotoMarker 
+                          ? renderContentWithPhotoMarkers(processedLine, imageBlocks, photoIndexRef.current)
+                          : processedLine
+                        }
+                      </p>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    );
+  };
 
   // Mobile: Step-based UI
   if (isMobile) {

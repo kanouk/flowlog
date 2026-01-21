@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
-import { Loader2, Bookmark, ExternalLink, Sparkles, RefreshCw, FileText, Circle, CheckCircle2 } from 'lucide-react';
-import { useEntries, Block } from '@/hooks/useEntries';
+import { Loader2, Bookmark, ExternalLink, Sparkles, RefreshCw, FileText, Circle, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useEntries, Block, UrlMetadata } from '@/hooks/useEntries';
 import { formatTimeJST, formatDateJST } from '@/lib/dateUtils';
 import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { Button } from '@/components/ui/button';
@@ -97,6 +97,21 @@ export function ReadLaterView() {
         setBlocks(prev => prev.map(b => 
           b.id === blockId 
             ? { ...b, url_metadata: result }
+            : b
+        ));
+      } else {
+        // summarizeUrl returned null - store error state locally
+        const errorMetadata: UrlMetadata = {
+          url,
+          title: '',
+          summary: '',
+          fetched_at: new Date().toISOString(),
+          error: true,
+          error_message: 'サマリーを取得できませんでした'
+        };
+        setBlocks(prev => prev.map(b => 
+          b.id === blockId 
+            ? { ...b, url_metadata: errorMetadata }
             : b
         ));
       }
@@ -288,7 +303,7 @@ export function ReadLaterView() {
                     )}
                     
                     {/* URL Summary Section */}
-                    {hasUrlMetadata && block.url_metadata && (
+                    {hasUrlMetadata && block.url_metadata && !block.url_metadata.error && (
                       <div className="bg-muted/50 p-3 rounded-lg mt-3 border-l-2 border-green-500/50">
                         <div className="flex items-start gap-2 mb-2">
                           <FileText className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
@@ -323,7 +338,33 @@ export function ReadLaterView() {
                       </div>
                     )}
                     
-                    {/* Summarize Button for URLs without metadata */}
+                    {/* URL Summary Error State */}
+                    {hasUrlMetadata && block.url_metadata?.error && (
+                      <div className="flex items-center gap-2 mt-3 text-xs text-muted-foreground/60">
+                        <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                        <span>{block.url_metadata.error_message || 'サマリーを取得できませんでした'}</span>
+                        {extractedUrl && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-5 px-2 text-xs text-muted-foreground hover:text-foreground ml-auto"
+                            onClick={() => handleSummarize(block.id, extractedUrl)}
+                            disabled={isSummarizing}
+                          >
+                            {isSummarizing ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <>
+                                <RefreshCw className="h-3 w-3 mr-1" />
+                                再試行
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Summarize Button for URLs without metadata (only if no error either) */}
                     {!hasUrlMetadata && extractedUrl && (
                       <div className="mt-3">
                         <Button
