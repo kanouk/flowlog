@@ -280,16 +280,14 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
             onChange={handleImageSelect}
             disabled={selectedImages.length >= maxImages || isSubmitting}
           />
-          <Button 
-            variant="ghost" 
-            size="icon"
+          <button 
             type="button"
             disabled={selectedImages.length >= maxImages || isSubmitting}
             onClick={() => fileInputRef.current?.click()}
-            className={selectedImages.length >= maxImages ? 'opacity-50' : ''}
+            className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
           >
             <ImagePlus className="h-4 w-4" />
-          </Button>
+          </button>
           
           {/* カメラ撮影ボタン */}
           <input
@@ -301,37 +299,35 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
             onChange={handleCameraCapture}
             disabled={selectedImages.length >= maxImages || isSubmitting}
           />
-          <Button 
-            variant="ghost" 
-            size="icon"
+          <button 
             type="button"
             disabled={selectedImages.length >= maxImages || isSubmitting}
             onClick={() => cameraInputRef.current?.click()}
-            className={selectedImages.length >= maxImages ? 'opacity-50' : ''}
+            className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
           >
             <Camera className="h-4 w-4" />
-          </Button>
+          </button>
           
           {/* タグドロップダウン */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground">
+              <button className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
                 {tag ? (
                   <>
                     {(() => {
                       const config = TAG_CONFIG[tag];
                       const Icon = config.icon;
-                      return <Icon className="h-3.5 w-3.5 mr-1" />;
+                      return <Icon className="h-3.5 w-3.5" />;
                     })()}
-                    {TAG_CONFIG[tag].label}
+                    <span>{TAG_CONFIG[tag].label}</span>
                   </>
                 ) : (
                   <>
-                    <Plus className="h-3.5 w-3.5 mr-1" />
-                    タグなし
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>タグなし</span>
                   </>
                 )}
-              </Button>
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="bg-popover">
               <DropdownMenuItem onClick={() => handleTagChange(null)}>
@@ -341,8 +337,8 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                 const config = TAG_CONFIG[t];
                 const Icon = config.icon;
                 return (
-                  <DropdownMenuItem key={t} onClick={() => handleTagChange(t)}>
-                    <Icon className="h-4 w-4 mr-2" />
+                  <DropdownMenuItem key={t} onClick={() => handleTagChange(t)} className="gap-2">
+                    <Icon className="h-4 w-4" />
                     {config.label}
                   </DropdownMenuItem>
                 );
