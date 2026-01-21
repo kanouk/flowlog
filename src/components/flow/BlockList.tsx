@@ -1,17 +1,14 @@
-import { useState, useRef, KeyboardEvent } from 'react';
-import { Trash2, Pencil, Check, X, Calendar, Clock, GripVertical, Square, CheckSquare as CheckSquareIcon } from 'lucide-react';
+import { useState } from 'react';
+import { Trash2, Pencil, GripVertical, Square, CheckSquare as CheckSquareIcon } from 'lucide-react';
 import { Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { formatTimeJST, getOccurredAtDayKey, createOccurredAt, isFutureDate, parseTimestamp } from '@/lib/dateUtils';
-import { toast } from 'sonner';
-import { BlockCategory, BlockTag, CATEGORIES, CATEGORY_CONFIG, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
+import { formatTimeJST, getOccurredAtDayKey } from '@/lib/dateUtils';
+import { BlockCategory, BlockTag, CATEGORY_CONFIG, TAG_CONFIG } from '@/lib/categoryUtils';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { BlockEditModal } from './BlockEditModal';
 
 interface BlockListProps {
   blocks: Block[];
@@ -23,164 +20,30 @@ interface BlockListProps {
   selectedDate?: string;
 }
 
-// カテゴリバッジコンポーネント
-function CategoryBadge({ 
-  category, 
-  editable,
-  onCategoryChange 
-}: { 
-  category: BlockCategory; 
-  editable: boolean;
-  onCategoryChange?: (cat: BlockCategory) => void;
-}) {
-  const [open, setOpen] = useState(false);
+// カテゴリバッジコンポーネント（表示専用）
+function CategoryBadge({ category }: { category: BlockCategory }) {
   const config = CATEGORY_CONFIG[category];
   const Icon = config.icon;
 
-  if (!editable) {
-    return (
-      <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${config.bgColor} ${config.color}`}>
-        <Icon className="h-3 w-3" />
-        {config.label}
-      </span>
-    );
-  }
-
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full cursor-pointer hover:opacity-80 transition-opacity ${config.bgColor} ${config.color}`}>
-          <Icon className="h-3 w-3" />
-          {config.label}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-2 bg-popover" align="start">
-        <div className="flex flex-col gap-1">
-          {CATEGORIES.map((cat) => {
-            const catConfig = CATEGORY_CONFIG[cat];
-            const CatIcon = catConfig.icon;
-            return (
-              <button
-                key={cat}
-                onClick={() => {
-                  onCategoryChange?.(cat);
-                  setOpen(false);
-                }}
-                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded text-sm text-left ${
-                  cat === category ? catConfig.bgColor : 'hover:bg-muted'
-                } ${catConfig.color}`}
-              >
-                <CatIcon className="h-4 w-4" />
-                {catConfig.label}
-              </button>
-            );
-          })}
-        </div>
-      </PopoverContent>
-    </Popover>
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${config.bgColor} ${config.color}`}>
+      <Icon className="h-3 w-3" />
+      {config.label}
+    </span>
   );
 }
 
-// タグバッジコンポーネント
-function TagBadge({ 
-  tag, 
-  editable,
-  onTagChange 
-}: { 
-  tag: BlockTag | null; 
-  editable: boolean;
-  onTagChange?: (t: BlockTag | null) => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  if (!tag && !editable) return null;
-
-  if (!tag) {
-    // 編集可能だがタグなし: タグ追加ボタンを表示
-    return (
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full text-muted-foreground hover:bg-muted transition-colors">
-            +タグ
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-2 bg-popover" align="start">
-          <div className="flex flex-col gap-1">
-            {TAGS.map((t) => {
-              const tagConfig = TAG_CONFIG[t];
-              const TagIcon = tagConfig.icon;
-              return (
-                <button
-                  key={t}
-                  onClick={() => {
-                    onTagChange?.(t);
-                    setOpen(false);
-                  }}
-                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded text-sm text-left hover:bg-muted ${tagConfig.color}`}
-                >
-                  <TagIcon className="h-4 w-4" />
-                  {tagConfig.label}
-                </button>
-              );
-            })}
-          </div>
-        </PopoverContent>
-      </Popover>
-    );
-  }
+// タグバッジコンポーネント（表示専用）
+function TagBadge({ tag }: { tag: BlockTag | null }) {
+  if (!tag) return null;
 
   const config = TAG_CONFIG[tag];
   const Icon = config.icon;
 
-  if (!editable) {
-    return (
-      <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full ${config.bgColor} ${config.color}`}>
-        <Icon className="h-3 w-3" />
-      </span>
-    );
-  }
-
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full cursor-pointer hover:opacity-80 transition-opacity ${config.bgColor} ${config.color}`}>
-          <Icon className="h-3 w-3" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-2 bg-popover" align="start">
-        <div className="flex flex-col gap-1">
-          {TAGS.map((t) => {
-            const tagConfig = TAG_CONFIG[t];
-            const TagIcon = tagConfig.icon;
-            return (
-              <button
-                key={t}
-                onClick={() => {
-                  onTagChange?.(t === tag ? null : t);
-                  setOpen(false);
-                }}
-                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded text-sm text-left ${
-                  t === tag ? tagConfig.bgColor : 'hover:bg-muted'
-                } ${tagConfig.color}`}
-              >
-                <TagIcon className="h-4 w-4" />
-                {tagConfig.label}
-              </button>
-            );
-          })}
-          <button
-            onClick={() => {
-              onTagChange?.(null);
-              setOpen(false);
-            }}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded text-sm text-left text-muted-foreground hover:bg-muted"
-          >
-            <X className="h-4 w-4" />
-            タグを外す
-          </button>
-        </div>
-      </PopoverContent>
-    </Popover>
+    <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full ${config.bgColor} ${config.color}`}>
+      <Icon className="h-3 w-3" />
+    </span>
   );
 }
 
@@ -231,14 +94,8 @@ export function BlockList({
   editable = true,
   selectedDate,
 }: BlockListProps) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState('');
-  const [isComposing, setIsComposing] = useState(false);
-  const [editingDateTimeId, setEditingDateTimeId] = useState<string | null>(null);
-  const [editDayKey, setEditDayKey] = useState('');
-  const [editTime, setEditTime] = useState('');
   const [modalImage, setModalImage] = useState<string | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [editingBlock, setEditingBlock] = useState<Block | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { 
@@ -252,99 +109,6 @@ export function BlockList({
     onDragEnd?.(active.id as string, over.id as string);
   };
 
-  const startEditing = (block: Block) => {
-    if (!editable || block.id.startsWith('temp-')) return;
-    setEditingId(block.id);
-    setEditContent(block.content || '');
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        textareaRef.current.style.height = 'auto';
-        textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-      }
-    }, 0);
-  };
-
-  const cancelEditing = () => {
-    setEditingId(null);
-    setEditContent('');
-  };
-
-  const saveEditing = () => {
-    if (editingId && onUpdate) {
-      onUpdate(editingId, { content: editContent.trim() });
-    }
-    cancelEditing();
-  };
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-      e.preventDefault();
-      saveEditing();
-    } else if (e.key === 'Escape') {
-      cancelEditing();
-    }
-  };
-
-  const startEditingDateTime = (block: Block) => {
-    if (!editable || block.id.startsWith('temp-')) return;
-    setEditingDateTimeId(block.id);
-    setEditDayKey(getOccurredAtDayKey(block.occurred_at));
-    setEditTime(formatTimeJST(block.occurred_at));
-  };
-
-  const cancelEditingDateTime = () => {
-    setEditingDateTimeId(null);
-    setEditDayKey('');
-    setEditTime('');
-  };
-
-  const setToCurrentTime = (blockId: string) => {
-    if (!onUpdate) return;
-    
-    const now = new Date();
-    onUpdate(blockId, { occurred_at: now.toISOString() });
-    cancelEditingDateTime();
-    toast.success('現在時刻に変更しました');
-  };
-
-  const saveEditingDateTime = (blockId: string) => {
-    if (!editDayKey || !editTime || !onUpdate) {
-      cancelEditingDateTime();
-      return;
-    }
-    
-    const newOccurredAt = createOccurredAt(editDayKey, editTime);
-    
-    if (isFutureDate(newOccurredAt)) {
-      toast.error('未来の日時は指定できません');
-      return;
-    }
-    
-    onUpdate(blockId, { occurred_at: newOccurredAt });
-    cancelEditingDateTime();
-  };
-
-  const handleDateSelect = (date: Date | undefined) => {
-    if (date) {
-      // 未来日は選択不可
-      if (date > new Date()) {
-        toast.error('未来の日付は指定できません');
-        return;
-      }
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      setEditDayKey(`${year}-${month}-${day}`);
-    }
-  };
-
-  const handleCategoryChange = (blockId: string, newCategory: BlockCategory) => {
-    if (onUpdate) {
-      onUpdate(blockId, { category: newCategory });
-    }
-  };
-
   const handleTaskToggle = (block: Block) => {
     if (!onUpdate || block.category !== 'task') return;
     
@@ -353,6 +117,22 @@ export function BlockList({
       is_done: newIsDone,
       done_at: newIsDone ? new Date().toISOString() : null,
     });
+  };
+
+  const handleEditSave = async (updates: BlockUpdatePayload & { images?: string[] }) => {
+    if (!editingBlock || !onUpdate) return;
+    onUpdate(editingBlock.id, updates);
+  };
+
+  const handleEditDelete = () => {
+    if (!editingBlock || !onDelete) return;
+    onDelete(editingBlock.id);
+    setEditingBlock(null);
+  };
+
+  const openEditModal = (block: Block) => {
+    if (!editable || block.id.startsWith('temp-')) return;
+    setEditingBlock(block);
   };
 
   if (blocks.length === 0) {
@@ -394,8 +174,6 @@ export function BlockList({
           <div className="space-y-3 pl-6">
             {blocks.map((block, index) => {
               const isTemporary = block.id.startsWith('temp-');
-              const isEditing = editingId === block.id;
-              const isEditingDateTime = editingDateTimeId === block.id;
               const hasImages = block.images && block.images.length > 0;
               const hasContent = block.content && block.content.trim().length > 0;
               const isTask = block.category === 'task';
@@ -408,7 +186,7 @@ export function BlockList({
                   >
                     <div className="flex items-start gap-3">
                       {/* タスクチェックボックス */}
-                      {isTask && !isEditing && (
+                      {isTask && (
                         <button
                           onClick={() => handleTaskToggle(block)}
                           className="mt-0.5 flex-shrink-0"
@@ -422,148 +200,51 @@ export function BlockList({
                         </button>
                       )}
                       
-                      <div className="flex-1">
-                        {isEditing ? (
-                          <div className="space-y-2">
-                            <textarea
-                              ref={textareaRef}
-                              value={editContent}
-                              onChange={(e) => {
-                                setEditContent(e.target.value);
-                                e.target.style.height = 'auto';
-                                e.target.style.height = `${e.target.scrollHeight}px`;
-                              }}
-                              onKeyDown={handleKeyDown}
-                              onCompositionStart={() => setIsComposing(true)}
-                              onCompositionEnd={() => setIsComposing(false)}
-                              onBlur={() => {
-                                setTimeout(() => {
-                                  if (editingId === block.id) {
-                                    saveEditing();
-                                  }
-                                }, 150);
-                              }}
-                              className="w-full bg-background border border-input rounded-md px-3 py-2 text-foreground leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                              rows={1}
-                            />
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <span>Enter: 保存</span>
-                              <span>Esc: キャンセル</span>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            {hasContent && (
-                              <p 
-                                className={`text-foreground leading-relaxed whitespace-pre-wrap ${
-                                  block.is_done ? 'line-through text-muted-foreground' : ''
-                                } ${editable && !isTemporary ? 'cursor-pointer hover:bg-muted/50 -mx-2 -my-1 px-2 py-1 rounded transition-colors' : ''}`}
-                                onClick={() => startEditing(block)}
-                              >
-                                {block.content}
-                              </p>
-                            )}
-
-                            {/* 画像表示 */}
-                            {hasImages && (
-                              <div className={`grid gap-2 ${hasContent ? 'mt-3' : ''} ${block.images!.length === 1 ? 'grid-cols-1 max-w-xs' : block.images!.length === 2 ? 'grid-cols-2 max-w-sm' : 'grid-cols-3 max-w-md'}`}>
-                                {block.images!.map((url, i) => (
-                                  <img
-                                    key={i}
-                                    src={url}
-                                    alt=""
-                                    className="w-full aspect-square object-cover rounded-md cursor-pointer hover:opacity-80 transition-opacity border border-border"
-                                    onClick={() => setModalImage(url)}
-                                  />
-                                ))}
-                              </div>
-                            )}
-                            
-                            {/* カテゴリバッジ + タグバッジ + タイムスタンプ */}
-                            <div className="flex items-center gap-2 mt-2 flex-wrap">
-                              <CategoryBadge 
-                                category={block.category} 
-                                editable={editable && !isTemporary}
-                                onCategoryChange={(cat) => handleCategoryChange(block.id, cat)}
-                              />
-                              <TagBadge
-                                tag={block.tag}
-                                editable={editable && !isTemporary}
-                                onTagChange={(t) => onUpdate?.(block.id, { tag: t })}
-                              />
-                              
-                              {isEditingDateTime ? (
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <Popover>
-                                    <PopoverTrigger asChild>
-                                      <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
-                                        <Calendar className="h-3 w-3 mr-1" />
-                                        {editDayKey}
-                                      </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start">
-                                      <CalendarComponent
-                                        mode="single"
-                                        selected={parseTimestamp(`${editDayKey}T00:00:00Z`)}
-                                        onSelect={handleDateSelect}
-                                        disabled={(date) => date > new Date()}
-                                        initialFocus
-                                      />
-                                    </PopoverContent>
-                                  </Popover>
-                                  <Input
-                                    type="time"
-                                    value={editTime}
-                                    onChange={(e) => setEditTime(e.target.value)}
-                                    className="h-7 w-24 text-xs"
-                                  />
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 px-2 text-xs"
-                                    onClick={() => setToCurrentTime(block.id)}
-                                  >
-                                    <Clock className="h-3 w-3 mr-1" />
-                                    今
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7"
-                                    onClick={() => saveEditingDateTime(block.id)}
-                                  >
-                                    <Check className="h-3 w-3" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7"
-                                    onClick={cancelEditingDateTime}
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              ) : (
-                                <button
-                                  className="timestamp-badge inline-block hover:bg-muted cursor-pointer transition-colors"
-                                  onClick={() => startEditingDateTime(block)}
-                                  disabled={!editable || isTemporary}
-                                >
-                                  {formatTimeJST(block.occurred_at)}
-                                </button>
-                              )}
-                            </div>
-                          </>
+                      <div className="flex-1 min-w-0">
+                        {hasContent && (
+                          <p 
+                            className={`text-foreground leading-relaxed whitespace-pre-wrap break-words ${
+                              block.is_done ? 'line-through text-muted-foreground' : ''
+                            }`}
+                          >
+                            {block.content}
+                          </p>
                         )}
+
+                        {/* 画像表示 */}
+                        {hasImages && (
+                          <div className={`grid gap-2 ${hasContent ? 'mt-3' : ''} ${block.images!.length === 1 ? 'grid-cols-1 max-w-xs' : block.images!.length === 2 ? 'grid-cols-2 max-w-sm' : 'grid-cols-3 max-w-md'}`}>
+                            {block.images!.map((url, i) => (
+                              <img
+                                key={i}
+                                src={url}
+                                alt=""
+                                className="w-full aspect-square object-cover rounded-md cursor-pointer hover:opacity-80 transition-opacity border border-border"
+                                onClick={() => setModalImage(url)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* カテゴリバッジ + タグバッジ + タイムスタンプ */}
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          <CategoryBadge category={block.category} />
+                          <TagBadge tag={block.tag} />
+                          <span className="timestamp-badge">
+                            {formatTimeJST(block.occurred_at)}
+                          </span>
+                        </div>
                       </div>
-                      {!isEditing && !isTemporary && !isEditingDateTime && (
+                      
+                      {/* Action buttons */}
+                      {!isTemporary && (
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {editable && onUpdate && hasContent && (
+                          {editable && onUpdate && (
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                              onClick={() => startEditing(block)}
+                              onClick={() => openEditModal(block)}
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
@@ -578,26 +259,6 @@ export function BlockList({
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           )}
-                        </div>
-                      )}
-                      {isEditing && (
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-primary"
-                            onClick={saveEditing}
-                          >
-                            <Check className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={cancelEditing}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
                         </div>
                       )}
                     </div>
@@ -621,6 +282,17 @@ export function BlockList({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* 編集モーダル */}
+      {editingBlock && (
+        <BlockEditModal
+          block={editingBlock}
+          open={!!editingBlock}
+          onOpenChange={(open) => !open && setEditingBlock(null)}
+          onSave={handleEditSave}
+          onDelete={showDelete ? handleEditDelete : undefined}
+        />
+      )}
     </>
   );
 }
