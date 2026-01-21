@@ -426,12 +426,13 @@ JSON形式で回答してください。`;
     );
 
     // Format blocks for the prompt (formatInTimeZone使用)
+    // Use structured photo markers with block ID for reliable frontend mapping
     const blocksText = sortedBlocks.map((block) => {
       const time = formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH:mm');
       const categoryLabel = block.category ? `[${getCategoryLabel(block.category)}]` : '';
       const doneNote = block.is_done ? '[✓]' : '';
       const imageNote = block.images && block.images.length > 0 
-        ? ` [📷${block.images.length}枚]` 
+        ? ` {{PHOTO:${block.id}:${block.images.length}}}` 
         : '';
       const content = block.content || '';
       return `[${time}] ${categoryLabel}${doneNote}${imageNote} ${content}`.trim();
@@ -457,6 +458,9 @@ JSON形式で回答してください。`;
    - 19:00-22:00 → 「夜」「夜に」
    - 22:00-1:00 → 「深夜」「夜遅く」
 10. 具体的な時刻は避け、流れが自然になる表現を使う（例：「その後」「しばらくして」「〜の後」）
+11. 写真マーカー {{PHOTO:xxx:N}} は必ずそのまま出力に含めること。形式を変えないこと
+    - 例: {{PHOTO:abc123:2}} → そのまま {{PHOTO:abc123:2}} として出力
+    - 「(📷)」「（写真あり）」などに置き換えないこと
 
 出力はMarkdown形式で返してください。`;
 
