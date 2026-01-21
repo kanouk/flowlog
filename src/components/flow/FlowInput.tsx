@@ -1,10 +1,16 @@
 import { useState, useRef, KeyboardEvent, useEffect } from 'react';
-import { Loader2, Send, ImagePlus, X, Camera } from 'lucide-react';
+import { Loader2, Send, ImagePlus, X, Camera, Plus, Tag as TagIcon } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { AddBlockMode } from '@/hooks/useEntries';
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { toast } from 'sonner';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { 
   BlockCategory, 
   BlockTag,
@@ -78,11 +84,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setLastCategory(cat);
   };
 
-  const handleTagChange = (t: BlockTag) => {
-    // 同じタグをタップしたら解除
-    const newTag = tag === t ? null : t;
-    setTag(newTag);
-    setLastTag(newTag);
+  const handleTagChange = (t: BlockTag | null) => {
+    setTag(t);
+    setLastTag(t);
   };
 
   const handleCompositionStart = () => {
@@ -224,30 +228,6 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
           })}
         </div>
 
-        {/* タグ選択チップ */}
-        <div className="flex gap-2 mb-4">
-          {TAGS.map((t) => {
-            const config = TAG_CONFIG[t];
-            const Icon = config.icon;
-            const isSelected = tag === t;
-            
-            return (
-              <button
-                key={t}
-                type="button"
-                onClick={() => handleTagChange(t)}
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-all ${
-                  isSelected 
-                    ? `${config.bgColor} ${config.color} ring-1 ring-current`
-                    : 'bg-muted/50 text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                <Icon className="h-3 w-3" />
-                <span className="hidden sm:inline">{config.label}</span>
-              </button>
-            );
-          })}
-        </div>
       
       <textarea
         ref={textareaRef}
@@ -331,6 +311,45 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
           >
             <Camera className="h-4 w-4" />
           </Button>
+          
+          {/* タグドロップダウン */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground">
+                {tag ? (
+                  <>
+                    {(() => {
+                      const config = TAG_CONFIG[tag];
+                      const Icon = config.icon;
+                      return <Icon className="h-3.5 w-3.5 mr-1" />;
+                    })()}
+                    {TAG_CONFIG[tag].label}
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    タグなし
+                  </>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="bg-popover">
+              <DropdownMenuItem onClick={() => handleTagChange(null)}>
+                タグなし
+              </DropdownMenuItem>
+              {TAGS.map((t) => {
+                const config = TAG_CONFIG[t];
+                const Icon = config.icon;
+                return (
+                  <DropdownMenuItem key={t} onClick={() => handleTagChange(t)}>
+                    <Icon className="h-4 w-4 mr-2" />
+                    {config.label}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          
           {selectedImages.length > 0 && (
             <p className="text-sm text-muted-foreground">
               画像{selectedImages.length}/{maxImages}
