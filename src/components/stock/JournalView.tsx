@@ -19,8 +19,8 @@ interface JournalViewProps {
   blocks?: Block[]; // blocks for photo display
 }
 
-// Photo pattern regex to detect photo markers in text
-const PHOTO_PATTERN = /[（\(](?:📷|写真(?:あり)?)\d*枚?[）\)]/g;
+// Structured photo marker pattern: {{PHOTO:block_id:count}}
+const PHOTO_MARKER_PATTERN = /\{\{PHOTO:([a-zA-Z0-9-]+):(\d+)\}\}/g;
 
 // PhotoMarker component - displays camera icon that opens photo dialog
 interface PhotoMarkerProps {
@@ -62,41 +62,39 @@ function PhotoMarker({ images }: PhotoMarkerProps) {
   );
 }
 
-// Helper function to render text with photo markers replaced by PhotoMarker components
+// Helper function to render text with structured photo markers replaced by PhotoMarker components
 function renderContentWithPhotoMarkers(
   text: string, 
-  imageBlocks: Block[], 
-  photoIndexRef: { current: number }
+  blocksById: Map<string, Block>
 ): ReactNode[] {
   const parts: ReactNode[] = [];
   let lastIndex = 0;
   let match;
   
   // Reset regex state
-  PHOTO_PATTERN.lastIndex = 0;
+  PHOTO_MARKER_PATTERN.lastIndex = 0;
   
-  while ((match = PHOTO_PATTERN.exec(text)) !== null) {
+  while ((match = PHOTO_MARKER_PATTERN.exec(text)) !== null) {
     // Add text before the match
     if (match.index > lastIndex) {
       parts.push(<span key={`text-${lastIndex}`}>{text.substring(lastIndex, match.index)}</span>);
     }
     
-    // Add PhotoMarker component if we have images
-    const block = imageBlocks[photoIndexRef.current];
+    // Get block by ID from the marker
+    const blockId = match[1];
+    const block = blocksById.get(blockId);
+    
     if (block?.images && block.images.length > 0) {
-      parts.push(<PhotoMarker key={`photo-${photoIndexRef.current}`} images={block.images} />);
-      photoIndexRef.current++;
-    } else {
-      // No more images, just show the original text
-      parts.push(<span key={`marker-${match.index}`}>{match[0]}</span>);
+      parts.push(<PhotoMarker key={`photo-${blockId}`} images={block.images} />);
     }
+    // If block not found, just skip the marker (don't show anything)
     
     lastIndex = match.index + match[0].length;
   }
   
   // Add remaining text
   if (lastIndex < text.length) {
-    parts.push(<span key={`text-end`}>{text.substring(lastIndex)}</span>);
+    parts.push(<span key="text-end">{text.substring(lastIndex)}</span>);
   }
   
   return parts.length > 0 ? parts : [<span key="full">{text}</span>];
@@ -305,18 +303,15 @@ export function JournalView({ entries, selectedDate, onDateSelect, blocks: exter
     );
   };
 
-  // Get blocks with images for photo markers
-  const imageBlocks = useMemo(() => {
-    return blocks.filter(b => b.images && b.images.length > 0);
+  // Create a Map of blocks by ID for efficient lookup in photo markers
+  const blocksById = useMemo(() => {
+    const map = new Map<string, Block>();
+    blocks.forEach(b => map.set(b.id, b));
+    return map;
   }, [blocks]);
 
   // Journal Content component - プレーンなデザイン
   const JournalContent = () => {
-    // Create a ref object to track photo index across sections
-    const photoIndexRef = useRef({ current: 0 });
-    // Reset the index when content changes
-    photoIndexRef.current = { current: 0 };
-    
     return (
       <>
         {loading ? (
@@ -349,13 +344,13 @@ export function JournalView({ entries, selectedDate, onDateSelect, blocks: exter
                 <div className="prose prose-sm max-w-none text-foreground/90">
                   {section.body.split('\n').map((line, i) => {
                     const processedLine = line.replace(/^[-*]\s*/, '• ');
-                    const hasPhotoMarker = PHOTO_PATTERN.test(processedLine);
-                    PHOTO_PATTERN.lastIndex = 0; // Reset regex
+                    const hasPhotoMarker = PHOTO_MARKER_PATTERN.test(processedLine);
+                    PHOTO_MARKER_PATTERN.lastIndex = 0; // Reset regex
                     
                     return (
                       <p key={i} className="mb-2 last:mb-0 leading-relaxed">
                         {hasPhotoMarker 
-                          ? renderContentWithPhotoMarkers(processedLine, imageBlocks, photoIndexRef.current)
+                          ? renderContentWithPhotoMarkers(processedLine, blocksById)
                           : processedLine
                         }
                       </p>
