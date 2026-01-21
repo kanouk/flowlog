@@ -171,6 +171,7 @@ export type Database = {
       get_user_ai_settings_safe: {
         Args: never
         Returns: {
+          behavior_rules: string
           created_at: string
           custom_summarize_prompt: string
           custom_system_prompt: string
@@ -178,6 +179,7 @@ export type Database = {
           has_google_key: boolean
           has_openai_key: boolean
           id: string
+          score_enabled: boolean
           selected_model: string
           selected_provider: string
           updated_at: string

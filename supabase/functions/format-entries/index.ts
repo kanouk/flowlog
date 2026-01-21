@@ -26,6 +26,9 @@ interface AISettings {
   selected_provider: string;
   selected_model: string;
   custom_system_prompt: string | null;
+  // Score feature
+  score_enabled: boolean;
+  behavior_rules: string | null;
 }
 
 interface TimeInferenceResult {
@@ -495,6 +498,73 @@ ${blocksText}`;
 
     console.log('Successfully formatted entries');
 
+    // ========== Phase 3: スコアリング（損失回避版） ==========
+    let score: number | undefined;
+    let scoreDetails: string | undefined;
+
+    if (aiSettings?.score_enabled && aiSettings.behavior_rules) {
+      console.log('Phase 3: Scoring diary...');
+      
+      const SCORE_PROMPT = `あなたは行動規範の達成度を評価するアシスタントです。
+
+## 重要な原則
+- 基準点は100点です
+- ルール違反があれば減点します
+- ルールを守れていても加点はしません（100点が最高）
+- 日記に言及がないルールは「守れた」と判断し減点しません
+
+## 評価方法
+各ルールについて：
+- 明確に違反している → 減点（違反の程度に応じて -5 〜 -25点）
+- 守れている/言及なし → 減点なし
+
+## 出力形式 (JSON)
+{
+  "score": 85,
+  "deductions": [
+    { "rule": "22時までに就寝する", "points": -15, "reason": "23時就寝と記載あり" }
+  ],
+  "summary": "就寝時間以外はよく守れました。明日は早めに寝ましょう。"
+}
+
+必ずJSON形式で回答してください。`;
+
+      const scoreUserPrompt = `## 行動規範
+${aiSettings.behavior_rules}
+
+## 今日の日記
+${formattedContent}
+
+上記の日記を行動規範と照らし合わせて、100点からの減点方式でスコアを算出してください。`;
+
+      try {
+        const scoreResponse = await callAI(provider, model, SCORE_PROMPT, scoreUserPrompt, aiSettings);
+        
+        // JSONを抽出
+        const scoreJsonMatch = scoreResponse.match(/\{[\s\S]*\}/);
+        if (scoreJsonMatch) {
+          const scoreResult = JSON.parse(scoreJsonMatch[0]);
+          score = Math.max(0, Math.min(100, scoreResult.score || 100));
+          
+          // 詳細を構築
+          const deductions = scoreResult.deductions || [];
+          if (deductions.length > 0) {
+            const deductionLines = deductions.map((d: { rule: string; points: number; reason: string }) => 
+              `・${d.rule}: ${d.points}点\n  → ${d.reason}`
+            ).join('\n');
+            scoreDetails = `減点内訳:\n${deductionLines}\n\n💬 ${scoreResult.summary || ''}`;
+          } else {
+            scoreDetails = scoreResult.summary || 'すべてのルールを守れました！';
+          }
+          
+          console.log('Score calculated:', score);
+        }
+      } catch (scoreError) {
+        console.error('Score calculation error:', scoreError);
+        // スコア計算に失敗しても日記は返す
+      }
+    }
+
     // レスポンスを構築
     const responseData: {
       formatted_content: string;
@@ -502,10 +572,18 @@ ${blocksText}`;
       time_updates?: TimeUpdate[];
       needs_clarification?: boolean;
       questions?: TimeQuestion[];
+      score?: number;
+      score_details?: string;
     } = {
       formatted_content: formattedContent,
       summary,
     };
+
+    // スコアがあれば追加
+    if (score !== undefined) {
+      responseData.score = score;
+      responseData.score_details = scoreDetails;
+    }
 
     // 時刻更新があれば追加
     if (timeUpdates.length > 0) {

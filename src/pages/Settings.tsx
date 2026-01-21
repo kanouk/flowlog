@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, User, LogOut, Loader2 } from 'lucide-react';
 import { AISettingsSection } from '@/components/settings/AISettingsSection';
+import { ScoreSettingsSection } from '@/components/settings/ScoreSettingsSection';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -50,6 +51,9 @@ export default function Settings() {
 
       {/* Main content */}
       <main className="container max-w-2xl mx-auto px-4 py-8 space-y-6">
+        {/* Score Settings section */}
+        <ScoreSettingsSection />
+
         {/* AI Settings section */}
         <AISettingsSection />
 
