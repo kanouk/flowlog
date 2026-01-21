@@ -58,6 +58,7 @@ export interface BlockUpdatePayload {
   tag?: BlockTag | null;
   is_done?: boolean;
   done_at?: string | null;
+  images?: string[];
 }
 
 export interface GetBlocksByCategoryOptions {
@@ -341,7 +342,7 @@ export function useEntries() {
       
       const oldEntryId = currentBlock?.entry_id;
       
-      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at'>> = {};
+      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at' | 'images'>> = {};
       
       if (updates.content !== undefined) {
         updateData.content = updates.content;
@@ -357,6 +358,9 @@ export function useEntries() {
       }
       if (updates.done_at !== undefined) {
         updateData.done_at = updates.done_at;
+      }
+      if (updates.images !== undefined) {
+        updateData.images = updates.images;
       }
       if (updates.occurred_at) {
         const newDayKey = getOccurredAtDayKey(updates.occurred_at);
