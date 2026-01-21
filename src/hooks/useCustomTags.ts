@@ -43,11 +43,28 @@ export const TAG_COLORS: Record<TagColor, { bg: string; text: string; label: str
 
 // 選択可能なアイコン一覧
 export const AVAILABLE_ICONS = [
-  'star', 'heart', 'flame', 'zap', 'target', 'trophy', 
-  'music', 'book', 'gamepad-2', 'dumbbell', 'palette', 'coffee',
-  'car', 'plane', 'home', 'gift', 'camera', 'smile',
-  'sun', 'moon', 'cloud', 'leaf', 'flower-2', 'sparkles',
-  'graduation-cap', 'stethoscope', 'shopping-cart', 'utensils',
+  // 基本
+  'star', 'heart', 'flame', 'zap', 'target', 'trophy', 'sparkles', 'gem',
+  // 仕事・学習
+  'book', 'book-open', 'notebook', 'sticky-note', 'file-text', 'clipboard', 'pencil', 'graduation-cap',
+  // コミュニケーション
+  'message-circle', 'mail', 'phone', 'video', 'users', 'user-circle',
+  // 生活
+  'home', 'coffee', 'utensils', 'shopping-cart', 'gift', 'cake',
+  // 健康・運動
+  'dumbbell', 'bike', 'footprints', 'apple', 'pill', 'stethoscope',
+  // 趣味・エンタメ
+  'music', 'headphones', 'gamepad-2', 'palette', 'camera', 'film',
+  // 移動・場所
+  'car', 'plane', 'train', 'map-pin', 'globe', 'compass',
+  // 自然・天気
+  'sun', 'moon', 'cloud', 'leaf', 'flower-2', 'tree-pine',
+  // ツール
+  'paperclip', 'link', 'folder', 'archive', 'tag', 'bookmark',
+  // 感情
+  'smile', 'frown', 'meh', 'party-popper',
+  // その他
+  'lightbulb', 'bell', 'clock', 'calendar', 'check-circle', 'alert-circle',
 ] as const;
 
 export type AvailableIcon = typeof AVAILABLE_ICONS[number];
