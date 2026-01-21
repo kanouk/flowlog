@@ -63,7 +63,7 @@ export function BlockEditModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const { uploadImages, deleteImages, maxImages } = useImageUpload();
-  const { customTags } = useCustomTags();
+  const { customTags, createCustomTag } = useCustomTags();
   
   // Reset state when modal opens with new block
   useEffect(() => {
@@ -302,7 +302,8 @@ export function BlockEditModal({
                 <TagDropdown 
                   value={tag} 
                   onChange={setTag} 
-                  customTags={customTags} 
+                  customTags={customTags}
+                  onCreateTag={createCustomTag}
                 />
                 
                 <input

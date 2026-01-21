@@ -39,7 +39,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
   const { uploadImages, maxImages } = useImageUpload();
-  const { customTags } = useCustomTags();
+  const { customTags, createCustomTag } = useCustomTags();
 
   // 初回マウント時にlocalStorageからカテゴリとタグを復元
   useEffect(() => {
@@ -306,7 +306,8 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
           <TagDropdown 
             value={tag} 
             onChange={handleTagChange} 
-            customTags={customTags} 
+            customTags={customTags}
+            onCreateTag={createCustomTag}
           />
           
           {selectedImages.length > 0 && (
