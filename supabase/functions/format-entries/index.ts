@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { parseISO } from "npm:date-fns@3";
-import { formatInTimeZone } from "npm:date-fns-tz@3";
+import { formatInTimeZone, fromZonedTime } from "npm:date-fns-tz@3";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -11,6 +11,7 @@ const corsHeaders = {
 const TIMEZONE = 'Asia/Tokyo';
 
 interface Block {
+  id: string;
   content: string | null;
   occurred_at: string;
   images?: string[];
@@ -25,6 +26,27 @@ interface AISettings {
   selected_provider: string;
   selected_model: string;
   custom_system_prompt: string | null;
+}
+
+interface TimeInferenceResult {
+  block_id: string;
+  inferred_time: string | null;
+  confidence: 'high' | 'medium' | 'none';
+  reason?: string;
+  question?: string;
+}
+
+interface TimeUpdate {
+  block_id: string;
+  old_time: string;
+  new_time: string;
+  reason: string;
+}
+
+interface TimeQuestion {
+  block_id: string;
+  content_preview: string;
+  question: string;
 }
 
 function getCategoryLabel(category: string): string {
@@ -150,6 +172,116 @@ async function callLovableAI(model: string, systemPrompt: string, userPrompt: st
   return data.choices?.[0]?.message?.content || '';
 }
 
+// AI呼び出しの共通ラッパー
+async function callAI(
+  provider: string,
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+  aiSettings: AISettings | null
+): Promise<string> {
+  switch (provider) {
+    case 'openai':
+      if (!aiSettings?.openai_api_key) {
+        throw new Error('OpenAI APIキーが設定されていません');
+      }
+      return callOpenAI(aiSettings.openai_api_key, model, systemPrompt, userPrompt);
+    
+    case 'anthropic':
+      if (!aiSettings?.anthropic_api_key) {
+        throw new Error('Anthropic APIキーが設定されていません');
+      }
+      return callAnthropic(aiSettings.anthropic_api_key, model, systemPrompt, userPrompt);
+    
+    case 'google':
+      if (!aiSettings?.google_api_key) {
+        throw new Error('Google APIキーが設定されていません');
+      }
+      return callGoogle(aiSettings.google_api_key, model, systemPrompt, userPrompt);
+    
+    default:
+      return callLovableAI(model, systemPrompt, userPrompt);
+  }
+}
+
+// 時刻推測プロンプト
+const TIME_ANALYSIS_PROMPT = `あなたは日記の各ブロックの実際の発生時刻を推測するアシスタントです。
+
+各ブロックの内容を分析し、実際に起きた時刻を推測してください。
+
+## 時間の手がかり例
+
+### 明示的な時刻表現
+- 「10時に」「午後3時」「朝8時」→ その時刻
+- 「正午に」→ 12:00
+- 「深夜に」→ 00:00-02:00
+
+### 食事・生活リズム
+- 「朝ごはん」「朝食」→ 07:00-09:00
+- 「ランチ」「昼ごはん」「昼食」→ 12:00-13:00
+- 「おやつ」「3時のおやつ」→ 15:00
+- 「夕食」「夕ごはん」「晩ごはん」→ 18:00-20:00
+- 「夜食」→ 22:00-00:00
+
+### 行動パターン
+- 「起床」「起きた」「目覚めた」→ 06:00-08:00
+- 「出勤」「会社に向かう」→ 08:00-09:00
+- 「帰宅」「家に帰った」→ 18:00-20:00
+- 「就寝」「寝る」「おやすみ」→ 22:00-00:00
+
+### 相対表現
+- 「その後」「それから」→ 前のブロックの30分〜1時間後
+- 「さっき」→ 現在より30分前程度
+
+### 時間帯表現
+- 「朝」「午前中」→ 08:00-11:00
+- 「昼」「お昼」→ 12:00-13:00
+- 「午後」→ 14:00-17:00
+- 「夕方」→ 17:00-19:00
+- 「夜」→ 19:00-23:00
+
+## 出力形式
+
+JSON形式で回答してください：
+{
+  "results": [
+    { 
+      "index": 0, 
+      "inferred_time": "08:00", 
+      "confidence": "high", 
+      "reason": "朝ごはんという記述から朝8時頃と推測" 
+    },
+    { 
+      "index": 1, 
+      "inferred_time": "14:00", 
+      "confidence": "medium", 
+      "reason": "その後という記述から前のブロックの後と推測" 
+    },
+    { 
+      "index": 2, 
+      "inferred_time": null, 
+      "confidence": "none", 
+      "question": "これはいつ頃のことですか？" 
+    }
+  ]
+}
+
+## 注意事項
+- confidence は "high"（明確な手がかりあり）、"medium"（推測可能）、"none"（手がかりなし）
+- confidence が "none" の場合、inferred_time は null、question を設定
+- 現在の occurred_at より大幅に異なる推測のみ報告（±30分以内なら変更不要）
+- inferred_time は "HH:mm" 形式（例: "08:00", "14:30"）`;
+
+// 時刻をJSTのHH:mm形式のISO文字列に変換
+function createOccurredAtFromTime(date: string, timeStr: string): string {
+  // date: "2024-01-15", timeStr: "08:30"
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  const jstDate = new Date(`${date}T${timeStr}:00`);
+  // JST時刻をUTCに変換
+  const utcDate = fromZonedTime(jstDate, TIMEZONE);
+  return utcDate.toISOString();
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -165,14 +297,16 @@ serve(async (req) => {
       );
     }
 
-    // Get user's AI settings
+    // Get user's AI settings and supabase client
     const authHeader = req.headers.get('Authorization');
     let aiSettings: AISettings | null = null;
+    let supabase: ReturnType<typeof createClient> | null = null;
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
     if (authHeader) {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-      const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      supabase = createClient(supabaseUrl, supabaseAnonKey, {
         global: { headers: { Authorization: authHeader } }
       });
 
@@ -194,6 +328,94 @@ serve(async (req) => {
     // Default to Lovable AI
     const provider = aiSettings?.selected_provider || 'lovable';
     const model = aiSettings?.selected_model || 'google/gemini-2.5-flash';
+
+    // ========== Phase 1: 時刻推測 ==========
+    console.log('Phase 1: Time inference...');
+    
+    // 時刻推測用のブロックテキストを生成
+    const timeAnalysisInput = blocks.map((block, index) => {
+      const currentTime = formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH:mm');
+      return `[${index}] 現在時刻: ${currentTime}, 内容: ${block.content || '(画像のみ)'}`;
+    }).join('\n');
+
+    const timeAnalysisPrompt = `以下は${date}のブロックです。各ブロックの実際の発生時刻を推測してください：
+
+${timeAnalysisInput}
+
+JSON形式で回答してください。`;
+
+    let timeUpdates: TimeUpdate[] = [];
+    let questions: TimeQuestion[] = [];
+
+    try {
+      const timeAnalysisResponse = await callAI(provider, model, TIME_ANALYSIS_PROMPT, timeAnalysisPrompt, aiSettings);
+      
+      // JSONを抽出
+      const jsonMatch = timeAnalysisResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const analysisResult = JSON.parse(jsonMatch[0]);
+        
+        if (analysisResult.results && Array.isArray(analysisResult.results)) {
+          for (const result of analysisResult.results) {
+            const blockIndex = result.index;
+            const block = blocks[blockIndex];
+            
+            if (!block) continue;
+            
+            if (result.confidence === 'none' && result.question) {
+              // 質問が必要
+              questions.push({
+                block_id: block.id,
+                content_preview: (block.content || '').substring(0, 50),
+                question: result.question,
+              });
+            } else if (result.inferred_time && (result.confidence === 'high' || result.confidence === 'medium')) {
+              // 時刻を更新
+              const currentTime = formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH:mm');
+              
+              // 30分以上の差がある場合のみ更新
+              const [currentH, currentM] = currentTime.split(':').map(Number);
+              const [inferredH, inferredM] = result.inferred_time.split(':').map(Number);
+              const currentMinutes = currentH * 60 + currentM;
+              const inferredMinutes = inferredH * 60 + inferredM;
+              
+              if (Math.abs(currentMinutes - inferredMinutes) >= 30) {
+                const newOccurredAt = createOccurredAtFromTime(date, result.inferred_time);
+                
+                // DBを更新
+                if (supabase) {
+                  // deno-lint-ignore no-explicit-any
+                  const { error: updateError } = await (supabase as any)
+                    .from('blocks')
+                    .update({ occurred_at: newOccurredAt })
+                    .eq('id', block.id);
+                  
+                  if (!updateError) {
+                    timeUpdates.push({
+                      block_id: block.id,
+                      old_time: currentTime,
+                      new_time: result.inferred_time,
+                      reason: result.reason || '',
+                    });
+                    // ローカルのブロックも更新
+                    block.occurred_at = newOccurredAt;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (timeError) {
+      console.error('Time inference error:', timeError);
+      // 時刻推測に失敗しても日記生成は続行
+    }
+
+    console.log('Time updates:', timeUpdates.length);
+    console.log('Questions:', questions.length);
+
+    // ========== Phase 2: 日記整形 ==========
+    console.log('Phase 2: Formatting diary...');
 
     // Sort blocks by occurred_at (parseISO使用)
     const sortedBlocks = [...blocks].sort(
@@ -242,32 +464,7 @@ ${blocksText}`;
     let formattedContent: string;
 
     try {
-      switch (provider) {
-        case 'openai':
-          if (!aiSettings?.openai_api_key) {
-            throw new Error('OpenAI APIキーが設定されていません');
-          }
-          formattedContent = await callOpenAI(aiSettings.openai_api_key, model, systemPrompt, userPrompt);
-          break;
-        
-        case 'anthropic':
-          if (!aiSettings?.anthropic_api_key) {
-            throw new Error('Anthropic APIキーが設定されていません');
-          }
-          formattedContent = await callAnthropic(aiSettings.anthropic_api_key, model, systemPrompt, userPrompt);
-          break;
-        
-        case 'google':
-          if (!aiSettings?.google_api_key) {
-            throw new Error('Google APIキーが設定されていません');
-          }
-          formattedContent = await callGoogle(aiSettings.google_api_key, model, systemPrompt, userPrompt);
-          break;
-        
-        default:
-          // Lovable AI (default)
-          formattedContent = await callLovableAI(model, systemPrompt, userPrompt);
-      }
+      formattedContent = await callAI(provider, model, systemPrompt, userPrompt, aiSettings);
     } catch (error) {
       if (error instanceof Error) {
         if (error.message === 'RATE_LIMIT') {
@@ -298,11 +495,31 @@ ${blocksText}`;
 
     console.log('Successfully formatted entries');
 
+    // レスポンスを構築
+    const responseData: {
+      formatted_content: string;
+      summary: string;
+      time_updates?: TimeUpdate[];
+      needs_clarification?: boolean;
+      questions?: TimeQuestion[];
+    } = {
+      formatted_content: formattedContent,
+      summary,
+    };
+
+    // 時刻更新があれば追加
+    if (timeUpdates.length > 0) {
+      responseData.time_updates = timeUpdates;
+    }
+
+    // 質問があれば追加
+    if (questions.length > 0) {
+      responseData.needs_clarification = true;
+      responseData.questions = questions;
+    }
+
     return new Response(
-      JSON.stringify({ 
-        formatted_content: formattedContent,
-        summary 
-      }),
+      JSON.stringify(responseData),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

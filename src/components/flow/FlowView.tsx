@@ -4,9 +4,10 @@ import { ja } from 'date-fns/locale';
 import { Loader2, CalendarDays, Sun, ChevronLeft } from 'lucide-react';
 import { FlowInput } from '@/components/flow/FlowInput';
 import { BlockList } from '@/components/flow/BlockList';
-import { useEntries, Block, Entry, AddBlockMode, BlockUpdatePayload } from '@/hooks/useEntries';
+import { TimeQuestion, getTimeFromTimeframe, Timeframe } from '@/components/flow/TimeQuestion';
+import { useEntries, Block, Entry, AddBlockMode, BlockUpdatePayload, TimeQuestion as TimeQuestionType } from '@/hooks/useEntries';
 import { toast } from 'sonner';
-import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDateJST, calculateMiddleOccurredAt } from '@/lib/dateUtils';
+import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDateJST, calculateMiddleOccurredAt, createOccurredAt } from '@/lib/dateUtils';
 import { BlockCategory, BlockTag } from '@/lib/categoryUtils';
 import { arrayMove } from '@dnd-kit/sortable';
 
@@ -44,6 +45,7 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
   const [entry, setEntry] = useState<Entry | null>(null);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingQuestions, setPendingQuestions] = useState<TimeQuestionType[]>([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -60,7 +62,9 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    // 日付が変わったら質問をクリア
+    setPendingQuestions([]);
+  }, [loadData, selectedDate]);
 
   /**
    * URLを抽出するヘルパー
@@ -72,7 +76,7 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
   };
 
   /**
-   * 自動日記生成（出来事ブロックのみ）
+   * 自動日記生成（出来事ブロックのみ）+ 時刻推測
    */
   const triggerAutoFormat = useCallback(async (targetDate: string) => {
     try {
@@ -83,13 +87,60 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
       const eventBlocks = blocksData.filter(b => b.category === 'event');
       
       if (entryData && eventBlocks.length > 0) {
-        await formatEntry(entryData.id, eventBlocks, targetDate);
+        const result = await formatEntry(entryData.id, eventBlocks, targetDate);
+        
+        // 時刻が更新された場合、ブロックをリロード
+        if (result?.time_updates && result.time_updates.length > 0) {
+          const updatedBlocks = await getBlocksByDate(targetDate);
+          setBlocks(updatedBlocks);
+        }
+        
+        // 質問がある場合、質問リストに追加
+        if (result?.needs_clarification && result.questions) {
+          setPendingQuestions(prev => {
+            // 重複を避ける
+            const existingIds = new Set(prev.map(q => q.block_id));
+            const newQuestions = result.questions!.filter(q => !existingIds.has(q.block_id));
+            return [...prev, ...newQuestions];
+          });
+        }
       }
     } catch (error) {
       console.error('Auto format error:', error);
       // 自動整形のエラーは静かに処理（トースト不要）
     }
   }, [getEntry, getBlocksByDate, formatEntry]);
+
+  /**
+   * 時刻質問への回答
+   */
+  const handleTimeAnswer = useCallback(async (blockId: string, timeframe: Timeframe) => {
+    const time = getTimeFromTimeframe(timeframe);
+    const newOccurredAt = createOccurredAt(selectedDate, time);
+    
+    // ブロックを更新
+    const updated = await updateBlock(blockId, { occurred_at: newOccurredAt });
+    
+    if (updated) {
+      // ローカルのブロックも更新
+      setBlocks(prev => sortBlocksDesc(
+        prev.map(b => b.id === blockId ? { ...b, occurred_at: newOccurredAt } : b)
+      ));
+      
+      // 質問を削除
+      setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
+      
+      // 再度整形をトリガー
+      triggerAutoFormat(selectedDate);
+    }
+  }, [selectedDate, updateBlock, triggerAutoFormat]);
+
+  /**
+   * 時刻質問を無視
+   */
+  const handleTimeDismiss = useCallback((blockId: string) => {
+    setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
+  }, []);
 
   /**
    * ブロック追加（楽観的更新 + 遷移処理 + 画像対応 + カテゴリ対応 + タグ対応 + 自動サマライズ）
@@ -168,6 +219,9 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
     const success = await deleteBlock(blockId);
     if (success) {
       setBlocks(prev => prev.filter(b => b.id !== blockId));
+      
+      // 関連する質問も削除
+      setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
       
       // 「出来事」カテゴリの場合、自動日記再生成
       if (wasEvent) {
@@ -322,6 +376,22 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
         selectedDate={selectedDate}
         isToday={isToday}
       />
+
+      {/* 時刻質問エリア */}
+      {pendingQuestions.length > 0 && (
+        <div className="space-y-2">
+          {pendingQuestions.map(q => (
+            <TimeQuestion
+              key={q.block_id}
+              blockId={q.block_id}
+              contentPreview={q.content_preview}
+              question={q.question}
+              onAnswer={handleTimeAnswer}
+              onDismiss={handleTimeDismiss}
+            />
+          ))}
+        </div>
+      )}
       
       {/* Section Header */}
       <div className="flex items-center justify-between pb-3 border-b border-border">
