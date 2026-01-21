@@ -337,7 +337,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
             </p>
           )}
         </div>
-        <div className="flex flex-col items-center gap-1">
+        <div className="flex flex-col items-center">
           <div className="flex items-center gap-2">
             {isSubmitting && (
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -357,8 +357,8 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
           
           {/* デスクトップのみ: ショートカットヒント */}
           {!isMobile && (
-            <span className="text-xs text-muted-foreground">
-              {typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'} + Enter
+            <span className="text-[10px] text-muted-foreground/70 leading-tight">
+              {typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}+↵
             </span>
           )}
         </div>
