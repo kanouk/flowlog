@@ -307,23 +307,23 @@ export function BlockEditModal({
                 {/* タグドロップダウン */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 px-2">
+                    <button className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
                       {tag ? (
                         <>
                           {(() => {
                             const config = TAG_CONFIG[tag];
                             const Icon = config.icon;
-                            return <Icon className="h-3.5 w-3.5 mr-1" />;
+                            return <Icon className="h-3.5 w-3.5" />;
                           })()}
-                          {TAG_CONFIG[tag].label}
+                          <span>{TAG_CONFIG[tag].label}</span>
                         </>
                       ) : (
                         <>
-                          <Plus className="h-3.5 w-3.5 mr-1" />
-                          タグなし
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>タグなし</span>
                         </>
                       )}
-                    </Button>
+                    </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="bg-popover">
                     <DropdownMenuItem onClick={() => setTag(null)}>
@@ -333,8 +333,8 @@ export function BlockEditModal({
                       const config = TAG_CONFIG[t];
                       const Icon = config.icon;
                       return (
-                        <DropdownMenuItem key={t} onClick={() => setTag(t)}>
-                          <Icon className="h-4 w-4 mr-2" />
+                        <DropdownMenuItem key={t} onClick={() => setTag(t)} className="gap-2">
+                          <Icon className="h-4 w-4" />
                           {config.label}
                         </DropdownMenuItem>
                       );
@@ -351,16 +351,14 @@ export function BlockEditModal({
                   onChange={handleImageSelect}
                   disabled={totalImages >= maxImages}
                 />
-                <Button
-                  variant="ghost"
-                  size="icon"
+                <button
                   type="button"
                   disabled={totalImages >= maxImages}
                   onClick={() => fileInputRef.current?.click()}
-                  className="h-8 w-8"
+                  className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ${totalImages >= maxImages ? 'opacity-50' : ''}`}
                 >
                   <ImagePlus className="h-4 w-4" />
-                </Button>
+                </button>
                 <input
                   ref={cameraInputRef}
                   type="file"
@@ -370,16 +368,14 @@ export function BlockEditModal({
                   onChange={handleImageSelect}
                   disabled={totalImages >= maxImages}
                 />
-                <Button
-                  variant="ghost"
-                  size="icon"
+                <button
                   type="button"
                   disabled={totalImages >= maxImages}
                   onClick={() => cameraInputRef.current?.click()}
-                  className="h-8 w-8"
+                  className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ${totalImages >= maxImages ? 'opacity-50' : ''}`}
                 >
                   <Camera className="h-4 w-4" />
-                </Button>
+                </button>
               </div>
             </div>
             
