@@ -261,14 +261,11 @@ export function ReadLaterView() {
           </div>
           
           {/* Tag Filter Dropdown */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">タグ:</span>
-            <TagFilterDropdown
-              value={tagFilter === 'all' ? null : tagFilter}
-              onChange={handleTagChange}
-              customTags={customTags}
-            />
-          </div>
+          <TagFilterDropdown
+            value={tagFilter === 'all' ? null : tagFilter}
+            onChange={handleTagChange}
+            customTags={customTags}
+          />
         </div>
       </div>
 
