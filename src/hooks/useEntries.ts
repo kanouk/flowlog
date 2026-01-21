@@ -388,8 +388,17 @@ export function useEntries() {
     } catch (error: unknown) {
       console.error('Error updating block:', error);
       const errMsg = error instanceof Error ? error.message : '';
-      if (errMsg.includes('future') || (error as { code?: string })?.code === '23514') {
+      const errCode = (error as { code?: string })?.code;
+      
+      // occurred_at の未来日時エラー
+      if (errMsg.includes('future') || errMsg.includes('occurred_at')) {
         toast.error('未来の日時は指定できません');
+      // タグ制約違反
+      } else if (errMsg.includes('blocks_tag_check') || errMsg.includes('tag')) {
+        toast.error('タグの保存に失敗しました');
+      // その他のCHECK制約違反
+      } else if (errCode === '23514') {
+        toast.error('入力値が不正です');
       } else {
         toast.error('ブロックの更新に失敗しました');
       }
