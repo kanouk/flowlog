@@ -78,11 +78,6 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
         <h2 className="text-xl md:text-2xl font-semibold text-foreground truncate">
           {isToday ? '今日の日記' : `${formattedDate}の日記`}
         </h2>
-        {entry?.summary && (
-          <p className="text-muted-foreground mt-1 text-sm truncate">
-            {entry.summary}
-          </p>
-        )}
       </div>
     </div>
   );
@@ -172,26 +167,31 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
     );
   }
 
-  // Desktop: Two-column layout
+  // Desktop: Title full-width, then two-column layout
   return (
-    <div className="grid md:grid-cols-[240px_1fr] gap-6 w-full overflow-hidden">
-      {/* Date List Sidebar */}
-      <aside className="rounded-2xl p-4 h-fit sticky top-24 bg-card border border-border max-w-[240px] overflow-hidden">
-        <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border">
-          <CalendarDays className="h-4 w-4 text-blue-500" />
-          <span className="text-sm font-medium">日付一覧</span>
-        </div>
-        <DateSelector 
-          entries={entries} 
-          onSelect={onDateSelect}
-          selectedDate={selectedDate}
-        />
-      </aside>
+    <div className="space-y-6">
+      {/* Title Card - Full width */}
+      <DateHeader />
+      
+      {/* Two-column layout */}
+      <div className="grid md:grid-cols-[240px_1fr] gap-6 w-full overflow-hidden">
+        {/* Date List Sidebar */}
+        <aside className="rounded-2xl p-4 h-fit sticky top-24 bg-card border border-border max-w-[240px] overflow-hidden">
+          <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border">
+            <CalendarDays className="h-4 w-4 text-blue-500" />
+            <span className="text-sm font-medium">日付一覧</span>
+          </div>
+          <DateSelector 
+            entries={entries} 
+            onSelect={onDateSelect}
+            selectedDate={selectedDate}
+          />
+        </aside>
 
-      {/* Journal Content */}
-      <div className="space-y-6 min-w-0 overflow-hidden">
-        <DateHeader />
-        <JournalContent />
+        {/* Journal Content */}
+        <div className="min-w-0 overflow-hidden">
+          <JournalContent />
+        </div>
       </div>
     </div>
   );
