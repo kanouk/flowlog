@@ -42,6 +42,9 @@ export interface Entry {
   formatted_content: string | null;
   created_at: string;
   updated_at: string;
+  // Score feature
+  score: number | null;
+  score_details: string | null;
 }
 
 export type AddBlockMode = 'toSelectedDate' | 'toNow';
@@ -82,6 +85,9 @@ export interface FormatEntryResponse {
   time_updates?: TimeUpdate[];
   needs_clarification?: boolean;
   questions?: TimeQuestion[];
+  // Score feature
+  score?: number;
+  score_details?: string;
 }
 
 export function useEntries() {
@@ -450,12 +456,27 @@ export function useEntries() {
 
       if (error) throw error;
 
+      const updateData: {
+        formatted_content: string;
+        summary: string;
+        score?: number;
+        score_details?: string;
+      } = {
+        formatted_content: data.formatted_content,
+        summary: data.summary,
+      };
+
+      // Include score if present
+      if (data.score !== undefined) {
+        updateData.score = data.score;
+      }
+      if (data.score_details !== undefined) {
+        updateData.score_details = data.score_details;
+      }
+
       const { error: updateError } = await supabase
         .from('entries')
-        .update({
-          formatted_content: data.formatted_content,
-          summary: data.summary,
-        })
+        .update(updateData)
         .eq('id', entryId);
 
       if (updateError) throw updateError;
@@ -463,6 +484,8 @@ export function useEntries() {
       // 時刻更新があった場合のみトースト表示
       if (data.time_updates && data.time_updates.length > 0) {
         toast.success(`${data.time_updates.length}件の時刻を自動調整しました`);
+      } else if (data.score !== undefined) {
+        toast.success(`整形が完了しました（得点: ${data.score}点）`);
       } else {
         toast.success('整形が完了しました');
       }

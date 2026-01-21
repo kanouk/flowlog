@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { Loader2, BookOpen, CalendarDays, ArrowLeft } from 'lucide-react';
+import { Loader2, BookOpen, CalendarDays, ArrowLeft, Trophy } from 'lucide-react';
 import { useEntries, Entry } from '@/hooks/useEntries';
 import { getTodayKey } from '@/lib/dateUtils';
 import { DateSelector } from '@/components/flow/DateSelector';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface JournalViewProps {
   entries: Entry[];
@@ -68,19 +69,60 @@ export function JournalView({ entries, selectedDate, onDateSelect }: JournalView
 
   const formattedDate = format(new Date(selectedDate), 'M月d日（E）', { locale: ja });
 
-  // Date Header component - シンプルなデザイン
-  const DateHeader = () => (
-    <div className="flex items-center gap-4 p-5 rounded-xl bg-card border border-border">
-      <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500">
-        <BookOpen className="h-6 w-6" />
+  // Score color helper
+  const getScoreStyle = (score: number) => {
+    if (score === 100) return { bg: 'bg-green-100 dark:bg-green-900/40', text: 'text-green-700 dark:text-green-300', label: 'パーフェクト！' };
+    if (score >= 80) return { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-700 dark:text-blue-300', label: '' };
+    if (score >= 60) return { bg: 'bg-amber-100 dark:bg-amber-900/40', text: 'text-amber-700 dark:text-amber-300', label: '' };
+    return { bg: 'bg-red-100 dark:bg-red-900/40', text: 'text-red-700 dark:text-red-300', label: '' };
+  };
+
+  // Date Header component with score
+  const DateHeader = () => {
+    const hasScore = entry?.score !== null && entry?.score !== undefined;
+    const scoreStyle = hasScore ? getScoreStyle(entry!.score!) : null;
+
+    return (
+      <div className="flex items-center gap-4 p-5 rounded-xl bg-card border border-border">
+        <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500">
+          <BookOpen className="h-6 w-6" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-xl md:text-2xl font-semibold text-foreground truncate">
+            {isToday ? '今日の日記' : `${formattedDate}の日記`}
+          </h2>
+        </div>
+        
+        {/* Score Badge */}
+        {hasScore && scoreStyle && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <button 
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${scoreStyle.bg} ${scoreStyle.text} font-bold text-sm hover:opacity-80 transition-opacity cursor-pointer`}
+              >
+                <Trophy className="h-4 w-4" />
+                <span>{entry!.score}点</span>
+                {scoreStyle.label && <span className="text-xs font-medium ml-1">{scoreStyle.label}</span>}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-4" align="end">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Trophy className={`h-5 w-5 ${scoreStyle.text}`} />
+                  <span className="font-semibold">今日のスコア: {entry!.score}点</span>
+                </div>
+                {entry?.score_details && (
+                  <div className="text-sm text-muted-foreground whitespace-pre-wrap">
+                    {entry.score_details}
+                  </div>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
       </div>
-      <div className="flex-1 min-w-0">
-        <h2 className="text-xl md:text-2xl font-semibold text-foreground truncate">
-          {isToday ? '今日の日記' : `${formattedDate}の日記`}
-        </h2>
-      </div>
-    </div>
-  );
+    );
+  };
 
   // Journal Content component - プレーンなデザイン
   const JournalContent = () => (

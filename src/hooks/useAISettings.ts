@@ -55,6 +55,9 @@ export interface AISettings {
   has_openai_key: boolean;
   has_anthropic_key: boolean;
   has_google_key: boolean;
+  // Score feature
+  score_enabled: boolean;
+  behavior_rules: string | null;
 }
 
 export const DEFAULT_SYSTEM_PROMPT = `あなたは思考ログを整形するアシスタントです。ユーザーが一日の中で書き留めた短いメモやつぶやきを、読みやすい日記形式に整形してください。
@@ -88,6 +91,8 @@ const DEFAULT_SETTINGS: AISettings = {
   has_openai_key: false,
   has_anthropic_key: false,
   has_google_key: false,
+  score_enabled: false,
+  behavior_rules: null,
 };
 
 // Settings update interface (for saving - can include new API keys)
@@ -99,6 +104,9 @@ export interface AISettingsUpdate {
   openai_api_key?: string | null;
   anthropic_api_key?: string | null;
   google_api_key?: string | null;
+  // Score feature
+  score_enabled?: boolean;
+  behavior_rules?: string | null;
 }
 
 export function useAISettings() {
@@ -132,6 +140,8 @@ export function useAISettings() {
           has_openai_key: row.has_openai_key as boolean,
           has_anthropic_key: row.has_anthropic_key as boolean,
           has_google_key: row.has_google_key as boolean,
+          score_enabled: row.score_enabled as boolean,
+          behavior_rules: (row.behavior_rules as string) || null,
         });
       } else {
         setSettings(DEFAULT_SETTINGS);
@@ -166,6 +176,8 @@ export function useAISettings() {
         openai_api_key?: string | null;
         anthropic_api_key?: string | null;
         google_api_key?: string | null;
+        score_enabled?: boolean;
+        behavior_rules?: string | null;
       };
 
       const upsertData: UpsertData = {
@@ -175,6 +187,14 @@ export function useAISettings() {
         custom_system_prompt: newSettings.custom_system_prompt ?? settings.custom_system_prompt ?? null,
         custom_summarize_prompt: newSettings.custom_summarize_prompt ?? settings.custom_summarize_prompt ?? null,
       };
+
+      // Include score settings if provided
+      if (newSettings.score_enabled !== undefined) {
+        upsertData.score_enabled = newSettings.score_enabled;
+      }
+      if (newSettings.behavior_rules !== undefined) {
+        upsertData.behavior_rules = newSettings.behavior_rules;
+      }
 
       // Only include API keys if they were explicitly set (not undefined)
       if (newSettings.openai_api_key !== undefined) {
