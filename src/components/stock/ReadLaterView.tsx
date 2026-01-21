@@ -1,13 +1,28 @@
 import { useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
 import { Loader2, Bookmark, ExternalLink, Sparkles, RefreshCw, FileText, Circle, CheckCircle2, AlertCircle } from 'lucide-react';
+import { icons } from 'lucide-react';
 import { useEntries, Block, UrlMetadata } from '@/hooks/useEntries';
 import { formatTimeJST, formatDateJST } from '@/lib/dateUtils';
 import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
+import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
+import { TagFilterDropdown } from './TagFilterDropdown';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-type TagFilter = 'all' | BlockTag;
+type TagFilter = 'all' | BlockTag | string;
 type ReadFilter = 'all' | 'unread' | 'read';
+
+function kebabToPascal(str: string): string {
+  return str
+    .split('-')
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join('');
+}
+
+function getIconComponent(iconName: string) {
+  const pascalName = kebabToPascal(iconName);
+  return (icons as Record<string, React.ComponentType<{ className?: string }>>)[pascalName];
+}
 
 /**
  * URLを検出して返す
@@ -48,6 +63,7 @@ function linkifyContent(text: string): ReactNode {
 
 export function ReadLaterView() {
   const { getBlocksByCategory, summarizeUrl, updateBlock } = useEntries();
+  const { customTags } = useCustomTags();
   
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
@@ -147,6 +163,42 @@ export function ReadLaterView() {
     }
   }, [updateBlock]);
 
+  const handleTagChange = (value: string | null) => {
+    setTagFilter(value || 'all');
+  };
+
+  // Helper to get tag display for a block
+  const getTagDisplay = (tag: string | null) => {
+    if (!tag) return null;
+    
+    // Check base tags
+    if (TAGS.includes(tag as BlockTag)) {
+      const config = TAG_CONFIG[tag as BlockTag];
+      const Icon = config.icon;
+      return (
+        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full ${config.bgColor} ${config.color}`}>
+          <Icon className="h-3 w-3" />
+        </span>
+      );
+    }
+    
+    // Check custom tags
+    const customTag = customTags.find(t => t.id === tag);
+    if (customTag) {
+      const colorConfig = TAG_COLORS[customTag.color as keyof typeof TAG_COLORS];
+      const IconComponent = getIconComponent(customTag.icon);
+      if (IconComponent) {
+        return (
+          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full ${colorConfig?.bg || ''} ${colorConfig?.text || ''}`}>
+            <IconComponent className="h-3 w-3" />
+          </span>
+        );
+      }
+    }
+    
+    return null;
+  };
+
   // Stats
   const unreadCount = blocks.filter(b => !b.is_done).length;
   const readCount = blocks.filter(b => b.is_done).length;
@@ -176,9 +228,10 @@ export function ReadLaterView() {
           </div>
         </div>
         
-        {/* Read Filter */}
-        <div className="mt-4">
-          <div className="grid grid-cols-3 gap-1.5 mb-3">
+        {/* Filters */}
+        <div className="mt-4 space-y-3">
+          {/* Read Filter */}
+          <div className="grid grid-cols-3 gap-1.5">
             <Button
               variant={readFilter === 'all' ? 'default' : 'outline'}
               size="sm"
@@ -206,36 +259,15 @@ export function ReadLaterView() {
               既読
             </Button>
           </div>
-        </div>
-        
-        {/* Tag Filter */}
-        <div className="mt-2">
-          <div className="grid grid-cols-4 gap-1.5">
-            <Button
-              variant={tagFilter === 'all' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setTagFilter('all')}
-              className={`h-8 text-xs px-2 ${tagFilter === 'all' ? 'bg-gray-500 hover:bg-gray-600' : ''}`}
-            >
-              <span className="sm:hidden">全</span>
-              <span className="hidden sm:inline">全タグ</span>
-            </Button>
-            {TAGS.map((t) => {
-              const config = TAG_CONFIG[t];
-              const Icon = config.icon;
-              return (
-                <Button
-                  key={t}
-                  variant={tagFilter === t ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setTagFilter(t)}
-                  className={`h-8 text-xs px-2 ${tagFilter === t ? `${config.bgColor} ${config.color}` : ''}`}
-                >
-                  <Icon className="h-3.5 w-3.5 sm:mr-1" />
-                  <span className="hidden sm:inline">{config.label}</span>
-                </Button>
-              );
-            })}
+          
+          {/* Tag Filter Dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">タグ:</span>
+            <TagFilterDropdown
+              value={tagFilter === 'all' ? null : tagFilter}
+              onChange={handleTagChange}
+              customTags={customTags}
+            />
           </div>
         </div>
       </div>
@@ -403,11 +435,7 @@ export function ReadLaterView() {
                     )}
                     
                     <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground flex-wrap">
-                      {block.tag && (
-                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full ${TAG_CONFIG[block.tag].bgColor} ${TAG_CONFIG[block.tag].color}`}>
-                          {(() => { const Icon = TAG_CONFIG[block.tag].icon; return <Icon className="h-3 w-3" />; })()}
-                        </span>
-                      )}
+                      {getTagDisplay(block.tag)}
                       <span>{formatDateJST(block.occurred_at)}</span>
                       <span>•</span>
                       <span>{formatTimeJST(block.occurred_at)}</span>
