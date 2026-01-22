@@ -324,7 +324,7 @@ export function ReadLaterView() {
                   <div className="flex-1">
                     {hasContent && (
                       <p className={cn(
-                        "text-foreground leading-relaxed whitespace-pre-wrap",
+                        "text-foreground leading-relaxed whitespace-pre-wrap break-anywhere",
                         block.is_done && "line-through"
                       )}>
                         {linkifyContent(block.content!)}

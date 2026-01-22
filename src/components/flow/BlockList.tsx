@@ -240,7 +240,7 @@ export function BlockList({
                       <div className="flex-1 min-w-0">
                         {hasContent && (
                           <p 
-                            className={`text-foreground leading-relaxed whitespace-pre-wrap break-words ${
+                            className={`text-foreground leading-relaxed whitespace-pre-wrap break-words break-anywhere ${
                               block.is_done ? 'line-through text-muted-foreground' : ''
                             }`}
                           >

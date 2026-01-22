@@ -149,7 +149,7 @@ export function MemosView() {
                   
                   <div className="flex-1 min-w-0">
                     {hasContent && (
-                      <p className="text-foreground leading-relaxed whitespace-pre-wrap">
+                      <p className="text-foreground leading-relaxed whitespace-pre-wrap break-anywhere">
                         {memo.content}
                       </p>
                     )}

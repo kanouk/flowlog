@@ -323,3 +323,9 @@
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-muted-foreground/30;
 }
+
+/* 長いURL等の連続文字列を適切に折り返す */
+.break-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

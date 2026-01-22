@@ -230,7 +230,7 @@ export function TasksView() {
                   
                   <div className="flex-1">
                     {hasContent && (
-                      <p className={`text-foreground leading-relaxed whitespace-pre-wrap ${
+                      <p className={`text-foreground leading-relaxed whitespace-pre-wrap break-anywhere ${
                         block.is_done ? 'line-through text-muted-foreground' : ''
                       }`}>
                         {block.content}
