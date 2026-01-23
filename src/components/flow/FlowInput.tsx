@@ -188,6 +188,47 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setPreviewUrls(prev => prev.filter((_, i) => i !== index));
   };
 
+  // クリップボードから画像を貼り付け
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const imageFiles: File[] = [];
+    
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          imageFiles.push(file);
+        }
+      }
+    }
+
+    // 画像がなければ通常のテキスト貼り付けを許可
+    if (imageFiles.length === 0) return;
+
+    // 画像がある場合のみデフォルト動作を防ぐ
+    e.preventDefault();
+
+    const remaining = maxImages - selectedImages.length;
+    if (remaining <= 0) {
+      toast.error(`画像は最大${maxImages}枚までです`);
+      return;
+    }
+
+    const toAdd = imageFiles.slice(0, remaining);
+    if (imageFiles.length > remaining) {
+      toast.warning(`最大${maxImages}枚のため、${remaining}枚のみ追加しました`);
+    }
+
+    // プレビューURL生成
+    const newPreviews = toAdd.map(f => URL.createObjectURL(f));
+    setSelectedImages(prev => [...prev, ...toAdd]);
+    setPreviewUrls(prev => [...prev, ...newPreviews]);
+    
+    toast.success(`画像を${toAdd.length}枚追加しました`);
+  };
+
   const currentConfig = CATEGORY_CONFIG[category];
   const canSubmit = (content.trim().length > 0 || selectedImages.length > 0) && !disabled && !isSubmitting;
 
@@ -228,6 +269,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
         value={content}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
         placeholder="今、思い出したことを書く…"
