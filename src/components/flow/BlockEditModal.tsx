@@ -143,6 +143,47 @@ export function BlockEditModal({
     setNewImages(prev => prev.filter((_, i) => i !== index));
     setNewImagePreviews(prev => prev.filter((_, i) => i !== index));
   };
+
+  // クリップボードから画像を貼り付け
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const imageFiles: File[] = [];
+    
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          imageFiles.push(file);
+        }
+      }
+    }
+
+    // 画像がなければ通常のテキスト貼り付けを許可
+    if (imageFiles.length === 0) return;
+
+    // 画像がある場合のみデフォルト動作を防ぐ
+    e.preventDefault();
+
+    const remaining = maxImages - totalImages;
+    if (remaining <= 0) {
+      toast.error(`画像は最大${maxImages}枚までです`);
+      return;
+    }
+
+    const toAdd = imageFiles.slice(0, remaining);
+    if (imageFiles.length > remaining) {
+      toast.warning(`最大${maxImages}枚のため、${remaining}枚のみ追加しました`);
+    }
+
+    // プレビューURL生成
+    const previews = toAdd.map(f => URL.createObjectURL(f));
+    setNewImages(prev => [...prev, ...toAdd]);
+    setNewImagePreviews(prev => [...prev, ...previews]);
+    
+    toast.success(`画像を${toAdd.length}枚追加しました`);
+  };
   
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
@@ -287,6 +328,7 @@ export function BlockEditModal({
             value={content}
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             onCompositionStart={() => setIsComposing(true)}
             onCompositionEnd={() => setIsComposing(false)}
             placeholder="内容を入力..."
