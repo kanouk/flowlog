@@ -219,7 +219,7 @@ export default function Dashboard() {
           <div className="flex h-16">
             <button
               onClick={() => setActiveTab('flow')}
-              className={`flex-1 flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+              className={`relative flex-1 flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
                 activeTab === 'flow' 
                   ? 'text-primary' 
                   : 'text-muted-foreground active:scale-95'
@@ -228,12 +228,12 @@ export default function Dashboard() {
               <PenLine className={`h-5 w-5 transition-transform duration-200 ${activeTab === 'flow' ? 'scale-110' : ''}`} />
               <span className="text-xs font-medium">Flow</span>
               {activeTab === 'flow' && (
-                <span className="absolute bottom-3 w-1 h-1 rounded-full bg-primary" />
+                <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
               )}
             </button>
             <button
               onClick={() => setActiveTab('stock')}
-              className={`flex-1 flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+              className={`relative flex-1 flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
                 activeTab === 'stock' 
                   ? 'text-primary' 
                   : 'text-muted-foreground active:scale-95'
@@ -242,7 +242,7 @@ export default function Dashboard() {
               <FileText className={`h-5 w-5 transition-transform duration-200 ${activeTab === 'stock' ? 'scale-110' : ''}`} />
               <span className="text-xs font-medium">Stock</span>
               {activeTab === 'stock' && (
-                <span className="absolute bottom-3 w-1 h-1 rounded-full bg-primary" />
+                <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
               )}
             </button>
           </div>
