@@ -160,18 +160,21 @@ export default function Dashboard() {
       </header>
 
       {/* Main content */}
-      <div className="container max-w-4xl mx-auto px-4 py-8">
+      <div className={`container max-w-4xl mx-auto px-4 py-8 ${isMobile ? 'pb-24' : ''}`}>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="flow" className="gap-1.5 whitespace-nowrap">
-              <PenLine className="h-4 w-4 flex-shrink-0" />
-              <span className="text-sm">Flow</span>
-            </TabsTrigger>
-            <TabsTrigger value="stock" className="gap-1.5 whitespace-nowrap">
-              <FileText className="h-4 w-4 flex-shrink-0" />
-              <span className="text-sm">Stock</span>
-            </TabsTrigger>
-          </TabsList>
+          {/* Desktop tabs - hidden on mobile */}
+          {!isMobile && (
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="flow" className="gap-1.5 whitespace-nowrap">
+                <PenLine className="h-4 w-4 flex-shrink-0" />
+                <span className="text-sm">Flow</span>
+              </TabsTrigger>
+              <TabsTrigger value="stock" className="gap-1.5 whitespace-nowrap">
+                <FileText className="h-4 w-4 flex-shrink-0" />
+                <span className="text-sm">Stock</span>
+              </TabsTrigger>
+            </TabsList>
+          )}
 
           <TabsContent value="flow" className="mt-0">
             <div className="flex gap-8">
@@ -209,6 +212,42 @@ export default function Dashboard() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Mobile Bottom Tab Bar */}
+      {isMobile && (
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-border safe-area-bottom">
+          <div className="flex h-16">
+            <button
+              onClick={() => setActiveTab('flow')}
+              className={`flex-1 flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+                activeTab === 'flow' 
+                  ? 'text-primary' 
+                  : 'text-muted-foreground active:scale-95'
+              }`}
+            >
+              <PenLine className={`h-5 w-5 transition-transform duration-200 ${activeTab === 'flow' ? 'scale-110' : ''}`} />
+              <span className="text-xs font-medium">Flow</span>
+              {activeTab === 'flow' && (
+                <span className="absolute bottom-3 w-1 h-1 rounded-full bg-primary" />
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('stock')}
+              className={`flex-1 flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+                activeTab === 'stock' 
+                  ? 'text-primary' 
+                  : 'text-muted-foreground active:scale-95'
+              }`}
+            >
+              <FileText className={`h-5 w-5 transition-transform duration-200 ${activeTab === 'stock' ? 'scale-110' : ''}`} />
+              <span className="text-xs font-medium">Stock</span>
+              {activeTab === 'stock' && (
+                <span className="absolute bottom-3 w-1 h-1 rounded-full bg-primary" />
+              )}
+            </button>
+          </div>
+        </nav>
+      )}
     </div>
   );
 }
