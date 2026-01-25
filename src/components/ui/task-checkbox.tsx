@@ -9,25 +9,42 @@ interface TaskCheckboxProps {
   size?: 'sm' | 'md';
 }
 
-// Confetti particle component
+// Confetti particle component - paper confetti style
 function ConfettiParticles() {
-  const particles = Array.from({ length: 6 }, (_, i) => i);
-  const colors = ['bg-orange-400', 'bg-yellow-400', 'bg-green-400', 'bg-blue-400', 'bg-pink-400', 'bg-purple-400'];
+  const particles = Array.from({ length: 16 }, (_, i) => i);
+  const colors = [
+    'bg-orange-400', 'bg-yellow-400', 'bg-green-400', 'bg-blue-400', 
+    'bg-pink-400', 'bg-purple-400', 'bg-red-400', 'bg-cyan-400'
+  ];
+  const shapes = ['rounded-full', 'rounded-sm', 'rounded-none']; // circle, square, rectangle
   
   return (
-    <div className="absolute inset-0 pointer-events-none">
-      {particles.map((i) => (
-        <span
-          key={i}
-          className={`absolute w-1.5 h-1.5 rounded-full ${colors[i]} animate-confetti-pop`}
-          style={{
-            left: '50%',
-            top: '50%',
-            transform: `rotate(${i * 60}deg) translateY(-8px)`,
-            animationDelay: `${i * 30}ms`,
-          }}
-        />
-      ))}
+    <div className="absolute inset-0 pointer-events-none overflow-visible">
+      {particles.map((i) => {
+        const angle = (i / 16) * 360 + Math.random() * 20;
+        const distance = 20 + Math.random() * 25;
+        const size = Math.random() > 0.5 ? 'w-1.5 h-1.5' : 'w-2 h-1';
+        const shape = shapes[i % 3];
+        const color = colors[i % colors.length];
+        const delay = i * 25;
+        const duration = 500 + Math.random() * 200;
+        
+        return (
+          <span
+            key={i}
+            className={`absolute ${size} ${shape} ${color}`}
+            style={{
+              left: '50%',
+              top: '50%',
+              '--confetti-angle': `${angle}deg`,
+              '--confetti-distance': `${distance}px`,
+              '--confetti-rotation': `${Math.random() * 720 - 360}deg`,
+              animation: `confetti-burst ${duration}ms cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards`,
+              animationDelay: `${delay}ms`,
+            } as React.CSSProperties}
+          />
+        );
+      })}
     </div>
   );
 }

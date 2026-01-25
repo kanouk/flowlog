@@ -134,6 +134,20 @@ export default {
           "0%": { transform: "rotate(var(--rotation)) translateY(0) scale(1)", opacity: "1" },
           "100%": { transform: "rotate(var(--rotation)) translateY(-16px) scale(0)", opacity: "0" },
         },
+        "confetti-burst": {
+          "0%": { 
+            transform: "translate(-50%, -50%) rotate(0deg) scale(0)",
+            opacity: "1"
+          },
+          "20%": {
+            transform: "translate(calc(-50% + cos(var(--confetti-angle)) * var(--confetti-distance) * 0.5), calc(-50% + sin(var(--confetti-angle)) * var(--confetti-distance) * 0.5 - 10px)) rotate(calc(var(--confetti-rotation) * 0.3)) scale(1.2)",
+            opacity: "1"
+          },
+          "100%": { 
+            transform: "translate(calc(-50% + cos(var(--confetti-angle)) * var(--confetti-distance)), calc(-50% + sin(var(--confetti-angle)) * var(--confetti-distance) + 15px)) rotate(var(--confetti-rotation)) scale(0.6)",
+            opacity: "0"
+          },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
