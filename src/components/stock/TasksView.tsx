@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Loader2, CheckSquare, Square, CheckSquare as CheckSquareIcon } from 'lucide-react';
+import { Loader2, CheckSquare } from 'lucide-react';
 import { icons } from 'lucide-react';
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
+import { TaskCheckbox } from '@/components/ui/task-checkbox';
 import { formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
 import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
@@ -217,16 +218,12 @@ export function TasksView() {
               >
                 <div className="flex items-start gap-3">
                   {/* Checkbox */}
-                  <button
-                    onClick={() => handleTaskToggle(block)}
-                    className="mt-0.5 flex-shrink-0"
-                  >
-                    {block.is_done ? (
-                      <CheckSquareIcon className="h-5 w-5 text-orange-500" />
-                    ) : (
-                      <Square className="h-5 w-5 text-muted-foreground hover:text-orange-500 transition-colors" />
-                    )}
-                  </button>
+                  <div className="mt-0.5 flex-shrink-0">
+                    <TaskCheckbox
+                      checked={block.is_done}
+                      onToggle={() => handleTaskToggle(block)}
+                    />
+                  </div>
                   
                   <div className="flex-1">
                     {hasContent && (

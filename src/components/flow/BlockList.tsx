@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Trash2, Pencil, GripVertical, Square, CheckSquare as CheckSquareIcon } from 'lucide-react';
+import { Trash2, Pencil, GripVertical } from 'lucide-react';
 import { icons } from 'lucide-react';
 import { Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { TaskCheckbox } from '@/components/ui/task-checkbox';
 import { formatTimeJST } from '@/lib/dateUtils';
 import { BlockCategory, BlockTag, CATEGORY_CONFIG, TAG_CONFIG, TAGS } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
@@ -224,17 +225,13 @@ export function BlockList({
                     <div className="flex items-start gap-3">
                       {/* タスクチェックボックス */}
                       {isTask && (
-                        <button
-                          onClick={() => handleTaskToggle(block)}
-                          className="mt-0.5 flex-shrink-0"
-                          disabled={isTemporary}
-                        >
-                          {block.is_done ? (
-                            <CheckSquareIcon className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-                          ) : (
-                            <Square className="h-5 w-5 text-muted-foreground hover:text-orange-600 dark:hover:text-orange-400 transition-colors" />
-                          )}
-                        </button>
+                        <div className="mt-0.5 flex-shrink-0">
+                          <TaskCheckbox
+                            checked={block.is_done}
+                            onToggle={() => handleTaskToggle(block)}
+                            disabled={isTemporary}
+                          />
+                        </div>
                       )}
                       
                       <div className="flex-1 min-w-0">

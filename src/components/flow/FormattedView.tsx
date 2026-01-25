@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { Entry, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { parseTimestamp, formatTimeJST } from '@/lib/dateUtils';
 import { CATEGORY_CONFIG, BlockCategory } from '@/lib/categoryUtils';
-import { Square, CheckSquare as CheckSquareIcon, BookOpen, ListTodo, Bookmark } from 'lucide-react';
+import { BookOpen, ListTodo, Bookmark } from 'lucide-react';
+import { TaskCheckbox } from '@/components/ui/task-checkbox';
 
 interface FormattedViewProps {
   entry: Entry | null;
@@ -146,16 +147,12 @@ export function FormattedView({ entry, blocks, onUpdate }: FormattedViewProps) {
                 <div className="flex items-start gap-3">
                   {/* タスクチェックボックス */}
                   {isTask && (
-                    <button
-                      onClick={() => handleTaskToggle(block)}
-                      className="mt-0.5 flex-shrink-0"
-                    >
-                      {block.is_done ? (
-                        <CheckSquareIcon className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-                      ) : (
-                        <Square className="h-5 w-5 text-muted-foreground hover:text-orange-600 dark:hover:text-orange-400 transition-colors" />
-                      )}
-                    </button>
+                    <div className="mt-0.5 flex-shrink-0">
+                      <TaskCheckbox
+                        checked={block.is_done}
+                        onToggle={() => handleTaskToggle(block)}
+                      />
+                    </div>
                   )}
                   
                   <div className="flex-1">
