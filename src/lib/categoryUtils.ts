@@ -58,7 +58,7 @@ export const CATEGORY_CONFIG: Record<BlockCategory, CategoryConfig> = {
     icon: Bookmark,
   },
   schedule: { 
-    label: 'スケジュール', 
+    label: '予定', 
     color: 'text-cyan-600 dark:text-cyan-400', 
     bgColor: 'bg-cyan-100 dark:bg-cyan-900/30',
     borderColor: 'border-cyan-300 dark:border-cyan-700',
@@ -89,7 +89,7 @@ export const TAG_CONFIG: Record<BlockTag, TagConfig> = {
   },
 };
 
-export const CATEGORIES: BlockCategory[] = ['event', 'task', 'thought', 'read_later', 'schedule'];
+export const CATEGORIES: BlockCategory[] = ['event', 'task', 'schedule', 'thought', 'read_later'];
 export const TAGS: BlockTag[] = ['work', 'family', 'private'];
 
 const LAST_CATEGORY_KEY = 'flowlog_last_category';
@@ -129,7 +129,7 @@ export function getCategoryLabel(category: string): string {
     thought: 'メモ',
     task: 'タスク',
     read_later: 'あとで読む',
-    schedule: 'スケジュール',
+    schedule: '予定',
   };
   return labels[category] || category;
 }
