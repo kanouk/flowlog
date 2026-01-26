@@ -1,16 +1,17 @@
 import { useState, useCallback, useRef } from 'react';
-import { BookOpen, ListTodo, Bookmark, Brain } from 'lucide-react';
+import { BookOpen, ListTodo, Bookmark, Brain, CalendarClock } from 'lucide-react';
 import { Entry } from '@/hooks/useEntries';
 import { JournalView } from './JournalView';
 import { TasksView } from './TasksView';
 import { ReadLaterView } from './ReadLaterView';
 import { MemosView } from './MemosView';
+import { ScheduleView } from './ScheduleView';
 import { useTabSwipe } from '@/hooks/useTabSwipe';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-type StockSubTab = 'journal' | 'tasks' | 'memos' | 'readLater';
+type StockSubTab = 'journal' | 'tasks' | 'memos' | 'readLater' | 'schedule';
 
-const TAB_ORDER: StockSubTab[] = ['journal', 'tasks', 'memos', 'readLater'];
+const TAB_ORDER: StockSubTab[] = ['journal', 'tasks', 'memos', 'readLater', 'schedule'];
 
 interface StockViewProps {
   entries: Entry[];
@@ -35,6 +36,10 @@ const TAB_COLORS: Record<StockSubTab, { active: string; hover: string }> = {
   readLater: { 
     active: 'bg-green-500 text-white', 
     hover: 'hover:bg-green-500/10 hover:text-green-600' 
+  },
+  schedule: { 
+    active: 'bg-cyan-500 text-white', 
+    hover: 'hover:bg-cyan-500/10 hover:text-cyan-600' 
   },
 };
 
@@ -117,6 +122,10 @@ export function StockView({ entries, selectedDate, onDateSelect }: StockViewProp
           <Bookmark className="h-4 w-4 flex-shrink-0" />
           <span className="hidden sm:inline">あとで読む</span>
         </button>
+        <button onClick={() => switchTab('schedule')} className={tabClass('schedule')}>
+          <CalendarClock className="h-4 w-4 flex-shrink-0" />
+          <span className="hidden sm:inline">スケジュール</span>
+        </button>
       </div>
 
       {/* Content with slide animation */}
@@ -139,6 +148,10 @@ export function StockView({ entries, selectedDate, onDateSelect }: StockViewProp
         
         {subTab === 'readLater' && (
           <ReadLaterView />
+        )}
+        
+        {subTab === 'schedule' && (
+          <ScheduleView />
         )}
       </div>
     </div>

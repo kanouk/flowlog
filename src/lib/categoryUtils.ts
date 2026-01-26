@@ -1,6 +1,6 @@
-import { CalendarDays, Brain, CheckSquare, Bookmark, Briefcase, Users, User, LucideIcon } from 'lucide-react';
+import { CalendarDays, Brain, CheckSquare, Bookmark, Briefcase, Users, User, CalendarClock, LucideIcon } from 'lucide-react';
 
-export type BlockCategory = 'event' | 'thought' | 'task' | 'read_later';
+export type BlockCategory = 'event' | 'thought' | 'task' | 'read_later' | 'schedule';
 export type BlockTag = 'work' | 'family' | 'private';
 
 export interface CategoryConfig {
@@ -57,6 +57,15 @@ export const CATEGORY_CONFIG: Record<BlockCategory, CategoryConfig> = {
     buttonColor: 'bg-green-500 hover:bg-green-600 text-white',
     icon: Bookmark,
   },
+  schedule: { 
+    label: 'スケジュール', 
+    color: 'text-cyan-600 dark:text-cyan-400', 
+    bgColor: 'bg-cyan-100 dark:bg-cyan-900/30',
+    borderColor: 'border-cyan-300 dark:border-cyan-700',
+    accentColor: 'bg-cyan-500',
+    buttonColor: 'bg-cyan-500 hover:bg-cyan-600 text-white',
+    icon: CalendarClock,
+  },
 };
 
 export const TAG_CONFIG: Record<BlockTag, TagConfig> = {
@@ -80,7 +89,7 @@ export const TAG_CONFIG: Record<BlockTag, TagConfig> = {
   },
 };
 
-export const CATEGORIES: BlockCategory[] = ['event', 'task', 'thought', 'read_later'];
+export const CATEGORIES: BlockCategory[] = ['event', 'task', 'thought', 'read_later', 'schedule'];
 export const TAGS: BlockTag[] = ['work', 'family', 'private'];
 
 const LAST_CATEGORY_KEY = 'flowlog_last_category';
@@ -120,6 +129,53 @@ export function getCategoryLabel(category: string): string {
     thought: 'メモ',
     task: 'タスク',
     read_later: 'あとで読む',
+    schedule: 'スケジュール',
   };
   return labels[category] || category;
+}
+
+// スケジュール表示用フォーマット関数
+export function formatScheduleRange(
+  startsAt: string | null, 
+  endsAt: string | null, 
+  isAllDay: boolean
+): string {
+  if (!startsAt) return '';
+  
+  const startDate = new Date(startsAt);
+  const startMonth = startDate.getMonth() + 1;
+  const startDay = startDate.getDate();
+  const startHours = String(startDate.getHours()).padStart(2, '0');
+  const startMinutes = String(startDate.getMinutes()).padStart(2, '0');
+  
+  if (isAllDay) {
+    if (!endsAt) {
+      return `${startMonth}月${startDay}日（終日）`;
+    }
+    const endDate = new Date(endsAt);
+    const endMonth = endDate.getMonth() + 1;
+    const endDay = endDate.getDate();
+    if (startMonth === endMonth && startDay === endDay) {
+      return `${startMonth}月${startDay}日（終日）`;
+    }
+    return `${startMonth}月${startDay}日 〜 ${endMonth}月${endDay}日`;
+  }
+  
+  if (!endsAt) {
+    return `${startMonth}月${startDay}日 ${startHours}:${startMinutes}〜`;
+  }
+  
+  const endDate = new Date(endsAt);
+  const endMonth = endDate.getMonth() + 1;
+  const endDay = endDate.getDate();
+  const endHours = String(endDate.getHours()).padStart(2, '0');
+  const endMinutes = String(endDate.getMinutes()).padStart(2, '0');
+  
+  // 同日の場合
+  if (startMonth === endMonth && startDay === endDay) {
+    return `${startMonth}月${startDay}日 ${startHours}:${startMinutes}〜${endHours}:${endMinutes}`;
+  }
+  
+  // 日跨ぎの場合
+  return `${startMonth}月${startDay}日 ${startHours}:${startMinutes} 〜 ${endMonth}月${endDay}日 ${endHours}:${endMinutes}`;
 }

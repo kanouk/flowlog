@@ -143,9 +143,20 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
   }, []);
 
   /**
-   * ブロック追加（楽観的更新 + 遷移処理 + 画像対応 + カテゴリ対応 + タグ対応 + 自動サマライズ）
+   * ブロック追加（楽観的更新 + 遷移処理 + 画像対応 + カテゴリ対応 + タグ対応 + 自動サマライズ + スケジュール対応）
    */
-  const handleAddBlock = async (content: string, mode: AddBlockMode, images: string[] = [], category: BlockCategory = 'event', tag: BlockTag | null = null) => {
+  const handleAddBlock = async (
+    content: string, 
+    mode: AddBlockMode, 
+    images: string[] = [], 
+    category: BlockCategory = 'event', 
+    tag: BlockTag | null = null,
+    scheduleData?: {
+      starts_at: string | null;
+      ends_at: string | null;
+      is_all_day: boolean;
+    }
+  ) => {
     const tempId = `temp-${Date.now()}`;
     const optimisticBlock: Block = {
       id: tempId,
@@ -160,6 +171,9 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
       is_done: false,
       done_at: null,
       url_metadata: null,
+      starts_at: scheduleData?.starts_at || null,
+      ends_at: scheduleData?.ends_at || null,
+      is_all_day: scheduleData?.is_all_day || false,
     };
     
     if (mode !== 'toNow' || isToday) {
@@ -173,6 +187,9 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
       images,
       category,
       tag,
+      starts_at: scheduleData?.starts_at,
+      ends_at: scheduleData?.ends_at,
+      is_all_day: scheduleData?.is_all_day,
     });
     
     if (savedBlock) {
