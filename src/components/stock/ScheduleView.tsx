@@ -1,9 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
-import { CalendarClock, ChevronDown, ChevronUp } from 'lucide-react';
+import { CalendarClock, ChevronDown, ChevronUp, ChevronRight } from 'lucide-react';
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { BlockEditModal } from '@/components/flow/BlockEditModal';
 import { formatScheduleRange, CATEGORY_CONFIG } from '@/lib/categoryUtils';
 import { TagFilterDropdown } from './TagFilterDropdown';
+
+// コンテンツから1行目（タイトル）と残り（詳細）を分離
+const parseContent = (content: string | null): { title: string; details: string | null } => {
+  if (!content) return { title: '', details: null };
+  const lines = content.split('\n');
+  const title = lines[0] || '';
+  const details = lines.length > 1 ? lines.slice(1).join('\n').trim() : null;
+  return { title, details };
+};
 
 export function ScheduleView() {
   const { getBlocksByCategory, updateBlock, deleteBlock } = useEntries();
@@ -12,6 +21,7 @@ export function ScheduleView() {
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [showPast, setShowPast] = useState(false);
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
+  const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set());
 
   const loadBlocks = useCallback(async () => {
     setLoading(true);
@@ -78,6 +88,72 @@ export function ScheduleView() {
 
   const config = CATEGORY_CONFIG['schedule'];
 
+  // 展開トグル
+  const toggleExpand = (blockId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedBlocks(prev => {
+      const next = new Set(prev);
+      if (next.has(blockId)) {
+        next.delete(blockId);
+      } else {
+        next.add(blockId);
+      }
+      return next;
+    });
+  };
+
+  // 予定アイテムのレンダリング
+  const renderScheduleItem = (block: Block, isPast = false) => {
+    const { title, details } = parseContent(block.content);
+    const isExpanded = expandedBlocks.has(block.id);
+    const hasDetails = !!details;
+
+    return (
+      <div
+        key={block.id}
+        className={`block-card p-4 cursor-pointer hover:shadow-md transition-shadow ${isPast ? 'opacity-60' : ''}`}
+      >
+        <div className="flex items-start gap-3">
+          <div 
+            className={`p-2 rounded-lg ${config.bgColor}`}
+            onClick={() => setEditingBlock(block)}
+          >
+            <CalendarClock className={`h-5 w-5 ${config.color}`} />
+          </div>
+          <div className="flex-1 min-w-0" onClick={() => setEditingBlock(block)}>
+            <div className={`text-sm font-medium ${config.color}`}>
+              {formatScheduleRange(block.starts_at, block.ends_at, block.is_all_day)}
+            </div>
+            {title && (
+              <p className="text-foreground font-medium mt-1">{title}</p>
+            )}
+          </div>
+          {hasDetails && (
+            <button
+              onClick={(e) => toggleExpand(block.id, e)}
+              className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {isExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </button>
+          )}
+        </div>
+        {/* 展開時の詳細 */}
+        {hasDetails && isExpanded && (
+          <div 
+            className="mt-3 pl-12 text-sm text-muted-foreground whitespace-pre-wrap border-l-2 border-cyan-200 dark:border-cyan-800 ml-5"
+            onClick={() => setEditingBlock(block)}
+          >
+            {details}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -106,27 +182,7 @@ export function ScheduleView() {
         </div>
       ) : (
         <div className="space-y-2">
-          {futureBlocks.map(block => (
-            <div
-              key={block.id}
-              onClick={() => setEditingBlock(block)}
-              className="block-card p-4 cursor-pointer hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-start gap-3">
-                <div className={`p-2 rounded-lg ${config.bgColor}`}>
-                  <CalendarClock className={`h-5 w-5 ${config.color}`} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className={`text-sm font-medium ${config.color}`}>
-                    {formatScheduleRange(block.starts_at, block.ends_at, block.is_all_day)}
-                  </div>
-                  {block.content && (
-                    <p className="text-foreground mt-1 line-clamp-2">{block.content}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
+          {futureBlocks.map(block => renderScheduleItem(block))}
         </div>
       )}
 
@@ -143,27 +199,7 @@ export function ScheduleView() {
           
           {showPast && (
             <div className="mt-3 space-y-2">
-              {pastBlocks.map(block => (
-                <div
-                  key={block.id}
-                  onClick={() => setEditingBlock(block)}
-                  className="block-card p-4 cursor-pointer hover:shadow-md transition-shadow opacity-60"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`p-2 rounded-lg ${config.bgColor}`}>
-                      <CalendarClock className={`h-5 w-5 ${config.color}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-medium ${config.color}`}>
-                        {formatScheduleRange(block.starts_at, block.ends_at, block.is_all_day)}
-                      </div>
-                      {block.content && (
-                        <p className="text-foreground mt-1 line-clamp-2">{block.content}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
+              {pastBlocks.map(block => renderScheduleItem(block, true))}
             </div>
           )}
         </div>
