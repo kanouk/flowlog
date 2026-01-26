@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { TagDropdown } from './TagDropdown';
 import { toast } from 'sonner';
 import { 
@@ -22,6 +23,41 @@ import {
   isFutureDate, 
   parseTimestamp 
 } from '@/lib/dateUtils';
+
+// Helper to format time from ISO string
+const formatTimeFromISO = (isoString: string | null): string => {
+  if (!isoString) return '09:00';
+  const date = new Date(isoString);
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
+// Helper to build ISO datetime from date and time
+const buildScheduleDateTime = (
+  date: Date | undefined, 
+  time: string, 
+  isAllDay: boolean
+): string | null => {
+  if (!date) return null;
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  
+  if (isAllDay) {
+    return `${year}-${month}-${day}T00:00:00+09:00`;
+  }
+  
+  return `${year}-${month}-${day}T${time}:00+09:00`;
+};
+
+// Helper to format date display
+const formatDateDisplay = (date: Date | undefined): string => {
+  if (!date) return '未設定';
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  return `${month}月${day}日`;
+};
 
 interface BlockEditModalProps {
   block: Block;
@@ -51,9 +87,24 @@ export function BlockEditModal({
   const [newImages, setNewImages] = useState<File[]>([]);
   const [newImagePreviews, setNewImagePreviews] = useState<string[]>([]);
   
-  // Date/Time
+  // Date/Time for non-schedule
   const [dayKey, setDayKey] = useState(getOccurredAtDayKey(block.occurred_at));
   const [time, setTime] = useState(formatTimeJST(block.occurred_at));
+  
+  // Schedule-specific states
+  const [isAllDay, setIsAllDay] = useState(block.is_all_day || false);
+  const [scheduleStartDate, setScheduleStartDate] = useState<Date | undefined>(
+    block.starts_at ? new Date(block.starts_at) : undefined
+  );
+  const [scheduleStartTime, setScheduleStartTime] = useState(
+    formatTimeFromISO(block.starts_at)
+  );
+  const [scheduleEndDate, setScheduleEndDate] = useState<Date | undefined>(
+    block.ends_at ? new Date(block.ends_at) : undefined
+  );
+  const [scheduleEndTime, setScheduleEndTime] = useState(
+    formatTimeFromISO(block.ends_at)
+  );
   
   // UI State
   const [isSaving, setIsSaving] = useState(false);
@@ -76,6 +127,12 @@ export function BlockEditModal({
       setNewImagePreviews([]);
       setDayKey(getOccurredAtDayKey(block.occurred_at));
       setTime(formatTimeJST(block.occurred_at));
+      // Schedule states
+      setIsAllDay(block.is_all_day || false);
+      setScheduleStartDate(block.starts_at ? new Date(block.starts_at) : undefined);
+      setScheduleStartTime(formatTimeFromISO(block.starts_at));
+      setScheduleEndDate(block.ends_at ? new Date(block.ends_at) : undefined);
+      setScheduleEndTime(formatTimeFromISO(block.ends_at));
       setIsSaving(false);
       setIsDeleting(false);
     }
@@ -209,6 +266,31 @@ export function BlockEditModal({
     setTime(`${hours}:${minutes}`);
   };
   
+  // Schedule handlers
+  const handleScheduleStartDateChange = (date: Date | undefined) => {
+    setScheduleStartDate(date);
+    // Auto-set end date to same day if not set
+    if (date && !scheduleEndDate) {
+      setScheduleEndDate(date);
+      // Auto-set end time to +1 hour
+      const [hours, minutes] = scheduleStartTime.split(':').map(Number);
+      const endHour = (hours + 1) % 24;
+      setScheduleEndTime(`${String(endHour).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`);
+    }
+  };
+  
+  const handleScheduleStartTimeChange = (newTime: string) => {
+    setScheduleStartTime(newTime);
+    // Auto-update end time to +1 hour
+    const [hours, minutes] = newTime.split(':').map(Number);
+    const endHour = (hours + 1) % 24;
+    setScheduleEndTime(`${String(endHour).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`);
+  };
+  
+  const clearScheduleEndDate = () => {
+    setScheduleEndDate(undefined);
+  };
+  
   const handleSave = async () => {
     if (isSaving) return;
     
@@ -252,6 +334,16 @@ export function BlockEditModal({
       }
       if (newOccurredAt !== block.occurred_at) {
         updates.occurred_at = newOccurredAt;
+      }
+      
+      // Schedule fields
+      if (category === 'schedule') {
+        const startsAt = buildScheduleDateTime(scheduleStartDate, scheduleStartTime, isAllDay);
+        const endsAt = buildScheduleDateTime(scheduleEndDate, scheduleEndTime, isAllDay);
+        
+        if (startsAt !== block.starts_at) updates.starts_at = startsAt;
+        if (endsAt !== block.ends_at) updates.ends_at = endsAt;
+        if (isAllDay !== block.is_all_day) updates.is_all_day = isAllDay;
       }
       
       // Always update images if there are any changes
@@ -425,43 +517,129 @@ export function BlockEditModal({
             )}
           </div>
           
-          {/* Date/Time */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-muted-foreground">日時:</span>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 px-2 text-sm">
-                  <Calendar className="h-3.5 w-3.5 mr-1.5" />
-                  {dayKey}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
-                <CalendarComponent
-                  mode="single"
-                  selected={parseTimestamp(`${dayKey}T00:00:00Z`)}
-                  onSelect={handleDateSelect}
-                  disabled={(date) => date > new Date()}
-                  initialFocus
-                  className="pointer-events-auto"
+          {/* Schedule category - special date/time UI */}
+          {category === 'schedule' && (
+            <div className="p-4 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800 space-y-3">
+              {/* 終日チェックボックス */}
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="edit-all-day"
+                  checked={isAllDay}
+                  onCheckedChange={(checked) => setIsAllDay(checked as boolean)}
                 />
-              </PopoverContent>
-            </Popover>
-            <Input
-              type="time"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-              className="h-8 w-28 text-sm"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-2 text-sm"
-              onClick={setToNow}
-            >
-              <Clock className="h-3.5 w-3.5 mr-1" />
-              今
-            </Button>
-          </div>
+                <label htmlFor="edit-all-day" className="text-sm font-medium cursor-pointer">終日</label>
+              </div>
+              
+              {/* 開始日時 */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm text-muted-foreground w-12 flex-shrink-0">開始:</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 px-3 text-sm">
+                      <Calendar className="h-3.5 w-3.5 mr-1.5" />
+                      {formatDateDisplay(scheduleStartDate)}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={scheduleStartDate}
+                      onSelect={handleScheduleStartDateChange}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+                {!isAllDay && (
+                  <Input
+                    type="time"
+                    value={scheduleStartTime}
+                    onChange={(e) => handleScheduleStartTimeChange(e.target.value)}
+                    className="h-8 w-28 text-sm"
+                  />
+                )}
+              </div>
+              
+              {/* 終了日時 */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm text-muted-foreground w-12 flex-shrink-0">終了:</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 px-3 text-sm">
+                      <Calendar className="h-3.5 w-3.5 mr-1.5" />
+                      {formatDateDisplay(scheduleEndDate)}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={scheduleEndDate}
+                      onSelect={setScheduleEndDate}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+                {!isAllDay && (
+                  <Input
+                    type="time"
+                    value={scheduleEndTime}
+                    onChange={(e) => setScheduleEndTime(e.target.value)}
+                    className="h-8 w-28 text-sm"
+                  />
+                )}
+                {/* クリアボタン */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-sm text-muted-foreground"
+                  onClick={clearScheduleEndDate}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
+          
+          {/* Date/Time - for non-schedule categories only */}
+          {category !== 'schedule' && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm text-muted-foreground">日時:</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 px-2 text-sm">
+                    <Calendar className="h-3.5 w-3.5 mr-1.5" />
+                    {dayKey}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                  <CalendarComponent
+                    mode="single"
+                    selected={parseTimestamp(`${dayKey}T00:00:00Z`)}
+                    onSelect={handleDateSelect}
+                    disabled={(date) => date > new Date()}
+                    initialFocus
+                    className="pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+              <Input
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className="h-8 w-28 text-sm"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2 text-sm"
+                onClick={setToNow}
+              >
+                <Clock className="h-3.5 w-3.5 mr-1" />
+                今
+              </Button>
+            </div>
+          )}
         </div>
         
         <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
