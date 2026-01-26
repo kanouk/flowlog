@@ -11,7 +11,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 type StockSubTab = 'journal' | 'tasks' | 'memos' | 'readLater' | 'schedule';
 
-const TAB_ORDER: StockSubTab[] = ['journal', 'tasks', 'memos', 'readLater', 'schedule'];
+const TAB_ORDER: StockSubTab[] = ['journal', 'tasks', 'schedule', 'memos', 'readLater'];
 
 interface StockViewProps {
   entries: Entry[];
@@ -114,6 +114,10 @@ export function StockView({ entries, selectedDate, onDateSelect }: StockViewProp
           <ListTodo className="h-4 w-4 flex-shrink-0" />
           <span className="hidden sm:inline">タスク</span>
         </button>
+        <button onClick={() => switchTab('schedule')} className={tabClass('schedule')}>
+          <CalendarClock className="h-4 w-4 flex-shrink-0" />
+          <span className="hidden sm:inline">予定</span>
+        </button>
         <button onClick={() => switchTab('memos')} className={tabClass('memos')}>
           <Brain className="h-4 w-4 flex-shrink-0" />
           <span className="hidden sm:inline">メモ</span>
@@ -121,10 +125,6 @@ export function StockView({ entries, selectedDate, onDateSelect }: StockViewProp
         <button onClick={() => switchTab('readLater')} className={tabClass('readLater')}>
           <Bookmark className="h-4 w-4 flex-shrink-0" />
           <span className="hidden sm:inline">あとで読む</span>
-        </button>
-        <button onClick={() => switchTab('schedule')} className={tabClass('schedule')}>
-          <CalendarClock className="h-4 w-4 flex-shrink-0" />
-          <span className="hidden sm:inline">スケジュール</span>
         </button>
       </div>
 
