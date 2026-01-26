@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Trash2, Pencil, GripVertical } from 'lucide-react';
+import { Trash2, Pencil, GripVertical, CalendarClock } from 'lucide-react';
 import { icons } from 'lucide-react';
 import { Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { TaskCheckbox } from '@/components/ui/task-checkbox';
 import { formatTimeJST } from '@/lib/dateUtils';
-import { BlockCategory, BlockTag, CATEGORY_CONFIG, TAG_CONFIG, TAGS } from '@/lib/categoryUtils';
+import { BlockCategory, BlockTag, CATEGORY_CONFIG, TAG_CONFIG, TAGS, formatScheduleRange } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -215,6 +215,7 @@ export function BlockList({
               const hasImages = block.images && block.images.length > 0;
               const hasContent = block.content && block.content.trim().length > 0;
               const isTask = block.category === 'task';
+              const isSchedule = block.category === 'schedule';
 
               return (
                 <SortableBlockItem key={block.id} block={block} editable={editable}>
@@ -257,6 +258,14 @@ export function BlockList({
                                 onClick={() => setModalImage(url)}
                               />
                             ))}
+                          </div>
+                        )}
+                        
+                        {/* スケジュール日時表示 */}
+                        {isSchedule && block.starts_at && (
+                          <div className="flex items-center gap-1.5 text-sm text-cyan-600 dark:text-cyan-400 mt-2">
+                            <CalendarClock className="h-3.5 w-3.5" />
+                            <span>{formatScheduleRange(block.starts_at, block.ends_at, block.is_all_day)}</span>
                           </div>
                         )}
                         

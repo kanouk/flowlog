@@ -2,6 +2,10 @@ import { useState, useRef, KeyboardEvent, useEffect } from 'react';
 import { Loader2, Send, ImagePlus, X, Camera } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Input } from '@/components/ui/input';
 import { AddBlockMode } from '@/hooks/useEntries';
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { useCustomTags } from '@/hooks/useCustomTags';
@@ -18,7 +22,18 @@ import {
 } from '@/lib/categoryUtils';
 
 interface FlowInputProps {
-  onSubmit: (content: string, mode: AddBlockMode, images: string[], category: BlockCategory, tag: string | null) => void;
+  onSubmit: (
+    content: string, 
+    mode: AddBlockMode, 
+    images: string[], 
+    category: BlockCategory, 
+    tag: string | null,
+    scheduleData?: {
+      starts_at: string | null;
+      ends_at: string | null;
+      is_all_day: boolean;
+    }
+  ) => void;
   disabled?: boolean;
   selectedDate: string;
   isToday: boolean;
@@ -34,6 +49,14 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [category, setCategory] = useState<BlockCategory>('event');
   const [tag, setTag] = useState<string | null>(null);
+  
+  // Schedule states
+  const [isAllDay, setIsAllDay] = useState(false);
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [startTime, setStartTime] = useState('09:00');
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [endTime, setEndTime] = useState('10:00');
+  
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -73,6 +96,13 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     }
   }, [content, selectedDate]);
 
+  // カテゴリ変更時にスケジュールのデフォルト値を設定
+  useEffect(() => {
+    if (category === 'schedule' && !startDate) {
+      setStartDate(new Date());
+    }
+  }, [category, startDate]);
+
   const handleCategoryChange = (cat: BlockCategory) => {
     setCategory(cat);
     setLastCategory(cat);
@@ -91,11 +121,35 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setIsComposing(false);
   };
 
+  // Build schedule datetime string
+  const buildScheduleDateTime = (date: Date | undefined, time: string, allDay: boolean): string | null => {
+    if (!date) return null;
+    
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    
+    if (allDay) {
+      return `${year}-${month}-${day}T00:00:00.000Z`;
+    }
+    
+    const [hours, minutes] = time.split(':');
+    // Create as local time, then convert to ISO
+    const localDate = new Date(year, date.getMonth(), date.getDate(), parseInt(hours), parseInt(minutes));
+    return localDate.toISOString();
+  };
+
   const handleSubmitWithMode = async (mode: AddBlockMode) => {
     const hasContent = content.trim().length > 0;
     const hasImages = selectedImages.length > 0;
     
-    if (!hasContent && !hasImages) return;
+    // スケジュールカテゴリの場合、開始日時が必須
+    if (category === 'schedule' && !startDate) {
+      toast.error('開始日を選択してください');
+      return;
+    }
+    
+    if (!hasContent && !hasImages && category !== 'schedule') return;
     if (disabled) return;
 
     setIsSubmitting(true);
@@ -110,7 +164,27 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
         }
       }
 
-      onSubmit(content.trim(), mode, uploadedUrls, category, tag);
+      // スケジュールデータを構築
+      let scheduleData = undefined;
+      if (category === 'schedule') {
+        const startsAt = buildScheduleDateTime(startDate, startTime, isAllDay);
+        const endsAt = buildScheduleDateTime(endDate, endTime, isAllDay);
+        
+        // 終了日時のバリデーション
+        if (endsAt && startsAt && new Date(endsAt) < new Date(startsAt)) {
+          toast.error('終了日時は開始日時より後にしてください');
+          setIsSubmitting(false);
+          return;
+        }
+        
+        scheduleData = {
+          starts_at: startsAt,
+          ends_at: endsAt,
+          is_all_day: isAllDay,
+        };
+      }
+
+      onSubmit(content.trim(), mode, uploadedUrls, category, tag, scheduleData);
       
       // リセット
       setContent('');
@@ -119,6 +193,15 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
       setSelectedImages([]);
       previewUrls.forEach(url => URL.revokeObjectURL(url));
       setPreviewUrls([]);
+      
+      // スケジュール関連もリセット
+      if (category === 'schedule') {
+        setStartDate(undefined);
+        setEndDate(undefined);
+        setStartTime('09:00');
+        setEndTime('10:00');
+        setIsAllDay(false);
+      }
       
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -139,7 +222,8 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
       e.preventDefault();
       const hasContent = content.trim().length > 0;
       const hasImages = selectedImages.length > 0;
-      if ((hasContent || hasImages) && !disabled && !isSubmitting) {
+      const canSubmitSchedule = category === 'schedule' && startDate;
+      if ((hasContent || hasImages || canSubmitSchedule) && !disabled && !isSubmitting) {
         handleSubmitWithMode('toSelectedDate');
       }
     }
@@ -229,8 +313,17 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     toast.success(`画像を${toAdd.length}枚追加しました`);
   };
 
+  // 日付フォーマット関数
+  const formatDateDisplay = (date: Date | undefined): string => {
+    if (!date) return '日付を選択';
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    return `${month}月${day}日`;
+  };
+
   const currentConfig = CATEGORY_CONFIG[category];
-  const canSubmit = (content.trim().length > 0 || selectedImages.length > 0) && !disabled && !isSubmitting;
+  const canSubmitSchedule = category === 'schedule' && startDate;
+  const canSubmit = (content.trim().length > 0 || selectedImages.length > 0 || canSubmitSchedule) && !disabled && !isSubmitting;
 
   return (
     <div className={`relative bg-card rounded-2xl overflow-hidden ${!isToday ? 'bg-muted/50' : ''}`}
@@ -263,6 +356,89 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
           })}
         </div>
 
+        {/* スケジュール入力UI */}
+        {category === 'schedule' && (
+          <div className="mb-4 p-4 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800 space-y-3">
+            {/* 終日チェックボックス */}
+            <div className="flex items-center gap-2">
+              <Checkbox 
+                id="all-day"
+                checked={isAllDay}
+                onCheckedChange={(checked) => setIsAllDay(checked as boolean)}
+              />
+              <label htmlFor="all-day" className="text-sm font-medium cursor-pointer">終日</label>
+            </div>
+            
+            {/* 開始日時 */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm text-muted-foreground w-12 flex-shrink-0">開始:</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 px-3 text-sm">
+                    {formatDateDisplay(startDate)}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={startDate}
+                    onSelect={setStartDate}
+                    initialFocus
+                    className="pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+              {!isAllDay && (
+                <Input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="h-8 w-28 text-sm"
+                />
+              )}
+            </div>
+            
+            {/* 終了日時 */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm text-muted-foreground w-12 flex-shrink-0">終了:</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 px-3 text-sm">
+                    {formatDateDisplay(endDate)}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={endDate}
+                    onSelect={setEndDate}
+                    initialFocus
+                    className="pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+              {!isAllDay && (
+                <Input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="h-8 w-28 text-sm"
+                />
+              )}
+              {endDate && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-sm text-muted-foreground"
+                  onClick={() => setEndDate(undefined)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
       
       <textarea
         ref={textareaRef}
@@ -272,7 +448,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
         onPaste={handlePaste}
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
-        placeholder="今、思い出したことを書く…"
+        placeholder={category === 'schedule' ? 'スケジュールのメモ（任意）' : '今、思い出したことを書く…'}
         disabled={disabled || isSubmitting}
         className="input-flow w-full min-h-[120px] text-lg leading-relaxed"
         rows={4}

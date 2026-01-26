@@ -20,11 +20,14 @@ export type Database = {
           content: string | null
           created_at: string
           done_at: string | null
+          ends_at: string | null
           entry_id: string
           id: string
           images: string[] | null
+          is_all_day: boolean | null
           is_done: boolean
           occurred_at: string
+          starts_at: string | null
           tag: string | null
           url_metadata: Json | null
           user_id: string
@@ -34,11 +37,14 @@ export type Database = {
           content?: string | null
           created_at?: string
           done_at?: string | null
+          ends_at?: string | null
           entry_id: string
           id?: string
           images?: string[] | null
+          is_all_day?: boolean | null
           is_done?: boolean
           occurred_at?: string
+          starts_at?: string | null
           tag?: string | null
           url_metadata?: Json | null
           user_id: string
@@ -48,11 +54,14 @@ export type Database = {
           content?: string | null
           created_at?: string
           done_at?: string | null
+          ends_at?: string | null
           entry_id?: string
           id?: string
           images?: string[] | null
+          is_all_day?: boolean | null
           is_done?: boolean
           occurred_at?: string
+          starts_at?: string | null
           tag?: string | null
           url_metadata?: Json | null
           user_id?: string

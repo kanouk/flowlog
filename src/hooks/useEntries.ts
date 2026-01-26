@@ -34,6 +34,10 @@ export interface Block {
   is_done: boolean;
   done_at: string | null;
   url_metadata: UrlMetadata | null;
+  // Schedule fields
+  starts_at: string | null;
+  ends_at: string | null;
+  is_all_day: boolean;
 }
 
 export interface Entry {
@@ -59,6 +63,10 @@ export interface BlockUpdatePayload {
   is_done?: boolean;
   done_at?: string | null;
   images?: string[];
+  // Schedule fields
+  starts_at?: string | null;
+  ends_at?: string | null;
+  is_all_day?: boolean;
 }
 
 export interface GetBlocksByCategoryOptions {
@@ -239,7 +247,7 @@ export function useEntries() {
   }, [userId]);
 
   /**
-   * ブロック追加（過去日対応 + "今で追加"モード + 画像対応 + カテゴリ対応 + タグ対応）
+   * ブロック追加（過去日対応 + "今で追加"モード + 画像対応 + カテゴリ対応 + タグ対応 + スケジュール対応）
    */
   const addBlockWithDate = useCallback(async ({ 
     content, 
@@ -248,6 +256,9 @@ export function useEntries() {
     images = [],
     category = 'event',
     tag = null,
+    starts_at = null,
+    ends_at = null,
+    is_all_day = false,
   }: { 
     content: string; 
     selectedDate: string; 
@@ -255,6 +266,9 @@ export function useEntries() {
     images?: string[];
     category?: BlockCategory;
     tag?: BlockTag | null;
+    starts_at?: string | null;
+    ends_at?: string | null;
+    is_all_day?: boolean;
   }) => {
     if (!userId) return { block: null, navigateToDate: null };
 
@@ -291,17 +305,26 @@ export function useEntries() {
       const entry = await getOrCreateEntryForDate(dayKey);
       if (!entry) throw new Error('Failed to get/create entry');
 
+      const insertData: Record<string, unknown> = {
+        entry_id: entry.id,
+        user_id: userId,
+        content: content || null,
+        images,
+        occurred_at: occurredAt,
+        category,
+        tag,
+      };
+
+      // スケジュールカテゴリの場合のみスケジュールフィールドを追加
+      if (category === 'schedule') {
+        insertData.starts_at = starts_at;
+        insertData.ends_at = ends_at;
+        insertData.is_all_day = is_all_day;
+      }
+
       const { data, error } = await supabase
         .from('blocks')
-        .insert({
-          entry_id: entry.id,
-          user_id: userId,
-          content: content || null,
-          images,
-          occurred_at: occurredAt,
-          category,
-          tag,
-        })
+        .insert(insertData as typeof insertData & { entry_id: string; user_id: string })
         .select()
         .single();
 
@@ -342,7 +365,7 @@ export function useEntries() {
       
       const oldEntryId = currentBlock?.entry_id;
       
-      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at' | 'images'>> = {};
+      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at' | 'images' | 'starts_at' | 'ends_at' | 'is_all_day'>> = {};
       
       if (updates.content !== undefined) {
         updateData.content = updates.content;
@@ -361,6 +384,16 @@ export function useEntries() {
       }
       if (updates.images !== undefined) {
         updateData.images = updates.images;
+      }
+      // Schedule fields
+      if (updates.starts_at !== undefined) {
+        updateData.starts_at = updates.starts_at;
+      }
+      if (updates.ends_at !== undefined) {
+        updateData.ends_at = updates.ends_at;
+      }
+      if (updates.is_all_day !== undefined) {
+        updateData.is_all_day = updates.is_all_day;
       }
       if (updates.occurred_at) {
         const newDayKey = getOccurredAtDayKey(updates.occurred_at);

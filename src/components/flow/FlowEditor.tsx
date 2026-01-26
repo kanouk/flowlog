@@ -69,9 +69,20 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
   }, [loadData]);
 
   /**
-   * ブロック追加（楽観的更新 + 遷移処理 + 画像対応 + カテゴリ対応 + タグ対応）
+   * ブロック追加（楽観的更新 + 遷移処理 + 画像対応 + カテゴリ対応 + タグ対応 + スケジュール対応）
    */
-  const handleAddBlock = async (content: string, mode: AddBlockMode, images: string[] = [], category: BlockCategory = 'event', tag: BlockTag | null = null) => {
+  const handleAddBlock = async (
+    content: string, 
+    mode: AddBlockMode, 
+    images: string[] = [], 
+    category: BlockCategory = 'event', 
+    tag: BlockTag | null = null,
+    scheduleData?: {
+      starts_at: string | null;
+      ends_at: string | null;
+      is_all_day: boolean;
+    }
+  ) => {
     // 楽観的更新: 仮のブロックを即座にUIに追加
     const tempId = `temp-${Date.now()}`;
     const optimisticBlock: Block = {
@@ -87,6 +98,9 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       is_done: false,
       done_at: null,
       url_metadata: null,
+      starts_at: scheduleData?.starts_at || null,
+      ends_at: scheduleData?.ends_at || null,
+      is_all_day: scheduleData?.is_all_day || false,
     };
     
     // toNowモードでなければローカルに追加（降順ソート）
@@ -102,6 +116,9 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       images,
       category,
       tag,
+      starts_at: scheduleData?.starts_at,
+      ends_at: scheduleData?.ends_at,
+      is_all_day: scheduleData?.is_all_day,
     });
     
     if (savedBlock) {
