@@ -451,14 +451,14 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                     const endHours = (hours + 1) % 24;
                     const newEndTime = `${String(endHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
                     setEndTime(newEndTime);
-                    // 終了日も設定（開始日と同じ、24時を超えた場合は翌日）
-                    if (startDate && !endDate) {
+                    // 終了日も設定（常に更新：24時を超えた場合は翌日）
+                    if (startDate) {
                       if (hours + 1 >= 24) {
                         const nextDay = new Date(startDate);
                         nextDay.setDate(nextDay.getDate() + 1);
                         setEndDate(nextDay);
                       } else {
-                        setEndDate(startDate);
+                        setEndDate(new Date(startDate));
                       }
                     }
                   }}
