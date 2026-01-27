@@ -1,11 +1,13 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Loader2, Brain } from 'lucide-react';
-import { useEntries, Block } from '@/hooks/useEntries';
-import { formatTimeJST, formatDateJST } from '@/lib/dateUtils';
+import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
+import { formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
 import { BlockTag, TAG_CONFIG, TAGS } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { TagFilterDropdown } from './TagFilterDropdown';
+import { BlockEditModal } from '@/components/flow/BlockEditModal';
 import { icons } from 'lucide-react';
+import { toast } from 'sonner';
 
 type TagFilter = 'all' | BlockTag | string;
 
@@ -22,11 +24,12 @@ function getIconComponent(iconName: string) {
 }
 
 export function MemosView() {
-  const { getBlocksByCategory } = useEntries();
+  const { getBlocksByCategory, updateBlock, deleteBlock } = useEntries();
   const { customTags } = useCustomTags();
   const [memos, setMemos] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
   const [tagFilter, setTagFilter] = useState<TagFilter>('all');
+  const [editingBlock, setEditingBlock] = useState<Block | null>(null);
 
   const loadMemos = useCallback(async () => {
     setLoading(true);
@@ -49,6 +52,34 @@ export function MemosView() {
 
   const handleTagChange = (value: string | null) => {
     setTagFilter(value || 'all');
+  };
+
+  // 編集保存ハンドラー
+  const handleEditSave = async (updates: BlockUpdatePayload & { images?: string[] }) => {
+    if (!editingBlock) return;
+    const updated = await updateBlock(editingBlock.id, updates);
+    if (updated) {
+      setMemos(prev => {
+        const mapped = prev.map(m => m.id === editingBlock.id ? updated : m);
+        // 再ソート（occurred_at DESC）
+        return mapped.sort((a, b) => 
+          parseTimestamp(b.occurred_at).getTime() - parseTimestamp(a.occurred_at).getTime()
+        );
+      });
+      toast.success('更新しました');
+    }
+    setEditingBlock(null);
+  };
+
+  // 削除ハンドラー
+  const handleEditDelete = async () => {
+    if (!editingBlock) return;
+    const success = await deleteBlock(editingBlock.id);
+    if (success) {
+      setMemos(prev => prev.filter(m => m.id !== editingBlock.id));
+      toast.success('削除しました');
+    }
+    setEditingBlock(null);
   };
 
   // Helper to get tag display for a block
@@ -140,7 +171,8 @@ export function MemosView() {
             return (
               <div 
                 key={memo.id} 
-                className="p-4 rounded-xl bg-card border border-border"
+                className="p-4 rounded-xl bg-card border border-border cursor-pointer hover:shadow-md transition-all"
+                onClick={() => setEditingBlock(memo)}
               >
                 <div className="flex items-start gap-3">
                   <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex-shrink-0">
@@ -179,6 +211,17 @@ export function MemosView() {
             );
           })}
         </div>
+      )}
+
+      {/* 編集モーダル */}
+      {editingBlock && (
+        <BlockEditModal
+          block={editingBlock}
+          open={!!editingBlock}
+          onOpenChange={(open) => !open && setEditingBlock(null)}
+          onSave={handleEditSave}
+          onDelete={handleEditDelete}
+        />
       )}
     </div>
   );
