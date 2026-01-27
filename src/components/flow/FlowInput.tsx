@@ -100,10 +100,41 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     }
   }, [content, selectedDate]);
 
+  // 30分刻みの時刻を計算するヘルパー関数
+  const getRoundedTime = (date: Date): { time: string; endTime: string; nextDay: boolean } => {
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    // 30分刻みに丸める（15分以上なら30分、45分以上なら次の00分）
+    let roundedMinutes = minutes < 15 ? 0 : minutes < 45 ? 30 : 0;
+    let roundedHours = minutes >= 45 ? hours + 1 : hours;
+    const nextDay = roundedHours >= 24;
+    roundedHours = roundedHours % 24;
+    
+    const time = `${String(roundedHours).padStart(2, '0')}:${String(roundedMinutes).padStart(2, '0')}`;
+    const endHours = (roundedHours + 1) % 24;
+    const endTime = `${String(endHours).padStart(2, '0')}:${String(roundedMinutes).padStart(2, '0')}`;
+    
+    return { time, endTime, nextDay };
+  };
+
   // カテゴリ変更時にスケジュールのデフォルト値を設定
   useEffect(() => {
     if (category === 'schedule' && !startDate) {
-      setStartDate(new Date());
+      const now = new Date();
+      const { time, endTime: calculatedEndTime, nextDay } = getRoundedTime(now);
+      
+      setStartDate(now);
+      setStartTime(time);
+      
+      // 終了日時も設定
+      if (nextDay) {
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        setEndDate(tomorrow);
+      } else {
+        setEndDate(now);
+      }
+      setEndTime(calculatedEndTime);
     }
   }, [category, startDate]);
 
@@ -389,7 +420,20 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                   <Calendar
                     mode="single"
                     selected={startDate}
-                    onSelect={setStartDate}
+                    onSelect={(date) => {
+                      setStartDate(date);
+                      // 開始日を変更したら終了日も連動
+                      if (date) {
+                        const [hours] = startTime.split(':').map(Number);
+                        if (hours + 1 >= 24) {
+                          const nextDay = new Date(date);
+                          nextDay.setDate(nextDay.getDate() + 1);
+                          setEndDate(nextDay);
+                        } else {
+                          setEndDate(date);
+                        }
+                      }
+                    }}
                     initialFocus
                     className="pointer-events-auto"
                   />
