@@ -399,7 +399,25 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                 <Input
                   type="time"
                   value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
+                  onChange={(e) => {
+                    const newStartTime = e.target.value;
+                    setStartTime(newStartTime);
+                    // 終了時刻を開始時刻の1時間後に自動設定
+                    const [hours, minutes] = newStartTime.split(':').map(Number);
+                    const endHours = (hours + 1) % 24;
+                    const newEndTime = `${String(endHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+                    setEndTime(newEndTime);
+                    // 終了日も設定（開始日と同じ、24時を超えた場合は翌日）
+                    if (startDate && !endDate) {
+                      if (hours + 1 >= 24) {
+                        const nextDay = new Date(startDate);
+                        nextDay.setDate(nextDay.getDate() + 1);
+                        setEndDate(nextDay);
+                      } else {
+                        setEndDate(startDate);
+                      }
+                    }
+                  }}
                   className="h-8 w-28 text-sm"
                 />
               )}
