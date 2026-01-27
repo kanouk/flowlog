@@ -100,40 +100,69 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     }
   }, [content, selectedDate]);
 
-  // 30分刻みの時刻を計算するヘルパー関数
-  const getRoundedTime = (date: Date): { time: string; endTime: string; nextDay: boolean } => {
+  // 30分刻みの時刻を計算するヘルパー関数（切り上げロジック）
+  const getRoundedTime = (date: Date): { 
+    time: string; 
+    endTime: string; 
+    startNextDay: boolean;  // 開始日が翌日になるか
+    endNextDay: boolean;    // 終了日が翌日になるか（開始日基準）
+  } => {
     const hours = date.getHours();
     const minutes = date.getMinutes();
-    // 30分刻みに丸める（15分以上なら30分、45分以上なら次の00分）
-    let roundedMinutes = minutes < 15 ? 0 : minutes < 45 ? 30 : 0;
-    let roundedHours = minutes >= 45 ? hours + 1 : hours;
-    const nextDay = roundedHours >= 24;
+    
+    // 切り上げロジック: 次の30分枠に進める
+    // 00分ちょうど → 00分のまま
+    // 01-30分 → 30分に切り上げ
+    // 31-59分 → 次の時間の00分に切り上げ
+    let roundedHours: number;
+    let roundedMinutes: number;
+    
+    if (minutes === 0) {
+      roundedHours = hours;
+      roundedMinutes = 0;
+    } else if (minutes <= 30) {
+      roundedHours = hours;
+      roundedMinutes = 30;
+    } else {
+      roundedHours = hours + 1;
+      roundedMinutes = 0;
+    }
+    
+    // 開始日が翌日になるかどうか
+    const startNextDay = roundedHours >= 24;
     roundedHours = roundedHours % 24;
     
-    const time = `${String(roundedHours).padStart(2, '0')}:${String(roundedMinutes).padStart(2, '0')}`;
-    const endHours = (roundedHours + 1) % 24;
-    const endTime = `${String(endHours).padStart(2, '0')}:${String(roundedMinutes).padStart(2, '0')}`;
+    // 終了時刻（1時間後）
+    const endRoundedHours = (roundedHours + 1) % 24;
+    // 終了日が翌日になるか（開始時刻基準で+1時間が24を超える場合）
+    const endNextDay = roundedHours + 1 >= 24;
     
-    return { time, endTime, nextDay };
+    const time = `${String(roundedHours).padStart(2, '0')}:${String(roundedMinutes).padStart(2, '0')}`;
+    const endTime = `${String(endRoundedHours).padStart(2, '0')}:${String(roundedMinutes).padStart(2, '0')}`;
+    
+    return { time, endTime, startNextDay, endNextDay };
   };
 
   // カテゴリ変更時にスケジュールのデフォルト値を設定
   useEffect(() => {
     if (category === 'schedule' && !startDate) {
       const now = new Date();
-      const { time, endTime: calculatedEndTime, nextDay } = getRoundedTime(now);
+      const { time, endTime: calculatedEndTime, startNextDay, endNextDay } = getRoundedTime(now);
       
-      setStartDate(now);
+      // 開始日を設定（切り上げで翌日になる場合は翌日）
+      const startDateValue = new Date(now);
+      if (startNextDay) {
+        startDateValue.setDate(startDateValue.getDate() + 1);
+      }
+      setStartDate(startDateValue);
       setStartTime(time);
       
-      // 終了日時も設定
-      if (nextDay) {
-        const tomorrow = new Date(now);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        setEndDate(tomorrow);
-      } else {
-        setEndDate(now);
+      // 終了日を設定（開始日基準で、+1時間が翌日になる場合）
+      const endDateValue = new Date(startDateValue);
+      if (endNextDay) {
+        endDateValue.setDate(endDateValue.getDate() + 1);
       }
+      setEndDate(endDateValue);
       setEndTime(calculatedEndTime);
     }
   }, [category, startDate]);
