@@ -64,10 +64,14 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const { uploadImages, maxImages } = useImageUpload();
   const { customTags, createCustomTag } = useCustomTags();
 
-  // 初回マウント時にlocalStorageからカテゴリとタグを復元
+  // 初回マウント時にlocalStorageからカテゴリとタグを復元し、フォーカス
   useEffect(() => {
     setCategory(getLastCategory());
     setTag(getLastTag());
+    // テキストエリアにフォーカス
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 100);
   }, []);
 
   // 下書きをsessionStorageから復元
@@ -106,6 +110,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const handleCategoryChange = (cat: BlockCategory) => {
     setCategory(cat);
     setLastCategory(cat);
+    // カテゴリ変更時にタグをクリア
+    setTag(null);
+    setLastTag(null);
   };
 
   const handleTagChange = (t: string | null) => {
