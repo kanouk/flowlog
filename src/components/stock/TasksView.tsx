@@ -8,6 +8,7 @@ import { formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
 import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { TagFilterDropdown } from './TagFilterDropdown';
+import { BlockEditModal } from '@/components/flow/BlockEditModal';
 import { toast } from 'sonner';
 
 type TaskFilter = 'all' | 'incomplete';
@@ -26,13 +27,14 @@ function getIconComponent(iconName: string) {
 }
 
 export function TasksView() {
-  const { getBlocksByCategory, updateBlock } = useEntries();
+  const { getBlocksByCategory, updateBlock, deleteBlock } = useEntries();
   const { customTags } = useCustomTags();
   
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<TaskFilter>('all');
   const [tagFilter, setTagFilter] = useState<TagFilter>('all');
+  const [editingBlock, setEditingBlock] = useState<Block | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -95,6 +97,40 @@ export function TasksView() {
 
   const handleTagChange = (value: string | null) => {
     setTagFilter(value || 'all');
+  };
+
+  // 編集保存ハンドラー
+  const handleEditSave = async (updates: BlockUpdatePayload & { images?: string[] }) => {
+    if (!editingBlock) return;
+    const updated = await updateBlock(editingBlock.id, updates);
+    if (updated) {
+      setBlocks(prev => {
+        const mapped = prev.map(b => b.id === editingBlock.id ? updated : b);
+        // 再ソート
+        return mapped.sort((a, b) => {
+          if (a.is_done !== b.is_done) return a.is_done ? 1 : -1;
+          if (a.is_done && b.is_done) {
+            const aTime = a.done_at ? parseTimestamp(a.done_at).getTime() : parseTimestamp(a.occurred_at).getTime();
+            const bTime = b.done_at ? parseTimestamp(b.done_at).getTime() : parseTimestamp(b.occurred_at).getTime();
+            return bTime - aTime;
+          }
+          return parseTimestamp(b.occurred_at).getTime() - parseTimestamp(a.occurred_at).getTime();
+        });
+      });
+      toast.success('更新しました');
+    }
+    setEditingBlock(null);
+  };
+
+  // 削除ハンドラー
+  const handleEditDelete = async () => {
+    if (!editingBlock) return;
+    const success = await deleteBlock(editingBlock.id);
+    if (success) {
+      setBlocks(prev => prev.filter(b => b.id !== editingBlock.id));
+      toast.success('削除しました');
+    }
+    setEditingBlock(null);
   };
 
   // Helper to get tag display for a block
@@ -210,15 +246,16 @@ export function TasksView() {
             return (
               <div 
                 key={block.id} 
-                className={`p-4 rounded-xl border transition-all ${
+                className={`p-4 rounded-xl border transition-all cursor-pointer hover:shadow-md ${
                   block.is_done 
                     ? 'bg-muted/30 border-border opacity-60' 
                     : 'bg-card border-border'
                 }`}
+                onClick={() => setEditingBlock(block)}
               >
                 <div className="flex items-start gap-3">
                   {/* Checkbox */}
-                  <div className="mt-0.5 flex-shrink-0">
+                  <div className="mt-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                     <TaskCheckbox
                       checked={block.is_done}
                       onToggle={() => handleTaskToggle(block)}
@@ -267,6 +304,17 @@ export function TasksView() {
             );
           })}
         </div>
+      )}
+
+      {/* 編集モーダル */}
+      {editingBlock && (
+        <BlockEditModal
+          block={editingBlock}
+          open={!!editingBlock}
+          onOpenChange={(open) => !open && setEditingBlock(null)}
+          onSave={handleEditSave}
+          onDelete={handleEditDelete}
+        />
       )}
     </div>
   );
