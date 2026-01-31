@@ -29,6 +29,7 @@ export default function Dashboard() {
   
   const today = getTodayKey();
   const selectedDate = searchParams.get('date') || today;
+  const targetBlockId = searchParams.get('block');
 
   // モバイルでスワイプジェスチャーによるサイドメニュー開閉
   useSwipeGesture({
@@ -87,15 +88,25 @@ export default function Dashboard() {
     setActiveTab('flow');
   };
 
-  const handleSearchNavigate = (targetDate: string, tab?: 'flow' | 'stock') => {
-    if (targetDate === today) {
-      setSearchParams({});
-    } else {
-      setSearchParams({ date: targetDate });
+  const handleSearchNavigate = (targetDate: string, tab?: 'flow' | 'stock', blockId?: string) => {
+    const params: Record<string, string> = {};
+    if (targetDate !== today) {
+      params.date = targetDate;
     }
+    if (blockId) {
+      params.block = blockId;
+    }
+    setSearchParams(params);
     if (tab) {
       setActiveTab(tab);
     }
+  };
+
+  const handleBlockScrolled = () => {
+    // スクロール完了後、blockパラメータをURLから削除
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('block');
+    setSearchParams(newParams);
   };
 
   const handleSignOut = async () => {
@@ -211,6 +222,8 @@ export default function Dashboard() {
                 <FlowView 
                   selectedDate={selectedDate} 
                   onNavigateToDate={handleNavigateToDate}
+                  targetBlockId={targetBlockId}
+                  onBlockScrolled={handleBlockScrolled}
                 />
               </main>
             </div>

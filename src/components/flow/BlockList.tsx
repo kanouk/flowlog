@@ -220,6 +220,7 @@ export function BlockList({
               return (
                 <SortableBlockItem key={block.id} block={block} editable={editable}>
                   <div
+                    id={`block-${block.id}`}
                     className={`block-card block-card-hover p-4 group animate-block-enter ${isTemporary ? 'opacity-60' : ''}`}
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
