@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('flow');
+  const [searchQuery, setSearchQuery] = useState<string | null>(null);
   const isMobile = useIsMobile();
   
   const today = getTodayKey();
@@ -88,7 +89,7 @@ export default function Dashboard() {
     setActiveTab('flow');
   };
 
-  const handleSearchNavigate = (targetDate: string, tab?: 'flow' | 'stock', blockId?: string) => {
+  const handleSearchNavigate = (targetDate: string, tab?: 'flow' | 'stock', blockId?: string, query?: string) => {
     const params: Record<string, string> = {};
     if (targetDate !== today) {
       params.date = targetDate;
@@ -99,6 +100,9 @@ export default function Dashboard() {
     setSearchParams(params);
     if (tab) {
       setActiveTab(tab);
+    }
+    if (query) {
+      setSearchQuery(query);
     }
   };
 
@@ -224,6 +228,8 @@ export default function Dashboard() {
                   onNavigateToDate={handleNavigateToDate}
                   targetBlockId={targetBlockId}
                   onBlockScrolled={handleBlockScrolled}
+                  searchQuery={searchQuery}
+                  onSearchCleared={() => setSearchQuery(null)}
                 />
               </main>
             </div>

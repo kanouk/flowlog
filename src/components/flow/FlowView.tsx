@@ -16,6 +16,8 @@ interface FlowViewProps {
   onNavigateToDate?: (date: string) => void;
   targetBlockId?: string | null;
   onBlockScrolled?: () => void;
+  searchQuery?: string | null;
+  onSearchCleared?: () => void;
 }
 
 /**
@@ -29,7 +31,7 @@ function sortBlocksDesc(blocks: Block[]): Block[] {
   });
 }
 
-export function FlowView({ selectedDate, onNavigateToDate, targetBlockId, onBlockScrolled }: FlowViewProps) {
+export function FlowView({ selectedDate, onNavigateToDate, targetBlockId, onBlockScrolled, searchQuery, onSearchCleared }: FlowViewProps) {
   const today = getTodayKey();
   const isToday = selectedDate === today;
 
@@ -86,10 +88,14 @@ export function FlowView({ selectedDate, onNavigateToDate, targetBlockId, onBloc
           }, 2000);
           // URLからblockパラメータをクリア
           onBlockScrolled?.();
+          // 5秒後にハイライトをクリア
+          setTimeout(() => {
+            onSearchCleared?.();
+          }, 5000);
         }, 100);
       }
     }
-  }, [targetBlockId, blocks.length, loading, onBlockScrolled]);
+  }, [targetBlockId, blocks.length, loading, onBlockScrolled, onSearchCleared]);
 
   /**
    * URLを抽出するヘルパー
@@ -464,6 +470,7 @@ export function FlowView({ selectedDate, onNavigateToDate, targetBlockId, onBloc
         showDelete={true}
         editable={true}
         selectedDate={selectedDate}
+        highlightQuery={searchQuery}
       />
     </div>
   );
