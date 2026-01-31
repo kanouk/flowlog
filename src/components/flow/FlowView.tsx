@@ -14,6 +14,8 @@ import { arrayMove } from '@dnd-kit/sortable';
 interface FlowViewProps {
   selectedDate: string;
   onNavigateToDate?: (date: string) => void;
+  targetBlockId?: string | null;
+  onBlockScrolled?: () => void;
 }
 
 /**
@@ -27,7 +29,7 @@ function sortBlocksDesc(blocks: Block[]): Block[] {
   });
 }
 
-export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
+export function FlowView({ selectedDate, onNavigateToDate, targetBlockId, onBlockScrolled }: FlowViewProps) {
   const today = getTodayKey();
   const isToday = selectedDate === today;
 
@@ -65,6 +67,29 @@ export function FlowView({ selectedDate, onNavigateToDate }: FlowViewProps) {
     // 日付が変わったら質問をクリア
     setPendingQuestions([]);
   }, [loadData, selectedDate]);
+
+  // ターゲットブロックへのスクロール
+  useEffect(() => {
+    if (targetBlockId && blocks.length > 0 && !loading) {
+      const element = document.getElementById(`block-${targetBlockId}`);
+      if (element) {
+        // 少し遅延を入れてDOMが安定してからスクロール
+        setTimeout(() => {
+          element.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+          // ハイライトアニメーション
+          element.classList.add('block-highlight');
+          setTimeout(() => {
+            element.classList.remove('block-highlight');
+          }, 2000);
+          // URLからblockパラメータをクリア
+          onBlockScrolled?.();
+        }, 100);
+      }
+    }
+  }, [targetBlockId, blocks.length, loading, onBlockScrolled]);
 
   /**
    * URLを抽出するヘルパー

@@ -9,7 +9,7 @@ interface SearchResultsProps {
   results: SearchResultsType | null;
   loading: boolean;
   query: string;
-  onSelectBlock: (date: string) => void;
+  onSelectBlock: (date: string, blockId: string) => void;
   onSelectEntry: (date: string) => void;
 }
 
@@ -96,7 +96,7 @@ export function SearchResults({
                 return (
                   <button
                     key={block.id}
-                    onClick={() => onSelectBlock(dateKey)}
+                    onClick={() => onSelectBlock(dateKey, block.id)}
                     className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-accent transition-colors text-left"
                   >
                     {getCategoryIcon(block.category)}
