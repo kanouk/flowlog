@@ -5,6 +5,7 @@ import { useEntries, Entry } from '@/hooks/useEntries';
 import { FlowView } from '@/components/flow/FlowView';
 import { StockView } from '@/components/stock/StockView';
 import { DateSelector } from '@/components/flow/DateSelector';
+import { SearchBar } from '@/components/search/SearchBar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -86,6 +87,17 @@ export default function Dashboard() {
     setActiveTab('flow');
   };
 
+  const handleSearchNavigate = (targetDate: string, tab?: 'flow' | 'stock') => {
+    if (targetDate === today) {
+      setSearchParams({});
+    } else {
+      setSearchParams({ date: targetDate });
+    }
+    if (tab) {
+      setActiveTab(tab);
+    }
+  };
+
   const handleSignOut = async () => {
     await signOut();
     navigate('/auth');
@@ -141,6 +153,7 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-2">
+            <SearchBar onNavigateToDate={handleSearchNavigate} />
             <Button
               variant="ghost"
               size="icon"
