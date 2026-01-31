@@ -9,38 +9,45 @@ interface TaskCheckboxProps {
   size?: 'sm' | 'md';
 }
 
-// Confetti particle component - paper confetti style
+// Confetti particle component - paper confetti style with JS-calculated coordinates
 function ConfettiParticles() {
   const particles = Array.from({ length: 16 }, (_, i) => i);
   const colors = [
     'bg-orange-400', 'bg-yellow-400', 'bg-green-400', 'bg-blue-400', 
     'bg-pink-400', 'bg-purple-400', 'bg-red-400', 'bg-cyan-400'
   ];
-  const shapes = ['rounded-full', 'rounded-sm', 'rounded-none']; // circle, square, rectangle
+  const shapes = ['rounded-full', 'rounded-sm', 'rounded-none'];
   
   return (
     <div className="absolute inset-0 pointer-events-none overflow-visible">
       {particles.map((i) => {
-        const angle = (i / 16) * 360 + Math.random() * 20;
+        // Calculate angle and distance with some randomness
+        const angleRad = ((i / 16) * 360 + Math.random() * 20) * (Math.PI / 180);
         const distance = 20 + Math.random() * 25;
+        
+        // Calculate coordinates using JavaScript (avoids CSS cos/sin compatibility issues)
+        const txMid = `${Math.cos(angleRad) * distance * 0.5}px`;
+        const tyMid = `${Math.sin(angleRad) * distance * 0.5 - 10}px`;
+        const txEnd = `${Math.cos(angleRad) * distance}px`;
+        const tyEnd = `${Math.sin(angleRad) * distance + 15}px`;
+        
         const size = Math.random() > 0.5 ? 'w-1.5 h-1.5' : 'w-2 h-1';
         const shape = shapes[i % 3];
         const color = colors[i % colors.length];
-        const delay = i * 25;
-        const duration = 500 + Math.random() * 200;
         
         return (
           <span
             key={i}
-            className={`absolute ${size} ${shape} ${color}`}
+            className={`absolute confetti-particle ${size} ${shape} ${color}`}
             style={{
               left: '50%',
               top: '50%',
-              '--confetti-angle': `${angle}deg`,
-              '--confetti-distance': `${distance}px`,
-              '--confetti-rotation': `${Math.random() * 720 - 360}deg`,
-              animation: `confetti-burst ${duration}ms cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards`,
-              animationDelay: `${delay}ms`,
+              '--tx-mid': txMid,
+              '--ty-mid': tyMid,
+              '--tx-end': txEnd,
+              '--ty-end': tyEnd,
+              '--duration': `${500 + Math.random() * 200}ms`,
+              '--delay': `${i * 25}ms`,
             } as React.CSSProperties}
           />
         );
