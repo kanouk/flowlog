@@ -52,13 +52,11 @@ const highlightMatch = (text: string, query: string) => {
   const parts = text.split(regex);
   
   return parts.map((part, i) => 
-    regex.test(part) ? (
-      <mark key={i} className="bg-primary/20 text-foreground rounded px-0.5">
+    i % 2 === 1 ? (
+      <mark key={i} className="bg-yellow-300 dark:bg-yellow-500/50 text-foreground rounded px-0.5">
         {part}
       </mark>
-    ) : (
-      part
-    )
+    ) : part
   );
 };
 

@@ -34,7 +34,7 @@ function highlightText(text: string, query: string | null | undefined): React.Re
   
   return parts.map((part, i) => 
     i % 2 === 1 ? (
-      <mark key={i} className="bg-primary/30 text-foreground rounded px-0.5">
+      <mark key={i} className="bg-yellow-300 dark:bg-yellow-500/50 text-foreground rounded px-0.5">
         {part}
       </mark>
     ) : part
