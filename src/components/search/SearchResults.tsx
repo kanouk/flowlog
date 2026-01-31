@@ -43,6 +43,25 @@ const truncateText = (text: string | null, maxLength: number = 50) => {
   return text.slice(0, maxLength) + '...';
 };
 
+// マッチしたキーワードをハイライト表示
+const highlightMatch = (text: string, query: string) => {
+  if (!query.trim()) return text;
+  
+  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escapedQuery})`, 'gi');
+  const parts = text.split(regex);
+  
+  return parts.map((part, i) => 
+    regex.test(part) ? (
+      <mark key={i} className="bg-primary/20 text-foreground rounded px-0.5">
+        {part}
+      </mark>
+    ) : (
+      part
+    )
+  );
+};
+
 export function SearchResults({ 
   results, 
   loading, 
@@ -104,7 +123,7 @@ export function SearchResults({
                       {formatDate(block.occurred_at)}
                     </span>
                     <span className="text-sm truncate flex-1">
-                      {truncateText(block.content, 40)}
+                      {highlightMatch(truncateText(block.content, 40), query)}
                     </span>
                   </button>
                 );
@@ -132,7 +151,7 @@ export function SearchResults({
                     {formatDate(entry.date)}
                   </span>
                   <span className="text-sm truncate flex-1">
-                    {truncateText(entry.summary || entry.formatted_content, 40)}
+                    {highlightMatch(truncateText(entry.summary || entry.formatted_content, 40), query)}
                   </span>
                 </button>
               ))}
