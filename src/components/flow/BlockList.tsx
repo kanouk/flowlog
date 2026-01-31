@@ -21,6 +21,24 @@ interface BlockListProps {
   showDelete?: boolean;
   editable?: boolean;
   selectedDate?: string;
+  highlightQuery?: string | null;
+}
+
+// テキスト内のキーワードをハイライト
+function highlightText(text: string, query: string | null | undefined): React.ReactNode {
+  if (!query?.trim()) return text;
+  
+  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escapedQuery})`, 'gi');
+  const parts = text.split(regex);
+  
+  return parts.map((part, i) => 
+    i % 2 === 1 ? (
+      <mark key={i} className="bg-primary/30 text-foreground rounded px-0.5">
+        {part}
+      </mark>
+    ) : part
+  );
 }
 
 // アイコン名をPascalCaseに変換
@@ -130,6 +148,7 @@ export function BlockList({
   showDelete = true,
   editable = true,
   selectedDate,
+  highlightQuery,
 }: BlockListProps) {
   const [modalImage, setModalImage] = useState<string | null>(null);
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
@@ -243,7 +262,7 @@ export function BlockList({
                               block.is_done ? 'line-through text-muted-foreground' : ''
                             }`}
                           >
-                            {block.content}
+                            {highlightText(block.content!, highlightQuery)}
                           </p>
                         )}
 
