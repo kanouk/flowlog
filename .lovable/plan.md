@@ -1,123 +1,145 @@
 
-# グローバル検索機能の実装
+# ブロックへのパーマリンク機能実装
 
 ## 概要
-ヘッダーに配置するグローバル検索バーを実装し、過去のフローログ（ブロック）とストックログ（日記）の両方を横断検索できる機能を追加します。
+検索結果から該当ブロックに直接スクロールできるパーマリンク機能を実装します。既存の `blocks.id`（UUID）を活用し、URLパラメータとして渡すことで特定ブロックへの遷移を実現します。
 
-## 検索対象
+## 実装アプローチ
 
-| 対象 | テーブル | カラム |
-|------|----------|--------|
-| ブロック | `blocks` | `content` |
-| 日記 | `entries` | `formatted_content`, `summary` |
-
-## UI設計
-
-### ヘッダー検索バー
-- 虫眼鏡アイコン付きの検索入力フィールド
-- モバイル: アイコンのみ表示 → タップで検索モーダル展開
-- デスクトップ: 常時表示の検索バー（幅調整）
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│ [Logo] FlowLog        [🔍 検索...]         [⚙️] [🚪]        │
-└─────────────────────────────────────────────────────────────┘
+### URL形式
+```
+/dashboard?date=2026-01-28&block=abc123-uuid
 ```
 
-### 検索結果表示
-- インクリメンタル検索（入力から300ms後に検索実行）
-- ドロップダウン形式で結果を表示（最大20件）
-- 結果クリックで該当日付のFlow/Stockに遷移
-
-### 結果のグルーピング
-
-```text
-┌────────────────────────────────────────────┐
-│ 🔍 「会議」の検索結果                        │
-├────────────────────────────────────────────┤
-│ ■ ブロック (5件)                            │
-│   ├─ 📅 1/28 会議の資料を作成した...          │
-│   ├─ 📝 1/25 チーム会議のメモ...              │
-│   └─ ✅ 1/24 会議室を予約する                 │
-├────────────────────────────────────────────┤
-│ ■ 日記 (2件)                               │
-│   ├─ 📖 1/28 午前中は会議の準備に追われた...    │
-│   └─ 📖 1/25 チーム会議で新プロジェクトの...    │
-└────────────────────────────────────────────┘
-```
+- `date`: 対象日付（既存）
+- `block`: スクロール対象のブロックID（新規追加）
 
 ---
 
-## 技術設計
+## 変更内容
 
-### 1. データベース検索
+### 1. SearchBar.tsx - ブロックID渡し対応
 
-PostgreSQLの `ILIKE` を使用した部分一致検索を実装します。
-
-```sql
--- ブロック検索
-SELECT * FROM blocks
-WHERE user_id = auth.uid()
-  AND content ILIKE '%検索キーワード%'
-ORDER BY occurred_at DESC
-LIMIT 10;
-
--- 日記検索
-SELECT * FROM entries
-WHERE user_id = auth.uid()
-  AND (
-    formatted_content ILIKE '%検索キーワード%'
-    OR summary ILIKE '%検索キーワード%'
-  )
-ORDER BY date DESC
-LIMIT 10;
-```
-
-### 2. 新規フック: `useSearch.ts`
+`onNavigateToDate` のシグネチャを拡張し、オプションでブロックIDを渡せるようにします。
 
 ```typescript
-interface SearchResult {
-  blocks: Block[];
-  entries: Entry[];
-}
+// 変更前
+onNavigateToDate: (date: string, tab?: 'flow' | 'stock') => void;
 
-function useSearch() {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  
-  // デバウンス付き検索
-  const search = useCallback(async (searchQuery: string) => {
-    // ブロックと日記を並行検索
-  }, []);
-  
-  return { query, setQuery, results, loading, search };
+// 変更後
+onNavigateToDate: (date: string, tab?: 'flow' | 'stock', blockId?: string) => void;
+```
+
+`handleSelectBlock` で日付とブロックIDの両方を渡します。
+
+### 2. SearchResults.tsx - ブロックID渡し対応
+
+`onSelectBlock` のコールバックにブロックIDを含めます。
+
+```typescript
+// 変更前
+onSelectBlock: (date: string) => void;
+
+// 変更後
+onSelectBlock: (date: string, blockId: string) => void;
+```
+
+### 3. Dashboard.tsx - URLパラメータ処理
+
+URLから `block` パラメータを読み取り、FlowViewに渡します。
+
+```typescript
+const blockId = searchParams.get('block');
+```
+
+`handleSearchNavigate` を更新してブロックIDをURLに含めます。また、スクロール完了後にURLからブロックIDをクリアします。
+
+### 4. FlowView.tsx - スクロール対象ブロックID対応
+
+新しいprops `targetBlockId` を受け取り、スクロール完了時にコールバックを呼び出します。
+
+```typescript
+interface FlowViewProps {
+  selectedDate: string;
+  onNavigateToDate?: (date: string) => void;
+  targetBlockId?: string | null;        // 新規追加
+  onBlockScrolled?: () => void;         // 新規追加
 }
 ```
 
-### 3. 新規コンポーネント
+`useEffect` でブロックへのスクロール処理を実装します。
 
-| ファイル | 役割 |
-|----------|------|
-| `src/components/search/SearchBar.tsx` | 検索入力UI |
-| `src/components/search/SearchResults.tsx` | 検索結果ドロップダウン |
-| `src/hooks/useSearch.ts` | 検索ロジック |
+### 5. BlockList.tsx - ブロックにDOM ID付与
 
-### 4. Dashboard.tsx への統合
+各ブロック要素に一意のIDを付与してDOM操作でアクセス可能にします。
 
-ヘッダーに `SearchBar` コンポーネントを追加し、検索結果からの遷移をハンドリングします。
+```html
+<div id={`block-${block.id}`} ...>
+```
+
+さらに、ハイライトのためのpropsとスタイルを追加します。
 
 ---
 
-## 実装手順
+## 技術詳細
 
-| # | 内容 |
-|---|------|
-| 1 | `useSearch.ts` フックを作成（ブロック・日記の検索ロジック） |
-| 2 | `SearchBar.tsx` コンポーネントを作成（検索入力UI） |
-| 3 | `SearchResults.tsx` コンポーネントを作成（結果表示） |
-| 4 | `Dashboard.tsx` のヘッダーに検索バーを統合 |
-| 5 | 検索結果クリックで該当日付への遷移を実装 |
+### スクロールロジック（FlowView.tsx）
+
+```typescript
+useEffect(() => {
+  if (targetBlockId && blocks.length > 0 && !loading) {
+    const element = document.getElementById(`block-${targetBlockId}`);
+    if (element) {
+      // 少し遅延を入れてDOMが安定してからスクロール
+      setTimeout(() => {
+        element.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+        // ハイライトアニメーション
+        element.classList.add('block-highlight');
+        setTimeout(() => {
+          element.classList.remove('block-highlight');
+        }, 2000);
+        // URLからblockパラメータをクリア
+        onBlockScrolled?.();
+      }, 100);
+    }
+  }
+}, [targetBlockId, blocks, loading, onBlockScrolled]);
+```
+
+### ハイライトアニメーション（App.css）
+
+```css
+@keyframes block-highlight {
+  0% { box-shadow: 0 0 0 0 rgba(var(--primary), 0.4); }
+  50% { box-shadow: 0 0 0 4px rgba(var(--primary), 0.2); }
+  100% { box-shadow: 0 0 0 0 rgba(var(--primary), 0); }
+}
+
+.block-highlight {
+  animation: block-highlight 2s ease-out;
+}
+```
+
+---
+
+## データフロー
+
+```text
+[検索結果クリック]
+        ↓
+SearchResults.tsx: onSelectBlock(date, blockId)
+        ↓
+SearchBar.tsx: handleSelectBlock → onNavigateToDate(date, 'flow', blockId)
+        ↓
+Dashboard.tsx: handleSearchNavigate → setSearchParams({ date, block: blockId })
+        ↓
+FlowView.tsx: targetBlockId を受け取り → スクロール実行
+        ↓
+Dashboard.tsx: onBlockScrolled → block パラメータをURLから削除
+```
 
 ---
 
@@ -125,8 +147,9 @@ function useSearch() {
 
 | ファイル | 変更内容 |
 |----------|----------|
-| `src/hooks/useSearch.ts` | 新規作成 - 検索ロジック |
-| `src/components/search/SearchBar.tsx` | 新規作成 - 検索入力UI |
-| `src/components/search/SearchResults.tsx` | 新規作成 - 結果ドロップダウン |
-| `src/pages/Dashboard.tsx` | ヘッダーに検索バー追加 |
-
+| `src/components/search/SearchResults.tsx` | `onSelectBlock` にブロックIDを追加 |
+| `src/components/search/SearchBar.tsx` | ブロックIDを上位コンポーネントに渡す |
+| `src/pages/Dashboard.tsx` | URLパラメータ `block` の処理、FlowViewへの渡し |
+| `src/components/flow/FlowView.tsx` | `targetBlockId` props追加、スクロール処理 |
+| `src/components/flow/BlockList.tsx` | ブロック要素にDOM ID付与、ハイライト対応 |
+| `src/App.css` | ハイライトアニメーション追加 |
