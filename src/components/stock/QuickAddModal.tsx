@@ -19,7 +19,7 @@ import { getTodayKey } from '@/lib/dateUtils';
 import { toast } from 'sonner';
 import { BlockCategory, CATEGORY_CONFIG } from '@/lib/categoryUtils';
 
-type QuickAddCategory = 'task' | 'schedule' | 'thought' | 'read_later';
+type QuickAddCategory = 'event' | 'task' | 'schedule' | 'thought' | 'read_later';
 
 interface QuickAddModalProps {
   open: boolean;
@@ -29,6 +29,11 @@ interface QuickAddModalProps {
 }
 
 const MODAL_CONFIG: Record<QuickAddCategory, { title: string; placeholder: string; icon: typeof ListTodo }> = {
+  event: {
+    title: '出来事を追加',
+    placeholder: '今日あった出来事を入力...',
+    icon: CalendarClock,
+  },
   task: {
     title: 'タスクを追加',
     placeholder: 'タスクの内容を入力...',
