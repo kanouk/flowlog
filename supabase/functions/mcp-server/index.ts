@@ -1,16 +1,10 @@
-import { Hono, type Context } from "jsr:@hono/hono@^4.6.5";
-import { cors } from "jsr:@hono/hono@^4.6.5/cors";
-import { McpServer, StreamableHttpTransport } from "npm:mcp-lite@^0.10.0";
-import { createClient } from "npm:@supabase/supabase-js@^2.89.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
 
-const app = new Hono();
-
-// CORS設定
-app.use("/*", cors({
-  origin: "*",
-  allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
-  allowHeaders: ["Content-Type", "Authorization", "mcp-session-id"],
-}));
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, mcp-session-id",
+};
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -285,15 +279,9 @@ async function getEntry(userId: string, date: string) {
   return data;
 }
 
-// MCPサーバーを作成する関数
-function createMcpServer(userId: string) {
-  const mcpServer = new McpServer({
-    name: "flowlog",
-    version: "1.0.0",
-  });
-
-  // 出来事一覧取得
-  mcpServer.tool({
+// MCPツール定義
+const TOOLS = [
+  {
     name: "list_events",
     description: "出来事（event）一覧を取得します",
     inputSchema: {
@@ -306,16 +294,8 @@ function createMcpServer(userId: string) {
         limit: { type: "number", description: "取得件数 (デフォルト: 50)" },
       },
     },
-    handler: async (args: Record<string, unknown>) => {
-      const events = await getBlocks(userId, "event", args as Record<string, string | number | boolean | undefined>);
-      return {
-        content: [{ type: "text", text: JSON.stringify(events, null, 2) }],
-      };
-    },
-  });
-
-  // 出来事追加
-  mcpServer.tool({
+  },
+  {
     name: "add_event",
     description: "出来事を追加します",
     inputSchema: {
@@ -327,21 +307,8 @@ function createMcpServer(userId: string) {
       },
       required: ["content"],
     },
-    handler: async (args: Record<string, unknown>) => {
-      const block = await addBlock(userId, {
-        category: "event",
-        content: args.content as string,
-        occurred_at: args.occurred_at as string | undefined,
-        tag: args.tag as string | undefined,
-      });
-      return {
-        content: [{ type: "text", text: `出来事を追加しました: ${block.id}` }],
-      };
-    },
-  });
-
-  // タスク一覧取得
-  mcpServer.tool({
+  },
+  {
     name: "list_tasks",
     description: "タスク一覧を取得します",
     inputSchema: {
@@ -352,16 +319,8 @@ function createMcpServer(userId: string) {
         limit: { type: "number", description: "取得件数 (デフォルト: 50)" },
       },
     },
-    handler: async (args: Record<string, unknown>) => {
-      const tasks = await getBlocks(userId, "task", args as Record<string, string | number | boolean | undefined>);
-      return {
-        content: [{ type: "text", text: JSON.stringify(tasks, null, 2) }],
-      };
-    },
-  });
-
-  // タスク追加
-  mcpServer.tool({
+  },
+  {
     name: "add_task",
     description: "タスクを追加します",
     inputSchema: {
@@ -372,20 +331,8 @@ function createMcpServer(userId: string) {
       },
       required: ["content"],
     },
-    handler: async (args: Record<string, unknown>) => {
-      const block = await addBlock(userId, {
-        category: "task",
-        content: args.content as string,
-        tag: args.tag as string | undefined,
-      });
-      return {
-        content: [{ type: "text", text: `タスクを追加しました: ${block.id}` }],
-      };
-    },
-  });
-
-  // タスク完了
-  mcpServer.tool({
+  },
+  {
     name: "complete_task",
     description: "タスクを完了/未完了にします",
     inputSchema: {
@@ -396,17 +343,8 @@ function createMcpServer(userId: string) {
       },
       required: ["task_id"],
     },
-    handler: async (args: Record<string, unknown>) => {
-      const isDone = args.is_done !== false;
-      await updateTaskStatus(userId, args.task_id as string, isDone);
-      return {
-        content: [{ type: "text", text: isDone ? "タスクを完了にしました" : "タスクを未完了に戻しました" }],
-      };
-    },
-  });
-
-  // 予定一覧取得
-  mcpServer.tool({
+  },
+  {
     name: "list_schedules",
     description: "予定一覧を取得します",
     inputSchema: {
@@ -418,16 +356,8 @@ function createMcpServer(userId: string) {
         limit: { type: "number", description: "取得件数 (デフォルト: 50)" },
       },
     },
-    handler: async (args: Record<string, unknown>) => {
-      const schedules = await getBlocks(userId, "schedule", args as Record<string, string | number | boolean | undefined>);
-      return {
-        content: [{ type: "text", text: JSON.stringify(schedules, null, 2) }],
-      };
-    },
-  });
-
-  // 予定追加
-  mcpServer.tool({
+  },
+  {
     name: "add_schedule",
     description: "予定を追加します",
     inputSchema: {
@@ -442,26 +372,8 @@ function createMcpServer(userId: string) {
       },
       required: ["title", "starts_at"],
     },
-    handler: async (args: Record<string, unknown>) => {
-      const content = args.details 
-        ? `${args.title}\n${args.details}` 
-        : args.title as string;
-      const block = await addBlock(userId, {
-        category: "schedule",
-        content,
-        starts_at: args.starts_at as string,
-        ends_at: args.ends_at as string | undefined,
-        is_all_day: args.is_all_day as boolean | undefined,
-        tag: args.tag as string | undefined,
-      });
-      return {
-        content: [{ type: "text", text: `予定を追加しました: ${block.id}` }],
-      };
-    },
-  });
-
-  // メモ一覧取得
-  mcpServer.tool({
+  },
+  {
     name: "list_memos",
     description: "メモ一覧を取得します",
     inputSchema: {
@@ -474,16 +386,8 @@ function createMcpServer(userId: string) {
         limit: { type: "number", description: "取得件数 (デフォルト: 50)" },
       },
     },
-    handler: async (args: Record<string, unknown>) => {
-      const memos = await getBlocks(userId, "thought", args as Record<string, string | number | boolean | undefined>);
-      return {
-        content: [{ type: "text", text: JSON.stringify(memos, null, 2) }],
-      };
-    },
-  });
-
-  // メモ追加
-  mcpServer.tool({
+  },
+  {
     name: "add_memo",
     description: "メモを追加します",
     inputSchema: {
@@ -494,20 +398,8 @@ function createMcpServer(userId: string) {
       },
       required: ["content"],
     },
-    handler: async (args: Record<string, unknown>) => {
-      const block = await addBlock(userId, {
-        category: "thought",
-        content: args.content as string,
-        tag: args.tag as string | undefined,
-      });
-      return {
-        content: [{ type: "text", text: `メモを追加しました: ${block.id}` }],
-      };
-    },
-  });
-
-  // あとで読む一覧取得
-  mcpServer.tool({
+  },
+  {
     name: "list_read_later",
     description: "あとで読むリストを取得します",
     inputSchema: {
@@ -518,16 +410,8 @@ function createMcpServer(userId: string) {
         limit: { type: "number", description: "取得件数 (デフォルト: 50)" },
       },
     },
-    handler: async (args: Record<string, unknown>) => {
-      const items = await getBlocks(userId, "read_later", args as Record<string, string | number | boolean | undefined>);
-      return {
-        content: [{ type: "text", text: JSON.stringify(items, null, 2) }],
-      };
-    },
-  });
-
-  // あとで読む追加
-  mcpServer.tool({
+  },
+  {
     name: "add_read_later",
     description: "あとで読むリストにURLを追加します",
     inputSchema: {
@@ -539,23 +423,8 @@ function createMcpServer(userId: string) {
       },
       required: ["url"],
     },
-    handler: async (args: Record<string, unknown>) => {
-      const content = args.comment 
-        ? `${args.url}\n${args.comment}` 
-        : args.url as string;
-      const block = await addBlock(userId, {
-        category: "read_later",
-        content,
-        tag: args.tag as string | undefined,
-      });
-      return {
-        content: [{ type: "text", text: `あとで読むに追加しました: ${block.id}` }],
-      };
-    },
-  });
-
-  // 既読/未読切替
-  mcpServer.tool({
+  },
+  {
     name: "mark_as_read",
     description: "あとで読むアイテムを既読/未読にします",
     inputSchema: {
@@ -566,17 +435,8 @@ function createMcpServer(userId: string) {
       },
       required: ["block_id"],
     },
-    handler: async (args: Record<string, unknown>) => {
-      const isRead = args.is_read !== false;
-      await markAsRead(userId, args.block_id as string, isRead);
-      return {
-        content: [{ type: "text", text: isRead ? "既読にしました" : "未読に戻しました" }],
-      };
-    },
-  });
-
-  // 横断検索
-  mcpServer.tool({
+  },
+  {
     name: "search_blocks",
     description: "全カテゴリを横断してキーワード検索します",
     inputSchema: {
@@ -589,16 +449,8 @@ function createMcpServer(userId: string) {
       },
       required: ["query"],
     },
-    handler: async (args: Record<string, unknown>) => {
-      const results = await searchBlocks(userId, args as { query: string; category?: string; tag?: string; limit?: number });
-      return {
-        content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
-      };
-    },
-  });
-
-  // 日記取得
-  mcpServer.tool({
+  },
+  {
     name: "get_entry",
     description: "指定日の日記（AI整形版）を取得します",
     inputSchema: {
@@ -608,59 +460,240 @@ function createMcpServer(userId: string) {
       },
       required: ["date"],
     },
-    handler: async (args: Record<string, unknown>) => {
+  },
+];
+
+// ツール実行
+async function executeTool(userId: string, toolName: string, args: Record<string, unknown>): Promise<unknown> {
+  switch (toolName) {
+    case "list_events":
+      return await getBlocks(userId, "event", args);
+    
+    case "add_event": {
+      const block = await addBlock(userId, {
+        category: "event",
+        content: args.content as string,
+        occurred_at: args.occurred_at as string | undefined,
+        tag: args.tag as string | undefined,
+      });
+      return { id: block.id, message: "出来事を追加しました" };
+    }
+    
+    case "list_tasks":
+      return await getBlocks(userId, "task", args);
+    
+    case "add_task": {
+      const block = await addBlock(userId, {
+        category: "task",
+        content: args.content as string,
+        tag: args.tag as string | undefined,
+      });
+      return { id: block.id, message: "タスクを追加しました" };
+    }
+    
+    case "complete_task": {
+      const isDone = args.is_done !== false;
+      await updateTaskStatus(userId, args.task_id as string, isDone);
+      return { message: isDone ? "タスクを完了にしました" : "タスクを未完了に戻しました" };
+    }
+    
+    case "list_schedules":
+      return await getBlocks(userId, "schedule", args);
+    
+    case "add_schedule": {
+      const content = args.details 
+        ? `${args.title}\n${args.details}` 
+        : args.title as string;
+      const block = await addBlock(userId, {
+        category: "schedule",
+        content,
+        starts_at: args.starts_at as string,
+        ends_at: args.ends_at as string | undefined,
+        is_all_day: args.is_all_day as boolean | undefined,
+        tag: args.tag as string | undefined,
+      });
+      return { id: block.id, message: "予定を追加しました" };
+    }
+    
+    case "list_memos":
+      return await getBlocks(userId, "thought", args);
+    
+    case "add_memo": {
+      const block = await addBlock(userId, {
+        category: "thought",
+        content: args.content as string,
+        tag: args.tag as string | undefined,
+      });
+      return { id: block.id, message: "メモを追加しました" };
+    }
+    
+    case "list_read_later":
+      return await getBlocks(userId, "read_later", args);
+    
+    case "add_read_later": {
+      const content = args.comment 
+        ? `${args.url}\n${args.comment}` 
+        : args.url as string;
+      const block = await addBlock(userId, {
+        category: "read_later",
+        content,
+        tag: args.tag as string | undefined,
+      });
+      return { id: block.id, message: "あとで読むに追加しました" };
+    }
+    
+    case "mark_as_read": {
+      const isRead = args.is_read !== false;
+      await markAsRead(userId, args.block_id as string, isRead);
+      return { message: isRead ? "既読にしました" : "未読に戻しました" };
+    }
+    
+    case "search_blocks":
+      return await searchBlocks(userId, args as { query: string; category?: string; tag?: string; limit?: number });
+    
+    case "get_entry": {
       const entry = await getEntry(userId, args.date as string);
       if (!entry) {
-        return { content: [{ type: "text", text: "日記がありません" }] };
+        return { message: "日記がありません" };
       }
       return {
-        content: [{
-          type: "text",
-          text: JSON.stringify({
-            date: entry.date,
-            summary: entry.summary,
-            formatted_content: entry.formatted_content,
-            score: entry.score,
-            score_details: entry.score_details,
-          }, null, 2),
-        }],
+        date: entry.date,
+        summary: entry.summary,
+        formatted_content: entry.formatted_content,
+        score: entry.score,
+        score_details: entry.score_details,
       };
-    },
-  });
-
-  return mcpServer;
+    }
+    
+    default:
+      throw new Error(`Unknown tool: ${toolName}`);
+  }
 }
 
-// MCPトランスポート
-const transport = new StreamableHttpTransport();
-
-// ヘルスチェック
-app.get("/mcp-server/health", (c: Context) => {
-  return c.json({ status: "ok", version: "1.0.0" });
-});
-
-// MCPエンドポイント
-app.all("/mcp-server/mcp/*", async (c: Context) => {
-  const authHeader = c.req.header("Authorization");
-  const userId = await authenticateUser(authHeader);
+// MCP JSON-RPCハンドラ
+async function handleMcpRequest(userId: string, body: unknown): Promise<unknown> {
+  const request = body as { jsonrpc: string; id?: string | number; method: string; params?: unknown };
   
-  if (!userId) {
-    return c.json({ error: "Unauthorized" }, 401);
+  if (request.jsonrpc !== "2.0") {
+    return { jsonrpc: "2.0", id: request.id, error: { code: -32600, message: "Invalid Request" } };
   }
   
-  const mcpServer = createMcpServer(userId);
-  
-  // パスを調整
-  const url = new URL(c.req.url);
-  url.pathname = url.pathname.replace(/^\/mcp-server\/mcp/, "/mcp");
-  const modifiedRequest = new Request(url.toString(), c.req.raw);
-  
-  return await transport.handleRequest(modifiedRequest, mcpServer);
-});
+  try {
+    switch (request.method) {
+      case "initialize":
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            protocolVersion: "2024-11-05",
+            capabilities: {
+              tools: { listChanged: false },
+            },
+            serverInfo: {
+              name: "flowlog",
+              version: "1.0.0",
+            },
+          },
+        };
+      
+      case "notifications/initialized":
+        return null; // No response for notifications
+      
+      case "tools/list":
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: { tools: TOOLS },
+        };
+      
+      case "tools/call": {
+        const params = request.params as { name: string; arguments?: Record<string, unknown> };
+        const result = await executeTool(userId, params.name, params.arguments || {});
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          },
+        };
+      }
+      
+      default:
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32601, message: "Method not found" },
+        };
+    }
+  } catch (error) {
+    return {
+      jsonrpc: "2.0",
+      id: request.id,
+      error: { code: -32000, message: error instanceof Error ? error.message : "Unknown error" },
+    };
+  }
+}
 
-// フォールバック
-app.all("*", (c: Context) => {
-  return c.json({ error: "Not Found", path: c.req.path }, 404);
+Deno.serve(async (req) => {
+  const url = new URL(req.url);
+  const path = url.pathname;
+  
+  // CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+  
+  // Health check
+  if (path.endsWith("/health")) {
+    return new Response(JSON.stringify({ status: "ok", version: "1.0.0" }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  // MCP endpoint
+  if (path.endsWith("/mcp") || path.includes("/mcp/")) {
+    const authHeader = req.headers.get("Authorization");
+    const userId = await authenticateUser(authHeader ?? undefined);
+    
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
+    if (req.method === "POST") {
+      try {
+        const body = await req.json();
+        const response = await handleMcpRequest(userId, body);
+        
+        if (response === null) {
+          return new Response(null, { status: 204, headers: corsHeaders });
+        }
+        
+        return new Response(JSON.stringify(response), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          error: { code: -32700, message: "Parse error" },
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+    
+    // GET for SSE (not implemented, return method not allowed)
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  return new Response(JSON.stringify({ error: "Not Found", path }), {
+    status: 404,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 });
-
-Deno.serve(app.fetch);
