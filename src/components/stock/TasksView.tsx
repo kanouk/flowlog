@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Loader2, CheckSquare } from 'lucide-react';
+import { Loader2, CheckSquare, Plus } from 'lucide-react';
 import { icons } from 'lucide-react';
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { TagFilterDropdown } from './TagFilterDropdown';
 import { BlockEditModal } from '@/components/flow/BlockEditModal';
+import { QuickAddModal } from './QuickAddModal';
 import { toast } from 'sonner';
 
 type TaskFilter = 'all' | 'incomplete';
@@ -35,6 +36,7 @@ export function TasksView() {
   const [filter, setFilter] = useState<TaskFilter>('all');
   const [tagFilter, setTagFilter] = useState<TagFilter>('all');
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -191,6 +193,14 @@ export function TasksView() {
               未完了 {incompleteCount}件 / 完了 {completedCount}件
             </p>
           </div>
+          <Button
+            size="sm"
+            onClick={() => setShowAddModal(true)}
+            className="bg-orange-500 hover:bg-orange-600 text-white gap-1"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">追加</span>
+          </Button>
         </div>
         
         {/* Filters */}
@@ -316,6 +326,22 @@ export function TasksView() {
           onDelete={handleEditDelete}
         />
       )}
+
+      {/* 追加モーダル */}
+      <QuickAddModal
+        open={showAddModal}
+        onOpenChange={setShowAddModal}
+        category="task"
+        onBlockAdded={(block) => {
+          setBlocks(prev => {
+            const updated = [block, ...prev];
+            return updated.sort((a, b) => {
+              if (a.is_done !== b.is_done) return a.is_done ? 1 : -1;
+              return parseTimestamp(b.occurred_at).getTime() - parseTimestamp(a.occurred_at).getTime();
+            });
+          });
+        }}
+      />
     </div>
   );
 }

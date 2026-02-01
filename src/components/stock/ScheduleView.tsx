@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { CalendarClock, ChevronDown, ChevronUp, ChevronRight } from 'lucide-react';
+import { CalendarClock, ChevronDown, ChevronUp, ChevronRight, Plus } from 'lucide-react';
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { BlockEditModal } from '@/components/flow/BlockEditModal';
+import { Button } from '@/components/ui/button';
 import { formatScheduleRange, CATEGORY_CONFIG } from '@/lib/categoryUtils';
 import { TagFilterDropdown } from './TagFilterDropdown';
+import { QuickAddModal } from './QuickAddModal';
 
 // コンテンツから1行目（タイトル）と残り（詳細）を分離
 const parseContent = (content: string | null): { title: string; details: string | null } => {
@@ -22,6 +24,7 @@ export function ScheduleView() {
   const [showPast, setShowPast] = useState(false);
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
   const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set());
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const loadBlocks = useCallback(async () => {
     setLoading(true);
@@ -164,9 +167,17 @@ export function ScheduleView() {
 
   return (
     <div className="space-y-4">
-      {/* フィルタ */}
-      <div className="flex items-center gap-2">
+      {/* Header with Add Button */}
+      <div className="flex items-center justify-between gap-2">
         <TagFilterDropdown value={filterTag} onChange={setFilterTag} />
+        <Button
+          size="sm"
+          onClick={() => setShowAddModal(true)}
+          className="bg-cyan-500 hover:bg-cyan-600 text-white gap-1"
+        >
+          <Plus className="h-4 w-4" />
+          <span className="hidden sm:inline">追加</span>
+        </Button>
       </div>
 
       {/* 未来のスケジュール */}
@@ -218,6 +229,23 @@ export function ScheduleView() {
           }}
         />
       )}
+
+      {/* 追加モーダル */}
+      <QuickAddModal
+        open={showAddModal}
+        onOpenChange={setShowAddModal}
+        category="schedule"
+        onBlockAdded={(block) => {
+          setBlocks(prev => {
+            const updated = [...prev, block];
+            return updated.sort((a, b) => {
+              const aTime = a.starts_at ? new Date(a.starts_at).getTime() : 0;
+              const bTime = b.starts_at ? new Date(b.starts_at).getTime() : 0;
+              return aTime - bTime;
+            });
+          });
+        }}
+      />
     </div>
   );
 }
