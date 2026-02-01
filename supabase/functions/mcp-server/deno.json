@@ -1,0 +1,8 @@
+{
+  "nodeModulesDir": "auto",
+  "imports": {
+    "hono": "jsr:@hono/hono@^4.6.5",
+    "mcp-lite": "npm:mcp-lite@^0.10.0",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@^2.89.0"
+  }
+}

@@ -217,6 +217,33 @@ export type Database = {
         }
         Relationships: []
       }
+      user_api_tokens: {
+        Row: {
+          created_at: string
+          id: string
+          last_used_at: string | null
+          name: string
+          token_hash: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_used_at?: string | null
+          name?: string
+          token_hash: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_used_at?: string | null
+          name?: string
+          token_hash?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
