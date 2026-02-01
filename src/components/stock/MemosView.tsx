@@ -1,11 +1,13 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Loader2, Brain } from 'lucide-react';
+import { Loader2, Brain, Plus } from 'lucide-react';
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
+import { Button } from '@/components/ui/button';
 import { formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
 import { BlockTag, TAG_CONFIG, TAGS } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { TagFilterDropdown } from './TagFilterDropdown';
 import { BlockEditModal } from '@/components/flow/BlockEditModal';
+import { QuickAddModal } from './QuickAddModal';
 import { icons } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -30,6 +32,7 @@ export function MemosView() {
   const [loading, setLoading] = useState(true);
   const [tagFilter, setTagFilter] = useState<TagFilter>('all');
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const loadMemos = useCallback(async () => {
     setLoading(true);
@@ -137,6 +140,14 @@ export function MemosView() {
               {filteredMemos.length}件{tagFilter !== 'all' && ` / 全${memos.length}件`}
             </p>
           </div>
+          <Button
+            size="sm"
+            onClick={() => setShowAddModal(true)}
+            className="bg-purple-500 hover:bg-purple-600 text-white gap-1"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">追加</span>
+          </Button>
         </div>
         
         {/* Tag Filter Dropdown */}
@@ -223,6 +234,21 @@ export function MemosView() {
           onDelete={handleEditDelete}
         />
       )}
+
+      {/* 追加モーダル */}
+      <QuickAddModal
+        open={showAddModal}
+        onOpenChange={setShowAddModal}
+        category="thought"
+        onBlockAdded={(block) => {
+          setMemos(prev => {
+            const updated = [block, ...prev];
+            return updated.sort((a, b) => 
+              parseTimestamp(b.occurred_at).getTime() - parseTimestamp(a.occurred_at).getTime()
+            );
+          });
+        }}
+      />
     </div>
   );
 }

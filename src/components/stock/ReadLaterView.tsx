@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
-import { Loader2, Bookmark, ExternalLink, Sparkles, RefreshCw, FileText, Circle, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Loader2, Bookmark, ExternalLink, Sparkles, RefreshCw, FileText, Circle, CheckCircle2, AlertCircle, Plus } from 'lucide-react';
 import { icons } from 'lucide-react';
 import { useEntries, Block, UrlMetadata } from '@/hooks/useEntries';
-import { formatTimeJST, formatDateJST } from '@/lib/dateUtils';
+import { formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
 import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { TagFilterDropdown } from './TagFilterDropdown';
+import { QuickAddModal } from './QuickAddModal';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -71,6 +72,7 @@ export function ReadLaterView() {
   const [tagFilter, setTagFilter] = useState<TagFilter>('all');
   const [readFilter, setReadFilter] = useState<ReadFilter>('all');
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -226,6 +228,14 @@ export function ReadLaterView() {
               {filteredBlocks.length}件表示 / 未読 {unreadCount}件 ・ 既読 {readCount}件
             </p>
           </div>
+          <Button
+            size="sm"
+            onClick={() => setShowAddModal(true)}
+            className="bg-green-500 hover:bg-green-600 text-white gap-1"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">追加</span>
+          </Button>
         </div>
         
         {/* Filters */}
@@ -444,6 +454,21 @@ export function ReadLaterView() {
           })}
         </div>
       )}
+
+      {/* 追加モーダル */}
+      <QuickAddModal
+        open={showAddModal}
+        onOpenChange={setShowAddModal}
+        category="read_later"
+        onBlockAdded={(block) => {
+          setBlocks(prev => {
+            const updated = [block, ...prev];
+            return updated.sort((a, b) => 
+              parseTimestamp(b.occurred_at).getTime() - parseTimestamp(a.occurred_at).getTime()
+            );
+          });
+        }}
+      />
     </div>
   );
 }
