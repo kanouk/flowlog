@@ -2,19 +2,21 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, User, LogOut, Loader2, Tag, Sparkles, Target, ChevronRight } from 'lucide-react';
+import { ChevronLeft, User, LogOut, Loader2, Tag, Sparkles, Target, ChevronRight, Plug } from 'lucide-react';
 import { AISettingsSection } from '@/components/settings/AISettingsSection';
 import { ScoreSettingsSection } from '@/components/settings/ScoreSettingsSection';
 import { TagManagementSection } from '@/components/settings/TagManagementSection';
+import { McpSettingsSection } from '@/components/settings/McpSettingsSection';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
-type SettingsSection = 'tags' | 'score' | 'ai' | 'account';
+type SettingsSection = 'tags' | 'score' | 'ai' | 'mcp' | 'account';
 
 const SECTIONS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
   { id: 'tags', label: 'タグ管理', icon: Tag },
   { id: 'score', label: '今日の得点', icon: Target },
   { id: 'ai', label: '生成AI設定', icon: Sparkles },
+  { id: 'mcp', label: 'MCP連携', icon: Plug },
   { id: 'account', label: 'アカウント', icon: User },
 ];
 
@@ -105,6 +107,8 @@ export default function Settings() {
         return <ScoreSettingsSection />;
       case 'ai':
         return <AISettingsSection />;
+      case 'mcp':
+        return <McpSettingsSection />;
       case 'account':
         return (
           <section className="space-y-6">
