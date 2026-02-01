@@ -1,7 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { format } from 'date-fns';
-import { ja } from 'date-fns/locale';
-import { Loader2, CalendarDays, Sun, ChevronLeft } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { FlowInput } from '@/components/flow/FlowInput';
 import { BlockList } from '@/components/flow/BlockList';
 import { TimeQuestion, getTimeFromTimeframe, Timeframe } from '@/components/flow/TimeQuestion';
@@ -367,8 +365,6 @@ export function FlowView({ selectedDate, onNavigateToDate, targetBlockId, onBloc
     }
   };
 
-  const formattedDate = format(new Date(selectedDate), 'M月d日（E）', { locale: ja });
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -379,45 +375,6 @@ export function FlowView({ selectedDate, onNavigateToDate, targetBlockId, onBloc
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className={`flex items-center gap-4 p-5 rounded-xl border ${isToday ? 'bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20' : 'bg-muted/30 border-border'}`}>
-        <div className={`flex items-center justify-center w-12 h-12 rounded-xl ${isToday ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>
-          {isToday ? <Sun className="h-6 w-6" /> : <CalendarDays className="h-6 w-6" />}
-        </div>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-semibold text-foreground">
-              {isToday ? '今日のログ' : formattedDate}
-            </h2>
-            {isToday ? (
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/15 text-primary">
-                今日
-              </span>
-            ) : (
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground">
-                過去
-              </span>
-            )}
-          </div>
-          {isToday && (
-            <p className="text-muted-foreground mt-1 text-sm">
-              {formattedDate}
-            </p>
-          )}
-        </div>
-        
-        {/* 今日に戻るボタン（過去日のみ表示） */}
-        {!isToday && (
-          <button
-            onClick={() => onNavigateToDate?.(today)}
-            className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            今日に戻る
-          </button>
-        )}
-      </div>
-
       {/* Input Form */}
       <FlowInput 
         onSubmit={handleAddBlock}

@@ -1,20 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useEntries, Entry } from '@/hooks/useEntries';
 import { FlowView } from '@/components/flow/FlowView';
 import { StockView } from '@/components/stock/StockView';
-import { DateSelector } from '@/components/flow/DateSelector';
+import { DateNavigation } from '@/components/flow/DateNavigation';
 import { SearchBar } from '@/components/search/SearchBar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { LogOut, Calendar, Settings, Menu, PenLine, FileText } from 'lucide-react';
+import { LogOut, Settings, PenLine, FileText } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import { getTodayKey } from '@/lib/dateUtils';
-import { useSwipeGesture } from '@/hooks/useSwipeGesture';
 import { useIsMobile } from '@/hooks/use-mobile';
 import logoImage from '@/assets/logo.png';
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -23,7 +22,6 @@ export default function Dashboard() {
   
   const [entries, setEntries] = useState<Entry[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('flow');
   const [searchQuery, setSearchQuery] = useState<string | null>(null);
   const isMobile = useIsMobile();
@@ -32,20 +30,10 @@ export default function Dashboard() {
   const selectedDate = searchParams.get('date') || today;
   const targetBlockId = searchParams.get('block');
 
-  // モバイルでスワイプジェスチャーによるサイドメニュー開閉
-  useSwipeGesture({
-    onSwipeRight: () => {
-      if (isMobile && !sidebarOpen) {
-        setSidebarOpen(true);
-      }
-    },
-    onSwipeLeft: () => {
-      if (isMobile && sidebarOpen) {
-        setSidebarOpen(false);
-      }
-    },
-    minSwipeDistance: 50,
-  });
+  // カレンダー用：エントリがある日付のリスト
+  const datesWithEntries = useMemo(() => {
+    return entries.map(e => e.date);
+  }, [entries]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -69,7 +57,6 @@ export default function Dashboard() {
     } else {
       setSearchParams({ date });
     }
-    setSidebarOpen(false);
   };
 
   const handleNavigateToDate = (targetDate: string) => {
@@ -135,36 +122,22 @@ export default function Dashboard() {
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b border-border">
         <div className="container max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* Mobile menu - only show in Flow tab */}
-            {activeTab === 'flow' && (
-              <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" className="md:hidden">
-                    <Menu className="h-5 w-5" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="left" className="w-80">
-                  <SheetHeader>
-                    <SheetTitle className="text-left">ログ一覧</SheetTitle>
-                  </SheetHeader>
-                  <div className="mt-6">
-                    <DateSelector 
-                      entries={entries} 
-                      onSelect={handleDateSelect}
-                      selectedDate={selectedDate}
-                    />
-                  </div>
-                </SheetContent>
-              </Sheet>
-            )}
-            
             <button 
               onClick={handleLogoClick}
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             >
               <img src={logoImage} alt="FlowLog" className="h-7 w-7" />
-              <h1 className="text-xl font-semibold text-gradient">FlowLog</h1>
+              <h1 className="text-xl font-semibold text-gradient hidden sm:block">FlowLog</h1>
             </button>
+            
+            {/* Date Navigation - Flow tab only */}
+            {activeTab === 'flow' && (
+              <DateNavigation
+                selectedDate={selectedDate}
+                onDateChange={handleDateSelect}
+                datesWithEntries={datesWithEntries}
+              />
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -205,34 +178,14 @@ export default function Dashboard() {
           )}
 
           <TabsContent value="flow" className="mt-0">
-            <div className="flex gap-8">
-              {/* Sidebar - Desktop (Flow tab only) */}
-              <aside className="hidden md:block w-64 flex-shrink-0">
-                <div className="sticky top-24 glass-card rounded-2xl p-4">
-                  <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">ログ一覧</span>
-                  </div>
-                  <DateSelector 
-                    entries={entries} 
-                    onSelect={handleDateSelect}
-                    selectedDate={selectedDate}
-                  />
-                </div>
-              </aside>
-
-              {/* Main FlowView */}
-              <main className="flex-1 min-w-0">
-                <FlowView 
-                  selectedDate={selectedDate} 
-                  onNavigateToDate={handleNavigateToDate}
-                  targetBlockId={targetBlockId}
-                  onBlockScrolled={handleBlockScrolled}
-                  searchQuery={searchQuery}
-                  onSearchCleared={() => setSearchQuery(null)}
-                />
-              </main>
-            </div>
+            <FlowView 
+              selectedDate={selectedDate} 
+              onNavigateToDate={handleNavigateToDate}
+              targetBlockId={targetBlockId}
+              onBlockScrolled={handleBlockScrolled}
+              searchQuery={searchQuery}
+              onSearchCleared={() => setSearchQuery(null)}
+            />
           </TabsContent>
 
           <TabsContent value="stock" className="mt-0">
