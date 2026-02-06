@@ -4,7 +4,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEntries, Entry } from '@/hooks/useEntries';
 import { FlowView } from '@/components/flow/FlowView';
 import { StockView } from '@/components/stock/StockView';
-import { DateNavigation } from '@/components/flow/DateNavigation';
 import { SearchBar } from '@/components/search/SearchBar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -121,24 +120,13 @@ export default function Dashboard() {
       {/* Header */}
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b border-border">
         <div className="container max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={handleLogoClick}
-              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-            >
-              <img src={logoImage} alt="FlowLog" className="h-7 w-7" />
-              <h1 className="text-xl font-semibold text-gradient hidden sm:block">FlowLog</h1>
-            </button>
-            
-            {/* Date Navigation - Flow tab only */}
-            {activeTab === 'flow' && (
-              <DateNavigation
-                selectedDate={selectedDate}
-                onDateChange={handleDateSelect}
-                datesWithEntries={datesWithEntries}
-              />
-            )}
-          </div>
+          <button 
+            onClick={handleLogoClick}
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+          >
+            <img src={logoImage} alt="FlowLog" className="h-7 w-7" />
+            <h1 className="text-xl font-semibold text-gradient hidden sm:block">FlowLog</h1>
+          </button>
 
           <div className="flex items-center gap-2">
             <SearchBar onNavigateToDate={handleSearchNavigate} />
@@ -181,6 +169,8 @@ export default function Dashboard() {
             <FlowView 
               selectedDate={selectedDate} 
               onNavigateToDate={handleNavigateToDate}
+              onDateChange={handleDateSelect}
+              datesWithEntries={datesWithEntries}
               targetBlockId={targetBlockId}
               onBlockScrolled={handleBlockScrolled}
               searchQuery={searchQuery}
