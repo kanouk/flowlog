@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import { FlowInput } from '@/components/flow/FlowInput';
 import { BlockList } from '@/components/flow/BlockList';
+import { DateNavigation } from '@/components/flow/DateNavigation';
 import { TimeQuestion, getTimeFromTimeframe, Timeframe } from '@/components/flow/TimeQuestion';
 import { useEntries, Block, Entry, AddBlockMode, BlockUpdatePayload, TimeQuestion as TimeQuestionType } from '@/hooks/useEntries';
 import { toast } from 'sonner';
@@ -12,6 +13,8 @@ import { arrayMove } from '@dnd-kit/sortable';
 interface FlowViewProps {
   selectedDate: string;
   onNavigateToDate?: (date: string) => void;
+  onDateChange: (date: string) => void;
+  datesWithEntries?: string[];
   targetBlockId?: string | null;
   onBlockScrolled?: () => void;
   searchQuery?: string | null;
@@ -29,7 +32,7 @@ function sortBlocksDesc(blocks: Block[]): Block[] {
   });
 }
 
-export function FlowView({ selectedDate, onNavigateToDate, targetBlockId, onBlockScrolled, searchQuery, onSearchCleared }: FlowViewProps) {
+export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWithEntries = [], targetBlockId, onBlockScrolled, searchQuery, onSearchCleared }: FlowViewProps) {
   const today = getTodayKey();
   const isToday = selectedDate === today;
 
@@ -375,6 +378,15 @@ export function FlowView({ selectedDate, onNavigateToDate, targetBlockId, onBloc
 
   return (
     <div className="space-y-6">
+      {/* Date Navigation - 入力フォームの上 */}
+      <div className="flex items-center justify-center pb-2 border-b border-border">
+        <DateNavigation 
+          selectedDate={selectedDate}
+          onDateChange={onDateChange}
+          datesWithEntries={datesWithEntries}
+        />
+      </div>
+
       {/* Input Form */}
       <FlowInput 
         onSubmit={handleAddBlock}
