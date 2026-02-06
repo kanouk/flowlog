@@ -1,11 +1,38 @@
 
-# FlowビューのX風レイアウト変更（再実装）
+# 日付ナビゲーションの配置変更
 
-## 問題の概要
-前回の変更が適用されていないため、以下の再実装が必要です：
-- 左サイドバーとモバイルシートメニューの削除
-- ヘッダーへの日付ナビゲーション追加
-- FlowView内のヘッダーセクション削除
+## 概要
+日付ナビゲーションをヘッダーから FlowView 内の入力フォームの上に移動し、Stock ビューと同様のレイアウトに統一します。
+
+---
+
+## 変更内容
+
+### Before（現在）
+```text
+┌────────────────────────────────────────────────────┐
+│ [FlowLog]  [◀] 今日 [📅]          [🔍] [⚙] [→]   │  ← ヘッダーに日付ナビ
+├────────────────────────────────────────────────────┤
+│    入力フォーム                                    │
+│    ───────────────                                │
+│    今日のログ 3件                                  │
+│    ログ一覧                                        │
+└────────────────────────────────────────────────────┘
+```
+
+### After（変更後）
+```text
+┌────────────────────────────────────────────────────┐
+│ [FlowLog]                         [🔍] [⚙] [→]   │  ← シンプルなヘッダー
+├────────────────────────────────────────────────────┤
+│    [◀] 今日 [▶] [今日] [📅]                       │  ← 日付ナビがここに
+│    ───────────────                                │
+│    入力フォーム                                    │
+│    ───────────────                                │
+│    今日のログ 3件                                  │
+│    ログ一覧                                        │
+└────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -13,84 +40,67 @@
 
 | ファイル | 変更内容 |
 |----------|----------|
-| `src/components/flow/DateNavigation.tsx` | 新規作成 |
-| `src/pages/Dashboard.tsx` | サイドバー削除、日付ナビ追加 |
-| `src/components/flow/FlowView.tsx` | ヘッダーセクション削除 |
+| `src/pages/Dashboard.tsx` | ヘッダーから DateNavigation を削除 |
+| `src/components/flow/FlowView.tsx` | FlowInput の上に DateNavigation を追加 |
 
 ---
 
-## 1. DateNavigation.tsx（新規作成）
+## 詳細な変更
 
+### 1. Dashboard.tsx
+- ヘッダーから `DateNavigation` コンポーネントを削除
+- `DateNavigation` のインポートを削除（FlowView に移動）
+- `datesWithEntries` の計算は FlowView に `entries` を渡すか、FlowView 内で計算
+
+### 2. FlowView.tsx
+- `DateNavigation` をインポート
+- FlowInput の上に DateNavigation を配置
+- `datesWithEntries` をローカルで計算（または props で受け取る）
+- props に `onDateChange` と `datesWithEntries` を追加
+
+---
+
+## レイアウト
+
+```tsx
+// FlowView.tsx
+return (
+  <div className="space-y-6">
+    {/* Date Navigation - 入力フォームの上 */}
+    <div className="flex items-center justify-center pb-2 border-b border-border">
+      <DateNavigation 
+        selectedDate={selectedDate}
+        onDateChange={onDateChange}
+        datesWithEntries={datesWithEntries}
+      />
+    </div>
+
+    {/* Input Form */}
+    <FlowInput ... />
+
+    {/* 時刻質問エリア */}
+    ...
+
+    {/* Section Header + Block List */}
+    ...
+  </div>
+);
+```
+
+---
+
+## Props の変更
+
+### FlowView
 ```typescript
-// 日付ナビゲーションコンポーネント
-// - 前日/次日ボタン
-// - 日付表示（今日 or M/d（E））
-// - 今日ボタン（過去日のみ表示）
-// - カレンダーポップオーバー
+interface FlowViewProps {
+  selectedDate: string;
+  onNavigateToDate?: (date: string) => void;
+  onDateChange: (date: string) => void;  // 追加
+  datesWithEntries?: string[];           // 追加
+  targetBlockId?: string | null;
+  onBlockScrolled?: () => void;
+  searchQuery?: string | null;
+  onSearchCleared?: () => void;
+}
 ```
-
----
-
-## 2. Dashboard.tsx 変更内容
-
-### 削除する要素
-- `Sheet`, `SheetContent`, `SheetHeader`, `SheetTitle`, `SheetTrigger` インポート
-- `Menu` アイコンインポート
-- `useSwipeGesture` 関連
-- `sidebarOpen` state
-- モバイルのサイドバーシート（140-159行目）
-- デスクトップのサイドバー（209-222行目）
-
-### 追加する要素
-- `DateNavigation` コンポーネントをインポート
-- ヘッダーにDateNavigationを配置（ロゴの右側、Flowタブ時のみ表示）
-- `datesWithEntries` の計算（カレンダー用）
-
-### レイアウト変更
-- FlowタブのコンテンツをシンプルにFlowViewのみに
-
----
-
-## 3. FlowView.tsx 変更内容
-
-### 削除する要素
-- `CalendarDays`, `Sun`, `ChevronLeft` インポート
-- ヘッダーセクション（382-419行目）の大きなヘッダーブロック
-
-### 維持する要素
-- 入力フォーム（FlowInput）
-- 時刻質問エリア
-- セクションヘッダー（「今日のログ / この日のログ」）
-- ブロックリスト
-
----
-
-## 完成イメージ
-
-```text
-┌────────────────────────────────────────────────────┐
-│ [FlowLog]  [◀] 今日 [📅]          [🔍] [⚙] [→]   │
-├────────────────────────────────────────────────────┤
-│                                                    │
-│    ┌────────────────────────────────────────┐      │
-│    │ [出来事] [タスク] [予定] [メモ] [あとで] │      │
-│    │ いまなにしてる？                        │      │
-│    │                      [📷] [🖼] [保存]  │      │
-│    └────────────────────────────────────────┘      │
-│                                                    │
-│    ─── 今日のログ 3件 ───                          │
-│                                                    │
-│    ┌────────────────────────────────────────┐      │
-│    │ [出来事] ランチを食べた       12:30    │      │
-│    └────────────────────────────────────────┘      │
-│                                                    │
-└────────────────────────────────────────────────────┘
-```
-
----
-
-## 実装順序
-
-1. `DateNavigation.tsx` を新規作成
-2. `Dashboard.tsx` を更新（サイドバー削除、DateNavigation追加）
-3. `FlowView.tsx` を更新（ヘッダー削除）
