@@ -10,6 +10,7 @@ import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { TagFilterDropdown } from './TagFilterDropdown';
 import { BlockEditModal } from '@/components/flow/BlockEditModal';
 import { QuickAddModal } from './QuickAddModal';
+import { PriorityIndicator } from '@/components/flow/PrioritySelector';
 import { toast } from 'sonner';
 
 type TaskFilter = 'all' | 'incomplete';
@@ -75,7 +76,7 @@ export function TasksView() {
       const updated = prev.map(b => 
         b.id === block.id ? { ...b, ...updates } : b
       );
-      // Re-sort: incomplete first, then by occurred_at/done_at
+      // Re-sort: incomplete first (sorted by priority then occurred_at), completed by done_at
       return updated.sort((a, b) => {
         if (a.is_done !== b.is_done) return a.is_done ? 1 : -1;
         if (a.is_done && b.is_done) {
@@ -83,6 +84,9 @@ export function TasksView() {
           const bTime = b.done_at ? parseTimestamp(b.done_at).getTime() : parseTimestamp(b.occurred_at).getTime();
           return bTime - aTime;
         }
+        // Incomplete: sort by priority DESC, then occurred_at DESC
+        const priorityDiff = (b.priority || 0) - (a.priority || 0);
+        if (priorityDiff !== 0) return priorityDiff;
         return parseTimestamp(b.occurred_at).getTime() - parseTimestamp(a.occurred_at).getTime();
       });
     });
@@ -106,19 +110,22 @@ export function TasksView() {
     if (!editingBlock) return;
     const updated = await updateBlock(editingBlock.id, updates);
     if (updated) {
-      setBlocks(prev => {
-        const mapped = prev.map(b => b.id === editingBlock.id ? updated : b);
-        // 再ソート
-        return mapped.sort((a, b) => {
-          if (a.is_done !== b.is_done) return a.is_done ? 1 : -1;
-          if (a.is_done && b.is_done) {
-            const aTime = a.done_at ? parseTimestamp(a.done_at).getTime() : parseTimestamp(a.occurred_at).getTime();
-            const bTime = b.done_at ? parseTimestamp(b.done_at).getTime() : parseTimestamp(b.occurred_at).getTime();
-            return bTime - aTime;
-          }
-          return parseTimestamp(b.occurred_at).getTime() - parseTimestamp(a.occurred_at).getTime();
-        });
+    setBlocks(prev => {
+      const mapped = prev.map(b => b.id === editingBlock.id ? updated : b);
+      // 再ソート (priority対応)
+      return mapped.sort((a, b) => {
+        if (a.is_done !== b.is_done) return a.is_done ? 1 : -1;
+        if (a.is_done && b.is_done) {
+          const aTime = a.done_at ? parseTimestamp(a.done_at).getTime() : parseTimestamp(a.occurred_at).getTime();
+          const bTime = b.done_at ? parseTimestamp(b.done_at).getTime() : parseTimestamp(b.occurred_at).getTime();
+          return bTime - aTime;
+        }
+        // Incomplete: sort by priority DESC, then occurred_at DESC
+        const priorityDiff = (b.priority || 0) - (a.priority || 0);
+        if (priorityDiff !== 0) return priorityDiff;
+        return parseTimestamp(b.occurred_at).getTime() - parseTimestamp(a.occurred_at).getTime();
       });
+    });
       toast.success('更新しました');
     }
     setEditingBlock(null);
@@ -273,13 +280,19 @@ export function TasksView() {
                   </div>
                   
                   <div className="flex-1">
-                    {hasContent && (
-                      <p className={`text-foreground leading-relaxed whitespace-pre-wrap break-anywhere ${
-                        block.is_done ? 'line-through text-muted-foreground' : ''
-                      }`}>
-                        {block.content}
-                      </p>
-                    )}
+                    <div className="flex items-start gap-2">
+                      {/* Priority Indicator */}
+                      <PriorityIndicator priority={block.priority || 0} className="mt-1 flex-shrink-0" />
+                      <div className="flex-1">
+                        {hasContent && (
+                          <p className={`text-foreground leading-relaxed whitespace-pre-wrap break-anywhere ${
+                            block.is_done ? 'line-through text-muted-foreground' : ''
+                          }`}>
+                            {block.content}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                     
                     {hasImages && (
                       <div className={`grid gap-2 ${hasContent ? 'mt-3' : ''} ${block.images!.length === 1 ? 'grid-cols-1 max-w-xs' : block.images!.length === 2 ? 'grid-cols-2 max-w-sm' : 'grid-cols-3 max-w-md'}`}>
@@ -337,6 +350,9 @@ export function TasksView() {
             const updated = [block, ...prev];
             return updated.sort((a, b) => {
               if (a.is_done !== b.is_done) return a.is_done ? 1 : -1;
+              // Incomplete: sort by priority DESC, then occurred_at DESC
+              const priorityDiff = (b.priority || 0) - (a.priority || 0);
+              if (priorityDiff !== 0) return priorityDiff;
               return parseTimestamp(b.occurred_at).getTime() - parseTimestamp(a.occurred_at).getTime();
             });
           });

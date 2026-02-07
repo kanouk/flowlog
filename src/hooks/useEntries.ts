@@ -38,6 +38,8 @@ export interface Block {
   starts_at: string | null;
   ends_at: string | null;
   is_all_day: boolean;
+  // Task priority (0=none, 1=low, 2=medium, 3=high)
+  priority: number;
 }
 
 export interface Entry {
@@ -67,6 +69,8 @@ export interface BlockUpdatePayload {
   starts_at?: string | null;
   ends_at?: string | null;
   is_all_day?: boolean;
+  // Task priority
+  priority?: number;
 }
 
 export interface GetBlocksByCategoryOptions {
@@ -259,6 +263,7 @@ export function useEntries() {
     starts_at = null,
     ends_at = null,
     is_all_day = false,
+    priority = 0,
   }: { 
     content: string; 
     selectedDate: string; 
@@ -269,6 +274,7 @@ export function useEntries() {
     starts_at?: string | null;
     ends_at?: string | null;
     is_all_day?: boolean;
+    priority?: number;
   }) => {
     if (!userId) return { block: null, navigateToDate: null };
 
@@ -313,6 +319,7 @@ export function useEntries() {
         occurred_at: occurredAt,
         category,
         tag,
+        priority: category === 'task' ? priority : 0,
       };
 
       // スケジュールカテゴリの場合のみスケジュールフィールドを追加
@@ -365,7 +372,7 @@ export function useEntries() {
       
       const oldEntryId = currentBlock?.entry_id;
       
-      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at' | 'images' | 'starts_at' | 'ends_at' | 'is_all_day'>> = {};
+      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at' | 'images' | 'starts_at' | 'ends_at' | 'is_all_day' | 'priority'>> = {};
       
       if (updates.content !== undefined) {
         updateData.content = updates.content;
@@ -394,6 +401,10 @@ export function useEntries() {
       }
       if (updates.is_all_day !== undefined) {
         updateData.is_all_day = updates.is_all_day;
+      }
+      // Priority field
+      if (updates.priority !== undefined) {
+        updateData.priority = updates.priority;
       }
       if (updates.occurred_at) {
         const newDayKey = getOccurredAtDayKey(updates.occurred_at);
