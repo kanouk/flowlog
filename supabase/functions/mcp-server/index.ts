@@ -9,6 +9,9 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+// FlowLogアプリのURL
+const FLOWLOG_APP_URL = "https://flowlog.lovable.app";
+
 // ユーザー認証（APIトークンから）
 async function authenticateUser(authHeader: string | undefined): Promise<string | null> {
   if (!authHeader?.startsWith("Bearer ")) {
@@ -277,6 +280,371 @@ async function getEntry(userId: string, date: string) {
   }
   
   return data;
+}
+
+// ===============================
+// OAuth 2.0 関連
+// ===============================
+
+// ランダムトークン生成
+function generateSecureToken(length: number = 32): string {
+  const array = new Uint8Array(length);
+  crypto.getRandomValues(array);
+  return Array.from(array, b => b.toString(16).padStart(2, "0")).join("");
+}
+
+// SHA-256ハッシュ計算
+async function sha256(text: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Base64URL エンコード
+function base64UrlEncode(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+// PKCE code_challenge 検証
+async function verifyCodeChallenge(
+  codeVerifier: string,
+  codeChallenge: string,
+  method: string
+): Promise<boolean> {
+  if (method === "plain") {
+    return codeVerifier === codeChallenge;
+  }
+  
+  if (method === "S256") {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(codeVerifier);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    const computed = base64UrlEncode(hashBuffer);
+    return computed === codeChallenge;
+  }
+  
+  return false;
+}
+
+// OAuth Server Metadata
+function getOAuthMetadata() {
+  const baseUrl = `${supabaseUrl}/functions/v1/mcp-server`;
+  return {
+    issuer: baseUrl,
+    authorization_endpoint: `${baseUrl}/oauth/authorize`,
+    token_endpoint: `${baseUrl}/oauth/token`,
+    registration_endpoint: `${baseUrl}/oauth/register`,
+    response_types_supported: ["code"],
+    grant_types_supported: ["authorization_code"],
+    code_challenge_methods_supported: ["S256"],
+    token_endpoint_auth_methods_supported: ["none"],
+    scopes_supported: ["mcp:full"],
+  };
+}
+
+// 動的クライアント登録
+async function handleClientRegistration(req: Request): Promise<Response> {
+  try {
+    const body = await req.json();
+    const { client_name, redirect_uris } = body;
+    
+    if (!redirect_uris || !Array.isArray(redirect_uris) || redirect_uris.length === 0) {
+      return new Response(JSON.stringify({ error: "invalid_request", error_description: "redirect_uris is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
+    // クライアントIDを生成（実際のプロダクションでは永続化すべき）
+    const clientId = generateSecureToken(16);
+    
+    return new Response(JSON.stringify({
+      client_id: clientId,
+      client_name: client_name || "Unknown Client",
+      redirect_uris,
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+    }), {
+      status: 201,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch {
+    return new Response(JSON.stringify({ error: "invalid_request" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+}
+
+// 認可エンドポイント（FlowLogアプリにリダイレクト）
+function handleAuthorize(url: URL): Response {
+  const clientId = url.searchParams.get("client_id");
+  const redirectUri = url.searchParams.get("redirect_uri");
+  const responseType = url.searchParams.get("response_type");
+  const scope = url.searchParams.get("scope") || "mcp:full";
+  const state = url.searchParams.get("state");
+  const codeChallenge = url.searchParams.get("code_challenge");
+  const codeChallengeMethod = url.searchParams.get("code_challenge_method") || "S256";
+  
+  // バリデーション
+  if (!clientId) {
+    return new Response(JSON.stringify({ error: "invalid_request", error_description: "client_id is required" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  if (!redirectUri) {
+    return new Response(JSON.stringify({ error: "invalid_request", error_description: "redirect_uri is required" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  if (responseType !== "code") {
+    return new Response(JSON.stringify({ error: "unsupported_response_type" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  // FlowLogアプリの認可画面にリダイレクト
+  const authPageUrl = new URL("/oauth/authorize", FLOWLOG_APP_URL);
+  authPageUrl.searchParams.set("client_id", clientId);
+  authPageUrl.searchParams.set("redirect_uri", redirectUri);
+  authPageUrl.searchParams.set("scope", scope);
+  if (state) authPageUrl.searchParams.set("state", state);
+  if (codeChallenge) {
+    authPageUrl.searchParams.set("code_challenge", codeChallenge);
+    authPageUrl.searchParams.set("code_challenge_method", codeChallengeMethod);
+  }
+  
+  return new Response(null, {
+    status: 302,
+    headers: {
+      ...corsHeaders,
+      Location: authPageUrl.toString(),
+    },
+  });
+}
+
+// トークンエンドポイント
+async function handleToken(req: Request): Promise<Response> {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  
+  // Content-Type によってパースを変える
+  const contentType = req.headers.get("Content-Type") || "";
+  let grantType: string | null = null;
+  let code: string | null = null;
+  let codeVerifier: string | null = null;
+  let redirectUri: string | null = null;
+  
+  if (contentType.includes("application/x-www-form-urlencoded")) {
+    const text = await req.text();
+    const params = new URLSearchParams(text);
+    grantType = params.get("grant_type");
+    code = params.get("code");
+    codeVerifier = params.get("code_verifier");
+    redirectUri = params.get("redirect_uri");
+  } else {
+    try {
+      const body = await req.json();
+      grantType = body.grant_type;
+      code = body.code;
+      codeVerifier = body.code_verifier;
+      redirectUri = body.redirect_uri;
+    } catch {
+      return new Response(JSON.stringify({ error: "invalid_request" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+  
+  if (grantType !== "authorization_code") {
+    return new Response(JSON.stringify({ error: "unsupported_grant_type" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  if (!code) {
+    return new Response(JSON.stringify({ error: "invalid_request", error_description: "code is required" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  // 認可コードを検索
+  const { data: authCode, error: codeError } = await supabase
+    .from("oauth_authorization_codes")
+    .select("*")
+    .eq("code", code)
+    .single();
+  
+  if (codeError || !authCode) {
+    return new Response(JSON.stringify({ error: "invalid_grant", error_description: "Invalid or expired code" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  // 期限切れチェック
+  if (new Date(authCode.expires_at) < new Date()) {
+    // 期限切れコードを削除
+    await supabase.from("oauth_authorization_codes").delete().eq("id", authCode.id);
+    return new Response(JSON.stringify({ error: "invalid_grant", error_description: "Code expired" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  // redirect_uri 検証
+  if (redirectUri && redirectUri !== authCode.redirect_uri) {
+    return new Response(JSON.stringify({ error: "invalid_grant", error_description: "redirect_uri mismatch" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  // PKCE検証（code_challenge がある場合）
+  if (authCode.code_challenge) {
+    if (!codeVerifier) {
+      return new Response(JSON.stringify({ error: "invalid_request", error_description: "code_verifier is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
+    const isValid = await verifyCodeChallenge(
+      codeVerifier,
+      authCode.code_challenge,
+      authCode.code_challenge_method || "S256"
+    );
+    
+    if (!isValid) {
+      return new Response(JSON.stringify({ error: "invalid_grant", error_description: "code_verifier mismatch" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+  
+  // 認可コードを削除（一度だけ使用可能）
+  await supabase.from("oauth_authorization_codes").delete().eq("id", authCode.id);
+  
+  // アクセストークンを生成
+  const accessToken = generateSecureToken(32);
+  const tokenHash = await sha256(accessToken);
+  
+  // APIトークンとして保存
+  const { error: tokenError } = await supabase
+    .from("user_api_tokens")
+    .insert({
+      user_id: authCode.user_id,
+      name: `OAuth: ${authCode.client_id}`,
+      token_hash: tokenHash,
+    });
+  
+  if (tokenError) {
+    return new Response(JSON.stringify({ error: "server_error", error_description: "Failed to create token" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  return new Response(JSON.stringify({
+    access_token: accessToken,
+    token_type: "Bearer",
+    scope: authCode.scope || "mcp:full",
+  }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// 認可コード作成API（フロントエンドから呼ばれる）
+async function handleCreateAuthorizationCode(req: Request): Promise<Response> {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  
+  // ユーザー認証（Supabase Auth JWTを使用）
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  const jwt = authHeader.slice(7);
+  const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
+  
+  if (authError || !user) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  try {
+    const body = await req.json();
+    const { client_id, redirect_uri, scope, state, code_challenge, code_challenge_method } = body;
+    
+    if (!client_id || !redirect_uri) {
+      return new Response(JSON.stringify({ error: "invalid_request" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
+    // 認可コードを生成
+    const code = generateSecureToken(32);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10分後
+    
+    // DBに保存
+    const { error: insertError } = await supabase
+      .from("oauth_authorization_codes")
+      .insert({
+        user_id: user.id,
+        code,
+        client_id,
+        redirect_uri,
+        scope: scope || "mcp:full",
+        state,
+        code_challenge,
+        code_challenge_method,
+        expires_at: expiresAt.toISOString(),
+      });
+    
+    if (insertError) {
+      console.error("Failed to insert auth code:", insertError);
+      return new Response(JSON.stringify({ error: "server_error" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
+    // リダイレクトURLを構築
+    const callbackUrl = new URL(redirect_uri);
+    callbackUrl.searchParams.set("code", code);
+    if (state) callbackUrl.searchParams.set("state", state);
+    
+    return new Response(JSON.stringify({ redirect_url: callbackUrl.toString() }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch {
+    return new Response(JSON.stringify({ error: "invalid_request" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 }
 
 // MCPツール定義
@@ -642,6 +1010,37 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+  
+  // ===== OAuth 2.0 エンドポイント =====
+  
+  // OAuth Server Metadata
+  if (path.endsWith("/.well-known/oauth-authorization-server")) {
+    return new Response(JSON.stringify(getOAuthMetadata()), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  // 動的クライアント登録
+  if (path.endsWith("/oauth/register") && req.method === "POST") {
+    return await handleClientRegistration(req);
+  }
+  
+  // 認可エンドポイント
+  if (path.endsWith("/oauth/authorize") && req.method === "GET") {
+    return handleAuthorize(url);
+  }
+  
+  // トークンエンドポイント
+  if (path.endsWith("/oauth/token") && req.method === "POST") {
+    return await handleToken(req);
+  }
+  
+  // 認可コード作成API（フロントエンドから呼ばれる）
+  if (path.endsWith("/oauth/create-code") && req.method === "POST") {
+    return await handleCreateAuthorizationCode(req);
+  }
+  
+  // ===== 既存のMCPエンドポイント =====
   
   // Health check
   if (path.endsWith("/health")) {
