@@ -1,24 +1,33 @@
-# タスク優先度機能の追加 ✅ 完了
 
+# 日付ナビゲーションの美しいデザインへの刷新
 
-## 概要
-タスクに優先度（高・中・低・なし）を設定できる機能を追加し、未完了タスクを優先度順で並び替えられるようにします。
+## 現状の問題
+- シンプルすぎるデザイン
+- 視覚的なインパクトが弱い
+- 今日と過去日の区別が分かりにくい
 
 ---
 
-## データベース変更
+## デザインコンセプト
 
-### blocks テーブルに priority カラムを追加
-```sql
-ALTER TABLE blocks ADD COLUMN priority integer DEFAULT 0;
+### 新しいレイアウト
+```text
+┌────────────────────────────────────────────────────────────┐
+│                                                            │
+│        ┌─────────────────────────────────────────┐         │
+│        │   ◀   │   ☀️ 今日   2/7（金）   │   ▶   │         │
+│        │       │ ───────────────────── │       │         │
+│        │       │        📅              │       │         │
+│        └─────────────────────────────────────────┘         │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
 ```
 
-| 値 | 意味 |
-|----|------|
-| 0 | なし（デフォルト） |
-| 1 | 低 |
-| 2 | 中 |
-| 3 | 高 |
+### カード型デザイン
+- 背景にグラデーション（今日：primary系、過去：muted系）
+- 角丸のカード形状
+- 今日はアイコン（太陽）と「今日」ラベル
+- 過去は日付を大きく表示
 
 ---
 
@@ -26,124 +35,124 @@ ALTER TABLE blocks ADD COLUMN priority integer DEFAULT 0;
 
 | ファイル | 変更内容 |
 |----------|----------|
-| `src/hooks/useEntries.ts` | Block型・BlockUpdatePayloadにpriority追加 |
-| `src/lib/categoryUtils.ts` | 優先度の定義・設定を追加 |
-| `src/components/stock/TasksView.tsx` | 優先度インジケーター表示、並び替えロジック |
-| `src/components/stock/QuickAddModal.tsx` | タスク追加時に優先度選択UI |
-| `src/components/flow/BlockEditModal.tsx` | タスク編集時に優先度選択UI |
-| `src/components/flow/FlowInput.tsx` | タスクカテゴリ時に優先度選択UI |
+| `src/components/flow/DateNavigation.tsx` | デザイン全面刷新 |
 
 ---
 
-## UI デザイン
+## デザイン詳細
 
-### 優先度セレクター（フラグアイコン）
+### 今日の場合
+```tsx
+<div className="date-nav-card bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
+  <button>◀</button>
+  <div className="text-center">
+    <div className="flex items-center justify-center gap-2">
+      <Sun className="text-primary h-5 w-5" />
+      <span className="text-lg font-semibold text-primary">今日</span>
+    </div>
+    <span className="text-sm text-muted-foreground">2月7日（金）</span>
+  </div>
+  <button disabled>▶</button>
+  <button>📅</button>
+</div>
+```
+
+### 過去日の場合
+```tsx
+<div className="date-nav-card bg-muted/50 border-border">
+  <button>◀</button>
+  <div className="text-center">
+    <span className="text-lg font-semibold">2月6日</span>
+    <span className="text-sm text-muted-foreground">（木）</span>
+  </div>
+  <button>▶</button>
+  <button className="text-primary">今日へ</button>
+  <button>📅</button>
+</div>
+```
+
+---
+
+## スタイリング
+
+### カード全体
+```css
+- px-4 py-3
+- rounded-xl
+- border
+- shadow-sm
+- 今日: グラデーション背景 + primary色のアクセント
+- 過去: muted背景 + subtle border
+```
+
+### ナビゲーションボタン
+```css
+- 円形ボタン（w-10 h-10）
+- ホバー時にスケールアップ
+- 今日: primary色
+- 過去: muted-foreground色
+```
+
+### 日付表示
+```css
+- 2行構成（日付 + 曜日/サブラベル）
+- 今日: アイコン + 「今日」+ 日付
+- 過去: 日付を大きく表示
+```
+
+### アニメーション
+```css
+- ボタンホバー: scale(1.1)
+- カード: subtle shadow on hover
+- 日付変更時: fade transition
+```
+
+---
+
+## 完成イメージ
+
+### 今日
 ```text
-[🏴 なし] [🏳️ 低] [🏴 中] [🔴 高]
+┌──────────────────────────────────────────────────┐
+│                                                  │
+│   ┌──────────────────────────────────────────┐   │
+│   │  (◀)    ☀️ 今日                     (📅) │   │
+│   │         2月7日（金）                     │   │
+│   └──────────────────────────────────────────┘   │
+│         ↑ グラデーション背景（primary系）        │
+└──────────────────────────────────────────────────┘
 ```
 
-フラグアイコンを使用し、色で優先度を区別：
-- **高**: 赤色 (`text-red-500`)
-- **中**: 黄色 (`text-yellow-500`)
-- **低**: 緑色 (`text-green-500`)
-- **なし**: グレー（デフォルト）
-
-### タスク一覧での表示
+### 過去日
 ```text
-┌─────────────────────────────────────────┐
-│ ☐ 🔴 重要なタスク              12:30   │  ← 高優先度（赤フラグ）
-│ ☐ 🟡 中程度のタスク            11:00   │  ← 中優先度（黄フラグ）
-│ ☐ 🟢 軽いタスク               10:00   │  ← 低優先度（緑フラグ）
-│ ☐    普通のタスク               9:00   │  ← 優先度なし
-└─────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│                                                  │
+│   ┌──────────────────────────────────────────┐   │
+│   │  (◀)    2月6日（木）      [今日] (▶)(📅) │   │
+│   └──────────────────────────────────────────┘   │
+│         ↑ muted背景                             │
+└──────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 並び替えロジック
+## 実装ポイント
 
-### 現在の順序
-1. 未完了 → 完了済み
-2. 未完了内: `occurred_at` DESC（新しい順）
-3. 完了内: `done_at` DESC
+1. **カード型コンテナ**
+   - `rounded-xl border shadow-sm`
+   - 条件付きグラデーション背景
 
-### 変更後の順序
-1. 未完了 → 完了済み
-2. 未完了内: **`priority` DESC（高い順）** → `occurred_at` DESC
-3. 完了内: `done_at` DESC（変更なし）
+2. **今日と過去の視覚的区別**
+   - 今日: Sun アイコン + 「今日」ラベル + primary カラー
+   - 過去: 日付のみ + 「今日へ」ボタン
 
----
+3. **ボタンのインタラクション**
+   - ホバー時のスケールアニメーション
+   - disabled 状態の適切な表示
 
-## 実装詳細
+4. **日付のフォーマット**
+   - 今日: "今日" + "M月d日（E）"
+   - 過去: "M月d日（E）"
 
-### 1. categoryUtils.ts に優先度定義を追加
-```typescript
-export type TaskPriority = 0 | 1 | 2 | 3;
-
-export const PRIORITY_CONFIG = {
-  0: { label: 'なし', color: 'text-muted-foreground', bgColor: '' },
-  1: { label: '低', color: 'text-green-500', bgColor: 'bg-green-500/10' },
-  2: { label: '中', color: 'text-yellow-500', bgColor: 'bg-yellow-500/10' },
-  3: { label: '高', color: 'text-red-500', bgColor: 'bg-red-500/10' },
-};
-```
-
-### 2. useEntries.ts の型更新
-```typescript
-export interface Block {
-  // ... existing fields
-  priority: number; // 0-3
-}
-
-export interface BlockUpdatePayload {
-  // ... existing fields
-  priority?: number;
-}
-```
-
-### 3. TasksView.tsx の並び替え更新
-```typescript
-// 未完了タスクの並び替え
-return updated.sort((a, b) => {
-  if (a.is_done !== b.is_done) return a.is_done ? 1 : -1;
-  if (!a.is_done && !b.is_done) {
-    // 優先度で並び替え（高い順）
-    const priorityDiff = (b.priority || 0) - (a.priority || 0);
-    if (priorityDiff !== 0) return priorityDiff;
-  }
-  // 同じ優先度なら日時順
-  return parseTimestamp(b.occurred_at).getTime() - parseTimestamp(a.occurred_at).getTime();
-});
-```
-
-### 4. PrioritySelector コンポーネント（新規）
-```typescript
-// タスクカテゴリ選択時のみ表示
-// 4つのボタン（なし/低/中/高）
-// 選択中はリング＋背景色
-```
-
----
-
-## 表示箇所
-
-| 画面 | 優先度表示 | 優先度設定 |
-|------|----------|----------|
-| Flow入力フォーム（タスク時） | - | ○ |
-| ブロック編集モーダル（タスク時） | - | ○ |
-| QuickAddModal（タスク時） | - | ○ |
-| TasksView 一覧 | ○（フラグアイコン） | - |
-| BlockList（Flow内） | ○（フラグアイコン） | - |
-
----
-
-## 実装順序
-
-1. DBマイグレーション（priority カラム追加）
-2. 型定義更新（useEntries.ts, categoryUtils.ts）
-3. PrioritySelector コンポーネント作成
-4. FlowInput に優先度選択UI追加
-5. BlockEditModal に優先度選択UI追加
-6. QuickAddModal に優先度選択UI追加
-7. TasksView に優先度表示＋並び替えロジック追加
-8. BlockList（Flow）に優先度表示追加
+5. **レスポンシブ対応**
+   - モバイルでもコンパクトに表示
