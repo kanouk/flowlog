@@ -1,158 +1,215 @@
 
-# 日付ナビゲーションの美しいデザインへの刷新
 
-## 現状の問題
-- シンプルすぎるデザイン
-- 視覚的なインパクトが弱い
-- 今日と過去日の区別が分かりにくい
+# REST API の実装
+
+## 概要
+MCPサーバーと同じ機能を提供するREST APIを新規Edge Functionとして実装します。MCPはJSON-RPCベースですが、REST APIはHTTPメソッドとパスベースの直感的なインターフェースを提供します。
 
 ---
 
-## デザインコンセプト
+## APIデザイン
 
-### 新しいレイアウト
+### 認証
+MCPと同じAPIトークン認証を使用：
+```
+Authorization: Bearer <your-api-token>
+```
+
+### ベースURL
+```
+https://wdvwnbeofakzihmjacko.supabase.co/functions/v1/api
+```
+
+---
+
+## エンドポイント一覧
+
+| メソッド | パス | 説明 | MCPツール相当 |
+|---------|------|------|--------------|
+| `GET` | `/events` | 出来事一覧 | list_events |
+| `POST` | `/events` | 出来事追加 | add_event |
+| `GET` | `/tasks` | タスク一覧 | list_tasks |
+| `POST` | `/tasks` | タスク追加 | add_task |
+| `PATCH` | `/tasks/:id/complete` | タスク完了/未完了 | complete_task |
+| `GET` | `/schedules` | 予定一覧 | list_schedules |
+| `POST` | `/schedules` | 予定追加 | add_schedule |
+| `GET` | `/memos` | メモ一覧 | list_memos |
+| `POST` | `/memos` | メモ追加 | add_memo |
+| `GET` | `/read-later` | あとで読む一覧 | list_read_later |
+| `POST` | `/read-later` | あとで読む追加 | add_read_later |
+| `PATCH` | `/read-later/:id/read` | 既読/未読 | mark_as_read |
+| `GET` | `/search` | 検索 | search_blocks |
+| `GET` | `/entries/:date` | 日記取得 | get_entry |
+| `GET` | `/health` | ヘルスチェック | - |
+
+---
+
+## リクエスト/レスポンス例
+
+### 出来事一覧
+```bash
+GET /api/events?date=2026-02-07&limit=20
+
+Response:
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "content": "...",
+      "occurred_at": "...",
+      "tag": "..."
+    }
+  ]
+}
+```
+
+### タスク追加
+```bash
+POST /api/tasks
+Content-Type: application/json
+
+{
+  "content": "買い物に行く",
+  "tag": "personal",
+  "priority": 2
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "message": "タスクを追加しました"
+  }
+}
+```
+
+### タスク完了
+```bash
+PATCH /api/tasks/123e4567-e89b-12d3-a456-426614174000/complete
+Content-Type: application/json
+
+{
+  "is_done": true
+}
+
+Response:
+{
+  "success": true,
+  "message": "タスクを完了にしました"
+}
+```
+
+### 検索
+```bash
+GET /api/search?query=会議&category=event&limit=10
+
+Response:
+{
+  "success": true,
+  "data": [...]
+}
+```
+
+---
+
+## 実装方針
+
+### 1. 新規Edge Function: `supabase/functions/api/index.ts`
+
+### 2. コードの再利用
+MCPサーバーから以下のヘルパー関数をそのまま利用：
+- `authenticateUser` - APIトークン認証
+- `getBlocks` - ブロック取得
+- `addBlock` - ブロック追加
+- `updateTaskStatus` - タスク状態更新
+- `markAsRead` - 既読状態更新
+- `searchBlocks` - 検索
+- `getEntry` - エントリー取得
+
+### 3. Honoルーターを使用
+```typescript
+import { Hono } from "hono";
+
+const app = new Hono();
+
+// Events
+app.get("/events", async (c) => { ... });
+app.post("/events", async (c) => { ... });
+
+// Tasks
+app.get("/tasks", async (c) => { ... });
+app.post("/tasks", async (c) => { ... });
+app.patch("/tasks/:id/complete", async (c) => { ... });
+
+// ... etc
+```
+
+---
+
+## ファイル構成
+
 ```text
-┌────────────────────────────────────────────────────────────┐
-│                                                            │
-│        ┌─────────────────────────────────────────┐         │
-│        │   ◀   │   ☀️ 今日   2/7（金）   │   ▶   │         │
-│        │       │ ───────────────────── │       │         │
-│        │       │        📅              │       │         │
-│        └─────────────────────────────────────────┘         │
-│                                                            │
-└────────────────────────────────────────────────────────────┘
-```
-
-### カード型デザイン
-- 背景にグラデーション（今日：primary系、過去：muted系）
-- 角丸のカード形状
-- 今日はアイコン（太陽）と「今日」ラベル
-- 過去は日付を大きく表示
-
----
-
-## 変更対象ファイル
-
-| ファイル | 変更内容 |
-|----------|----------|
-| `src/components/flow/DateNavigation.tsx` | デザイン全面刷新 |
-
----
-
-## デザイン詳細
-
-### 今日の場合
-```tsx
-<div className="date-nav-card bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
-  <button>◀</button>
-  <div className="text-center">
-    <div className="flex items-center justify-center gap-2">
-      <Sun className="text-primary h-5 w-5" />
-      <span className="text-lg font-semibold text-primary">今日</span>
-    </div>
-    <span className="text-sm text-muted-foreground">2月7日（金）</span>
-  </div>
-  <button disabled>▶</button>
-  <button>📅</button>
-</div>
-```
-
-### 過去日の場合
-```tsx
-<div className="date-nav-card bg-muted/50 border-border">
-  <button>◀</button>
-  <div className="text-center">
-    <span className="text-lg font-semibold">2月6日</span>
-    <span className="text-sm text-muted-foreground">（木）</span>
-  </div>
-  <button>▶</button>
-  <button className="text-primary">今日へ</button>
-  <button>📅</button>
-</div>
+supabase/functions/
+├── api/
+│   └── index.ts     # REST API（新規）
+└── mcp-server/
+    └── index.ts     # 既存MCP（変更なし）
 ```
 
 ---
 
-## スタイリング
+## エラーレスポンス
 
-### カード全体
-```css
-- px-4 py-3
-- rounded-xl
-- border
-- shadow-sm
-- 今日: グラデーション背景 + primary色のアクセント
-- 過去: muted背景 + subtle border
-```
+```typescript
+// 認証エラー
+{
+  "success": false,
+  "error": "Unauthorized"
+}
 
-### ナビゲーションボタン
-```css
-- 円形ボタン（w-10 h-10）
-- ホバー時にスケールアップ
-- 今日: primary色
-- 過去: muted-foreground色
-```
+// バリデーションエラー
+{
+  "success": false,
+  "error": "content is required"
+}
 
-### 日付表示
-```css
-- 2行構成（日付 + 曜日/サブラベル）
-- 今日: アイコン + 「今日」+ 日付
-- 過去: 日付を大きく表示
-```
-
-### アニメーション
-```css
-- ボタンホバー: scale(1.1)
-- カード: subtle shadow on hover
-- 日付変更時: fade transition
+// サーバーエラー
+{
+  "success": false,
+  "error": "Failed to add block"
+}
 ```
 
 ---
 
-## 完成イメージ
+## config.toml 設定
 
-### 今日
-```text
-┌──────────────────────────────────────────────────┐
-│                                                  │
-│   ┌──────────────────────────────────────────┐   │
-│   │  (◀)    ☀️ 今日                     (📅) │   │
-│   │         2月7日（金）                     │   │
-│   └──────────────────────────────────────────┘   │
-│         ↑ グラデーション背景（primary系）        │
-└──────────────────────────────────────────────────┘
-```
-
-### 過去日
-```text
-┌──────────────────────────────────────────────────┐
-│                                                  │
-│   ┌──────────────────────────────────────────┐   │
-│   │  (◀)    2月6日（木）      [今日] (▶)(📅) │   │
-│   └──────────────────────────────────────────┘   │
-│         ↑ muted背景                             │
-└──────────────────────────────────────────────────┘
+```toml
+[functions.api]
+verify_jwt = false
 ```
 
 ---
 
-## 実装ポイント
+## 追加機能（MCPにはない）
 
-1. **カード型コンテナ**
-   - `rounded-xl border shadow-sm`
-   - 条件付きグラデーション背景
+REST APIでは追加で以下も実装：
 
-2. **今日と過去の視覚的区別**
-   - 今日: Sun アイコン + 「今日」ラベル + primary カラー
-   - 過去: 日付のみ + 「今日へ」ボタン
+| メソッド | パス | 説明 |
+|---------|------|------|
+| `PATCH` | `/tasks/:id/priority` | タスク優先度変更 |
+| `DELETE` | `/blocks/:id` | ブロック削除 |
+| `PATCH` | `/blocks/:id` | ブロック更新 |
 
-3. **ボタンのインタラクション**
-   - ホバー時のスケールアニメーション
-   - disabled 状態の適切な表示
+---
 
-4. **日付のフォーマット**
-   - 今日: "今日" + "M月d日（E）"
-   - 過去: "M月d日（E）"
+## 実装順序
 
-5. **レスポンシブ対応**
-   - モバイルでもコンパクトに表示
+1. Edge Function `api/index.ts` を作成
+2. 認証ミドルウェアを実装
+3. 各エンドポイントを実装
+4. config.toml に設定追加
+5. ヘルスチェックで動作確認
+
