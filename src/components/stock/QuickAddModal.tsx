@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { TagDropdown } from '@/components/flow/TagDropdown';
+import { PrioritySelector, TaskPriority } from '@/components/flow/PrioritySelector';
 import { useCustomTags } from '@/hooks/useCustomTags';
 import { useEntries, Block } from '@/hooks/useEntries';
 import { getTodayKey } from '@/lib/dateUtils';
@@ -62,6 +63,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
   
   const [content, setContent] = useState('');
   const [tag, setTag] = useState<string | null>(null);
+  const [priority, setPriority] = useState<TaskPriority>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Schedule states
@@ -118,6 +120,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
     if (open) {
       setContent('');
       setTag(null);
+      setPriority(0);
       setIsAllDay(false);
       
       if (category === 'schedule') {
@@ -212,6 +215,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
         starts_at: scheduleData?.starts_at || null,
         ends_at: scheduleData?.ends_at || null,
         is_all_day: scheduleData?.is_all_day || false,
+        priority: category === 'task' ? priority : 0,
       });
 
       if (block) {
@@ -346,6 +350,15 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
                 )}
               </div>
             </div>
+          )}
+
+          {/* タスク優先度セレクター */}
+          {category === 'task' && (
+            <PrioritySelector
+              value={priority}
+              onChange={setPriority}
+              disabled={isSubmitting}
+            />
           )}
 
           {/* Content Textarea */}

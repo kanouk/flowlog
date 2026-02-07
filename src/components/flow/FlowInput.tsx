@@ -11,6 +11,7 @@ import { useImageUpload } from '@/hooks/useImageUpload';
 import { useCustomTags } from '@/hooks/useCustomTags';
 import { toast } from 'sonner';
 import { TagDropdown } from './TagDropdown';
+import { PrioritySelector, TaskPriority } from './PrioritySelector';
 import { 
   BlockCategory, 
   CATEGORIES, 
@@ -32,7 +33,8 @@ interface FlowInputProps {
       starts_at: string | null;
       ends_at: string | null;
       is_all_day: boolean;
-    }
+    },
+    priority?: number
   ) => void;
   disabled?: boolean;
   selectedDate: string;
@@ -49,6 +51,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [category, setCategory] = useState<BlockCategory>('event');
   const [tag, setTag] = useState<string | null>(null);
+  const [priority, setPriority] = useState<TaskPriority>(0);
   
   // Schedule states
   const [isAllDay, setIsAllDay] = useState(false);
@@ -170,9 +173,10 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const handleCategoryChange = (cat: BlockCategory) => {
     setCategory(cat);
     setLastCategory(cat);
-    // カテゴリ変更時にタグをクリア
+    // カテゴリ変更時にタグと優先度をクリア
     setTag(null);
     setLastTag(null);
+    setPriority(0);
   };
 
   const handleTagChange = (t: string | null) => {
@@ -251,7 +255,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
         };
       }
 
-      onSubmit(content.trim(), mode, uploadedUrls, category, tag, scheduleData);
+      onSubmit(content.trim(), mode, uploadedUrls, category, tag, scheduleData, category === 'task' ? priority : 0);
       
       // リセット
       setContent('');
@@ -269,6 +273,8 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
         setEndTime('10:00');
         setIsAllDay(false);
       }
+      // 優先度リセット
+      setPriority(0);
       
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -422,6 +428,17 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
             );
           })}
         </div>
+
+        {/* タスク優先度セレクター */}
+        {category === 'task' && (
+          <div className="mb-3">
+            <PrioritySelector
+              value={priority}
+              onChange={setPriority}
+              disabled={disabled || isSubmitting}
+            />
+          </div>
+        )}
 
         {/* スケジュール入力UI */}
         {category === 'schedule' && (

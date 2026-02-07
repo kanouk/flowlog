@@ -16,6 +16,7 @@ import {
   CATEGORIES, 
   CATEGORY_CONFIG, 
 } from '@/lib/categoryUtils';
+import { PrioritySelector, TaskPriority } from './PrioritySelector';
 import { 
   formatTimeJST, 
   getOccurredAtDayKey, 
@@ -78,9 +79,10 @@ export function BlockEditModal({
   const [content, setContent] = useState(block.content || '');
   const [isComposing, setIsComposing] = useState(false);
   
-  // Category & Tag
+  // Category & Tag & Priority
   const [category, setCategory] = useState<BlockCategory>(block.category);
   const [tag, setTag] = useState<string | null>(block.tag);
+  const [priority, setPriority] = useState<TaskPriority>((block.priority || 0) as TaskPriority);
   
   // Images
   const [existingImages, setExistingImages] = useState<string[]>(block.images || []);
@@ -122,6 +124,7 @@ export function BlockEditModal({
       setContent(block.content || '');
       setCategory(block.category);
       setTag(block.tag);
+      setPriority((block.priority || 0) as TaskPriority);
       setExistingImages(block.images || []);
       setNewImages([]);
       setNewImagePreviews([]);
@@ -346,7 +349,11 @@ export function BlockEditModal({
         if (isAllDay !== block.is_all_day) updates.is_all_day = isAllDay;
       }
       
-      // Always update images if there are any changes
+      // Priority field (only for tasks)
+      if (category === 'task' && priority !== (block.priority || 0)) {
+        updates.priority = priority;
+      }
+      
       const originalImages = block.images || [];
       const imagesChanged = 
         finalImages.length !== originalImages.length ||
@@ -413,6 +420,15 @@ export function BlockEditModal({
             })}
           </div>
           
+          {/* タスク優先度セレクター */}
+          {category === 'task' && (
+            <div className="mt-3">
+              <PrioritySelector
+                value={priority}
+                onChange={setPriority}
+              />
+            </div>
+          )}
           
           {/* Textarea */}
           <textarea

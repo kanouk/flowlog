@@ -101,6 +101,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       starts_at: scheduleData?.starts_at || null,
       ends_at: scheduleData?.ends_at || null,
       is_all_day: scheduleData?.is_all_day || false,
+      priority: 0,
     };
     
     // toNowモードでなければローカルに追加（降順ソート）

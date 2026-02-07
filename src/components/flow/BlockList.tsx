@@ -8,6 +8,7 @@ import { TaskCheckbox } from '@/components/ui/task-checkbox';
 import { formatTimeJST } from '@/lib/dateUtils';
 import { BlockCategory, BlockTag, CATEGORY_CONFIG, TAG_CONFIG, TAGS, formatScheduleRange } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
+import { PriorityIndicator } from './PrioritySelector';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -256,15 +257,23 @@ export function BlockList({
                       )}
                       
                       <div className="flex-1 min-w-0">
-                        {hasContent && (
-                          <p 
-                            className={`text-foreground leading-relaxed whitespace-pre-wrap break-words break-anywhere ${
-                              block.is_done ? 'line-through text-muted-foreground' : ''
-                            }`}
-                          >
-                            {highlightText(block.content!, highlightQuery)}
-                          </p>
-                        )}
+                        <div className="flex items-start gap-2">
+                          {/* Priority Indicator for tasks */}
+                          {isTask && (
+                            <PriorityIndicator priority={block.priority || 0} className="mt-1 flex-shrink-0" />
+                          )}
+                          <div className="flex-1">
+                            {hasContent && (
+                              <p 
+                                className={`text-foreground leading-relaxed whitespace-pre-wrap break-words break-anywhere ${
+                                  block.is_done ? 'line-through text-muted-foreground' : ''
+                                }`}
+                              >
+                                {highlightText(block.content!, highlightQuery)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
 
                         {/* 画像表示 */}
                         {hasImages && (

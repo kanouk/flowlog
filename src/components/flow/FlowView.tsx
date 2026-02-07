@@ -187,7 +187,8 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       starts_at: string | null;
       ends_at: string | null;
       is_all_day: boolean;
-    }
+    },
+    priority: number = 0
   ) => {
     const tempId = `temp-${Date.now()}`;
     const optimisticBlock: Block = {
@@ -206,6 +207,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       starts_at: scheduleData?.starts_at || null,
       ends_at: scheduleData?.ends_at || null,
       is_all_day: scheduleData?.is_all_day || false,
+      priority: 0,
     };
     
     if (mode !== 'toNow' || isToday) {
@@ -222,6 +224,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       starts_at: scheduleData?.starts_at,
       ends_at: scheduleData?.ends_at,
       is_all_day: scheduleData?.is_all_day,
+      priority: category === 'task' ? priority : 0,
     });
     
     if (savedBlock) {
