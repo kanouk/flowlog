@@ -148,6 +148,48 @@ export type Database = {
         }
         Relationships: []
       }
+      oauth_authorization_codes: {
+        Row: {
+          client_id: string
+          code: string
+          code_challenge: string | null
+          code_challenge_method: string | null
+          created_at: string | null
+          expires_at: string
+          id: string
+          redirect_uri: string
+          scope: string | null
+          state: string | null
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          code: string
+          code_challenge?: string | null
+          code_challenge_method?: string | null
+          created_at?: string | null
+          expires_at: string
+          id?: string
+          redirect_uri: string
+          scope?: string | null
+          state?: string | null
+          user_id: string
+        }
+        Update: {
+          client_id?: string
+          code?: string
+          code_challenge?: string | null
+          code_challenge_method?: string | null
+          created_at?: string | null
+          expires_at?: string
+          id?: string
+          redirect_uri?: string
+          scope?: string | null
+          state?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
