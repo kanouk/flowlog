@@ -1,218 +1,247 @@
 
-# REST API ドキュメントの追加
+
+# MCP OAuth認証対応
 
 ## 概要
-REST APIを外部から簡単に利用できるよう、2つの形式でドキュメントを提供します：
-1. **設定画面にREST APIセクションを追加** - ユーザーがすぐに確認できるUI
-2. **エンドポイント `/api/docs` で仕様を返す** - プログラマブルなアクセス用
+Claude DesktopやChatGPTなどのAIアシスタントは、MCPサーバーに接続する際にOAuth 2.0 (Authorization Code Grant) を前提としています。現在のAPIトークン方式（Bearer Token手動コピー）から、OAuthフローに対応することで、ユーザーが認可ボタンをクリックするだけで接続できるようになります。
 
 ---
 
-## 1. 設定画面の拡張
-
-### McpSettingsSectionをAPI統合セクションに拡張
-
-現在の「MCP連携」セクションを拡張し、REST APIのドキュメントも表示：
+## OAuth 2.0 フロー
 
 ```text
-┌─────────────────────────────────────────────────────────┐
-│  🔌 API連携                                             │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  APIトークン                                            │
-│  ┌─────────────────────────────────────┐  [新規作成]   │
-│  │ Claude Code  作成: 2日前            │               │
-│  └─────────────────────────────────────┘               │
-│                                                         │
-│  ▼ MCP接続方法                                         │
-│    接続URL: https://...                                 │
-│    設定例、利用可能なツール...                          │
-│                                                         │
-│  ▼ REST API                                   [NEW]    │
-│    ベースURL: https://.../functions/v1/api              │
-│    使用例（curl）                                       │
-│    エンドポイント一覧                                   │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
+┌─────────────┐      ┌─────────────┐      ┌─────────────┐
+│ Claude/     │      │  FlowLog    │      │  FlowLog    │
+│ ChatGPT     │      │ OAuth EP   │      │   App       │
+└─────┬───────┘      └─────┬───────┘      └─────┬───────┘
+      │                    │                    │
+      │ 1. /authorize?...  │                    │
+      │───────────────────>│                    │
+      │                    │ 2. Redirect to App │
+      │                    │───────────────────>│
+      │                    │                    │
+      │                    │  3. ユーザー認証   │
+      │                    │  4. 認可確認画面   │
+      │                    │<───────────────────│
+      │                    │                    │
+      │ 5. callback?code=  │                    │
+      │<───────────────────│                    │
+      │                    │                    │
+      │ 6. /token          │                    │
+      │───────────────────>│                    │
+      │                    │                    │
+      │ 7. access_token    │                    │
+      │<───────────────────│                    │
+      │                    │                    │
+      │ 8. MCP calls       │                    │
+      │   (Bearer token)   │                    │
 ```
 
 ---
 
-## 2. 変更対象ファイル
+## エンドポイント設計
+
+| エンドポイント | 説明 |
+|---------------|------|
+| `GET /.well-known/oauth-authorization-server` | OAuth Server Metadata |
+| `GET /oauth/authorize` | 認可エンドポイント（認可画面へリダイレクト） |
+| `POST /oauth/token` | トークン交換エンドポイント |
+| `POST /oauth/revoke` | トークン失効（オプション） |
+
+---
+
+## 変更対象
 
 | ファイル | 変更内容 |
 |----------|----------|
-| `src/components/settings/McpSettingsSection.tsx` | REST APIドキュメントセクションを追加 |
-| `supabase/functions/api/index.ts` | `/docs` エンドポイント追加（JSON仕様返却） |
-| `src/pages/Settings.tsx` | セクション名を「MCP連携」→「API連携」に変更 |
+| `supabase/functions/mcp-server/index.ts` | OAuthエンドポイント追加 |
+| `src/pages/OAuthAuthorize.tsx` | 認可確認画面（新規） |
+| `src/App.tsx` | ルート追加 |
+| DB: `oauth_authorization_codes` | 認可コード一時保存テーブル（新規） |
+| DB: `oauth_clients` | クライアント情報テーブル（オプション） |
 
 ---
 
-## 3. REST APIドキュメントUI（新規追加）
+## データベース設計
 
-### 接続方法セクション内に追加
+### 新規テーブル: oauth_authorization_codes
 
-```tsx
-<Collapsible>
-  <CollapsibleTrigger>
-    <span>REST API</span>
-    <ChevronDown />
-  </CollapsibleTrigger>
-  <CollapsibleContent>
-    {/* ベースURL */}
-    <div>
-      <div className="text-sm font-medium">ベースURL</div>
-      <code>{REST_API_URL}</code>
-      <Button onClick={copy}>コピー</Button>
-    </div>
+```sql
+CREATE TABLE oauth_authorization_codes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  code text NOT NULL UNIQUE,
+  code_challenge text,              -- PKCE用
+  code_challenge_method text,       -- 'S256' or 'plain'
+  redirect_uri text NOT NULL,
+  client_id text NOT NULL,
+  scope text,
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
 
-    {/* curl使用例 */}
-    <div>
-      <div className="text-sm font-medium">使用例（タスク一覧取得）</div>
-      <pre>
-        curl -X GET "{REST_API_URL}/tasks" \
-          -H "Authorization: Bearer YOUR_API_TOKEN"
-      </pre>
-    </div>
-
-    {/* エンドポイント一覧テーブル */}
-    <div>
-      <div className="text-sm font-medium">エンドポイント一覧</div>
-      <table>
-        <tr><td>GET</td><td>/events</td><td>出来事一覧</td></tr>
-        <tr><td>POST</td><td>/events</td><td>出来事追加</td></tr>
-        <tr><td>GET</td><td>/tasks</td><td>タスク一覧</td></tr>
-        ...
-      </table>
-    </div>
-  </CollapsibleContent>
-</Collapsible>
+-- 期限切れコードの自動削除
+CREATE INDEX idx_oauth_codes_expires ON oauth_authorization_codes(expires_at);
 ```
 
 ---
 
-## 4. /api/docs エンドポイント
+## MCPサーバー拡張
 
-外部ツールがAPIスキーマを取得できるよう、エンドポイント仕様をJSONで返却：
+### 1. OAuth Server Metadata
 
 ```typescript
-app.get("/docs", (c) => {
-  return c.json({
-    name: "FlowLog REST API",
-    version: "1.0.0",
-    baseUrl: `${supabaseUrl}/functions/v1/api`,
-    authentication: {
-      type: "Bearer",
-      header: "Authorization",
-      description: "APIトークンをBearer形式で指定"
-    },
-    endpoints: [
-      {
-        method: "GET",
-        path: "/events",
-        description: "出来事一覧を取得",
-        parameters: [
-          { name: "date", type: "string", required: false, description: "日付 (YYYY-MM-DD)" },
-          { name: "limit", type: "number", required: false, description: "取得件数 (デフォルト: 50)" }
-        ]
-      },
-      // ... 全エンドポイント
-    ]
-  });
-});
+// /.well-known/oauth-authorization-server
+{
+  "issuer": "https://wdvwnbeofakzihmjacko.supabase.co/functions/v1/mcp-server",
+  "authorization_endpoint": ".../oauth/authorize",
+  "token_endpoint": ".../oauth/token",
+  "response_types_supported": ["code"],
+  "grant_types_supported": ["authorization_code"],
+  "code_challenge_methods_supported": ["S256"],
+  "token_endpoint_auth_methods_supported": ["none"]
+}
+```
+
+### 2. 認可エンドポイント
+
+```typescript
+// GET /oauth/authorize
+// → FlowLogの認可確認ページにリダイレクト
+// パラメータ: client_id, redirect_uri, scope, state, code_challenge, code_challenge_method
+```
+
+### 3. トークンエンドポイント
+
+```typescript
+// POST /oauth/token
+// grant_type: authorization_code
+// code: 認可コード
+// code_verifier: PKCE検証用
+// → access_token (= APIトークン形式) を返却
 ```
 
 ---
 
-## 5. UIデザイン詳細
-
-### エンドポイント一覧の表示
-
-コンパクトなテーブル形式：
-
-| メソッド | パス | 説明 |
-|---------|------|------|
-| `GET` | `/events` | 出来事一覧 |
-| `POST` | `/events` | 出来事追加 |
-| `GET` | `/tasks` | タスク一覧 |
-| `POST` | `/tasks` | タスク追加 |
-| `PATCH` | `/tasks/:id/complete` | 完了/未完了 |
-| `PATCH` | `/tasks/:id/priority` | 優先度変更 |
-| ... | ... | ... |
-
-### カラーコード
-
-- `GET` → 緑バッジ
-- `POST` → 青バッジ
-- `PATCH` → 黄バッジ
-- `DELETE` → 赤バッジ
-
----
-
-## 6. 実装順序
-
-1. Settings.tsxのセクション名変更（MCP連携 → API連携）
-2. McpSettingsSection.tsxにREST APIドキュメントを追加
-3. api/index.tsに `/docs` エンドポイントを追加
-4. デプロイ・動作確認
-
----
-
-## 7. 完成イメージ
-
-### 設定画面
+## 認可確認画面 (OAuthAuthorize.tsx)
 
 ```text
-┌───────────────────────────────────────────────────────────┐
-│  設定                                                     │
-├───────────────────────────────────────────────────────────┤
-│  タグ管理                                                 │
-│  今日の得点                                               │
-│  生成AI設定                                               │
-│  API連携 ←─────── 名前変更                               │
-│  アカウント                                               │
-└───────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│                                                        │
+│               🔐 FlowLog への接続許可                  │
+│                                                        │
+│  「Claude Desktop」が FlowLog へのアクセスを          │
+│  リクエストしています。                               │
+│                                                        │
+│  許可される操作:                                       │
+│  ✓ 出来事、タスク、予定などの読み取り                 │
+│  ✓ 新しいエントリの追加                               │
+│  ✓ タスクの完了状態変更                               │
+│                                                        │
+│  ┌──────────┐    ┌──────────┐                         │
+│  │ キャンセル │    │  許可する │                         │
+│  └──────────┘    └──────────┘                         │
+│                                                        │
+└────────────────────────────────────────────────────────┘
 ```
 
-### API連携セクション
+---
+
+## 実装詳細
+
+### PKCE (Proof Key for Code Exchange)
+
+セキュリティ強化のためPKCEをサポート：
+
+1. クライアントが `code_verifier` を生成
+2. `code_challenge = SHA256(code_verifier)` を認可リクエストに含める
+3. トークンリクエスト時に `code_verifier` を送信
+4. サーバーが検証
+
+### スコープ
+
+シンプルに単一スコープで開始：
+- `mcp:full` - 全ツールへのアクセス
+
+将来的には細分化可能：
+- `mcp:read` - 読み取りのみ
+- `mcp:write` - 書き込み可能
+
+---
+
+## セキュリティ考慮事項
+
+1. **認可コードは10分で期限切れ**
+2. **PKCEを推奨（必須にもできる）**
+3. **redirect_uriの厳密な検証**
+4. **既存のトークンハッシュ方式をそのまま利用**
+5. **アクセストークンは長期有効（手動削除まで）**
+
+---
+
+## 設定画面の更新
+
+McpSettingsSectionに追加：
 
 ```text
 ┌───────────────────────────────────────────────────────────┐
 │  🔌 API連携                                               │
 │                                                           │
-│  FlowLogのデータに外部からアクセスできます。              │
+│  ▼ OAuth接続（推奨）                          [NEW]       │
+│    Claude DesktopやChatGPTから直接接続できます           │
 │                                                           │
-│  ──────────────────────────────────────────────           │
-│  🔑 APIトークン                          [新規作成]       │
-│  ┌────────────────────────────────────────────┐          │
-│  │ Claude Code  作成: 2日前  最終使用: 1時間前 │ 🗑       │
-│  └────────────────────────────────────────────┘          │
-│  ──────────────────────────────────────────────           │
+│    接続済みアプリ:                                        │
+│    ┌────────────────────────────────────────────┐        │
+│    │ Claude Desktop  接続: 1時間前              │ 🗑      │
+│    └────────────────────────────────────────────┘        │
 │                                                           │
-│  ▼ MCP接続方法                                           │
-│     (既存のMCPドキュメント)                               │
-│                                                           │
-│  ▼ REST API                                              │
-│     ベースURL                                             │
-│     ┌──────────────────────────────────┐ [コピー]        │
-│     │ https://.../functions/v1/api     │                 │
-│     └──────────────────────────────────┘                 │
-│                                                           │
-│     使用例                                                │
-│     ┌──────────────────────────────────────────┐         │
-│     │ curl -X GET ".../api/tasks" \            │ [コピー] │
-│     │   -H "Authorization: Bearer TOKEN"       │         │
-│     └──────────────────────────────────────────┘         │
-│                                                           │
-│     エンドポイント一覧                                    │
-│     ┌──────┬─────────────────────┬────────────┐         │
-│     │ GET  │ /events             │ 出来事一覧 │         │
-│     │ POST │ /events             │ 出来事追加 │         │
-│     │ GET  │ /tasks              │ タスク一覧 │         │
-│     │ ...  │ ...                 │ ...        │         │
-│     └──────┴─────────────────────┴────────────┘         │
-│                                                           │
-│     📄 詳細ドキュメント: /api/docs                        │
+│  ▼ 手動トークン設定                                       │
+│    (既存のAPIトークン管理UI)                              │
 │                                                           │
 └───────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 実装順序
+
+1. **DBマイグレーション**
+   - `oauth_authorization_codes` テーブル作成
+   - インデックス追加
+
+2. **MCPサーバー拡張**
+   - `/.well-known/oauth-authorization-server` エンドポイント
+   - `/oauth/authorize` エンドポイント
+   - `/oauth/token` エンドポイント
+
+3. **認可確認画面**
+   - `/oauth/authorize` ページ作成
+   - ログイン状態確認
+   - 認可ボタン処理
+
+4. **設定画面更新**
+   - OAuth接続済みアプリ一覧表示
+   - 接続解除機能
+
+5. **テスト**
+   - Claude Desktopで接続テスト
+
+---
+
+## クライアント設定例（Claude Desktop）
+
+OAuth対応後、ユーザーは以下の設定だけでOK：
+
+```json
+{
+  "mcpServers": {
+    "flowlog": {
+      "url": "https://wdvwnbeofakzihmjacko.supabase.co/functions/v1/mcp-server/mcp",
+      "transport": { "type": "streamable_http" }
+    }
+  }
+}
+```
+
+初回接続時にブラウザが開き、FlowLogにログイン → 認可確認 → 自動的にトークンが設定されます。
+
