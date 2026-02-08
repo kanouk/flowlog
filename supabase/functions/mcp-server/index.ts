@@ -333,7 +333,7 @@ async function verifyCodeChallenge(
   return false;
 }
 
-// OAuth Server Metadata
+// OAuth Server Metadata (RFC 8414)
 function getOAuthMetadata() {
   const baseUrl = `${supabaseUrl}/functions/v1/mcp-server`;
   return {
@@ -347,6 +347,27 @@ function getOAuthMetadata() {
     token_endpoint_auth_methods_supported: ["none"],
     scopes_supported: ["mcp:full"],
   };
+}
+
+// Protected Resource Metadata (RFC 9728)
+function getProtectedResourceMetadata() {
+  const baseUrl = `${supabaseUrl}/functions/v1/mcp-server`;
+  return {
+    resource: `${baseUrl}/mcp`,
+    authorization_servers: [baseUrl],
+    scopes_supported: ["mcp:full"],
+    bearer_methods_supported: ["header"],
+    resource_documentation: `${FLOWLOG_APP_URL}/settings`,
+  };
+}
+
+// Session management for Streamable HTTP
+const sessions = new Map<string, { userId: string; createdAt: Date }>();
+
+function generateSessionId(): string {
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  return Array.from(array, b => b.toString(16).padStart(2, "0")).join("");
 }
 
 // 動的クライアント登録
@@ -938,66 +959,88 @@ async function executeTool(userId: string, toolName: string, args: Record<string
   }
 }
 
-// MCP JSON-RPCハンドラ
-async function handleMcpRequest(userId: string, body: unknown): Promise<unknown> {
+// MCP JSON-RPCハンドラ（セッションID対応）
+interface McpRequestContext {
+  userId: string;
+  sessionId?: string;
+  isNewSession?: boolean;
+}
+
+async function handleMcpRequest(ctx: McpRequestContext, body: unknown): Promise<{ response: unknown; sessionId?: string }> {
   const request = body as { jsonrpc: string; id?: string | number; method: string; params?: unknown };
   
   if (request.jsonrpc !== "2.0") {
-    return { jsonrpc: "2.0", id: request.id, error: { code: -32600, message: "Invalid Request" } };
+    return { response: { jsonrpc: "2.0", id: request.id, error: { code: -32600, message: "Invalid Request" } } };
   }
   
   try {
     switch (request.method) {
-      case "initialize":
+      case "initialize": {
+        // セッションIDを生成
+        const newSessionId = generateSessionId();
+        sessions.set(newSessionId, { userId: ctx.userId, createdAt: new Date() });
+        
         return {
-          jsonrpc: "2.0",
-          id: request.id,
-          result: {
-            protocolVersion: "2024-11-05",
-            capabilities: {
-              tools: { listChanged: false },
-            },
-            serverInfo: {
-              name: "flowlog",
-              version: "1.0.0",
+          response: {
+            jsonrpc: "2.0",
+            id: request.id,
+            result: {
+              protocolVersion: "2024-11-05",
+              capabilities: {
+                tools: { listChanged: false },
+              },
+              serverInfo: {
+                name: "flowlog",
+                version: "1.0.0",
+              },
             },
           },
+          sessionId: newSessionId,
         };
+      }
       
       case "notifications/initialized":
-        return null; // No response for notifications
+        return { response: null }; // No response for notifications
       
       case "tools/list":
         return {
-          jsonrpc: "2.0",
-          id: request.id,
-          result: { tools: TOOLS },
+          response: {
+            jsonrpc: "2.0",
+            id: request.id,
+            result: { tools: TOOLS },
+          },
         };
       
       case "tools/call": {
         const params = request.params as { name: string; arguments?: Record<string, unknown> };
-        const result = await executeTool(userId, params.name, params.arguments || {});
+        const result = await executeTool(ctx.userId, params.name, params.arguments || {});
         return {
-          jsonrpc: "2.0",
-          id: request.id,
-          result: {
-            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          response: {
+            jsonrpc: "2.0",
+            id: request.id,
+            result: {
+              content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+            },
           },
         };
       }
       
       default:
         return {
-          jsonrpc: "2.0",
-          id: request.id,
-          error: { code: -32601, message: "Method not found" },
+          response: {
+            jsonrpc: "2.0",
+            id: request.id,
+            error: { code: -32601, message: "Method not found" },
+          },
         };
     }
   } catch (error) {
     return {
-      jsonrpc: "2.0",
-      id: request.id,
-      error: { code: -32000, message: error instanceof Error ? error.message : "Unknown error" },
+      response: {
+        jsonrpc: "2.0",
+        id: request.id,
+        error: { code: -32000, message: error instanceof Error ? error.message : "Unknown error" },
+      },
     };
   }
 }
@@ -1013,9 +1056,16 @@ Deno.serve(async (req) => {
   
   // ===== OAuth 2.0 エンドポイント =====
   
-  // OAuth Server Metadata
+  // OAuth Server Metadata (RFC 8414)
   if (path.endsWith("/.well-known/oauth-authorization-server")) {
     return new Response(JSON.stringify(getOAuthMetadata()), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  // Protected Resource Metadata (RFC 9728)
+  if (path.endsWith("/.well-known/oauth-protected-resource")) {
+    return new Response(JSON.stringify(getProtectedResourceMetadata()), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -1055,8 +1105,8 @@ Deno.serve(async (req) => {
     const userId = await authenticateUser(authHeader ?? undefined);
     
     if (!userId) {
-      // OAuth対応: WWW-Authenticateヘッダを付与
-      const oauthMetadata = getOAuthMetadata();
+      // RFC 9728準拠: resource_metadataパラメータで認証方式を通知
+      const resourceMetadataUrl = `${supabaseUrl}/functions/v1/mcp-server/.well-known/oauth-protected-resource`;
       return new Response(JSON.stringify({ 
         error: "unauthorized",
         error_description: "Bearer token required. Obtain via OAuth or API token.",
@@ -1065,23 +1115,39 @@ Deno.serve(async (req) => {
         headers: { 
           ...corsHeaders, 
           "Content-Type": "application/json",
-          "WWW-Authenticate": `Bearer realm="FlowLog MCP", authorization_uri="${oauthMetadata.authorization_endpoint}"`,
+          "WWW-Authenticate": `Bearer resource_metadata="${resourceMetadataUrl}"`,
         },
       });
     }
+    
+    // セッションIDを取得（あれば）
+    const incomingSessionId = req.headers.get("mcp-session-id") ?? undefined;
     
     // POST: JSON-RPC リクエスト処理
     if (req.method === "POST") {
       try {
         const body = await req.json();
-        const response = await handleMcpRequest(userId, body);
+        const ctx: McpRequestContext = {
+          userId,
+          sessionId: incomingSessionId,
+        };
+        const result = await handleMcpRequest(ctx, body);
         
-        if (response === null) {
+        if (result.response === null) {
           return new Response(null, { status: 204, headers: corsHeaders });
         }
         
-        return new Response(JSON.stringify(response), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        // セッションIDを返す（initialize時のみ新規生成）
+        const responseHeaders: Record<string, string> = {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        };
+        if (result.sessionId) {
+          responseHeaders["Mcp-Session-Id"] = result.sessionId;
+        }
+        
+        return new Response(JSON.stringify(result.response), {
+          headers: responseHeaders,
         });
       } catch {
         return new Response(JSON.stringify({
