@@ -9,8 +9,8 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// FlowLogアプリのURL
-const FLOWLOG_APP_URL = "https://flowlog.lovable.app";
+// FlowLogアプリのURL（環境変数から取得、フォールバックあり）
+const FLOWLOG_APP_URL = Deno.env.get("FLOWLOG_APP_URL") || "https://flowlog.lovable.app";
 
 // ユーザー認証（APIトークンから）
 async function authenticateUser(authHeader: string | undefined): Promise<string | null> {
@@ -1055,12 +1055,22 @@ Deno.serve(async (req) => {
     const userId = await authenticateUser(authHeader ?? undefined);
     
     if (!userId) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      // OAuth対応: WWW-Authenticateヘッダを付与
+      const oauthMetadata = getOAuthMetadata();
+      return new Response(JSON.stringify({ 
+        error: "unauthorized",
+        error_description: "Bearer token required. Obtain via OAuth or API token.",
+      }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { 
+          ...corsHeaders, 
+          "Content-Type": "application/json",
+          "WWW-Authenticate": `Bearer realm="FlowLog MCP", authorization_uri="${oauthMetadata.authorization_endpoint}"`,
+        },
       });
     }
     
+    // POST: JSON-RPC リクエスト処理
     if (req.method === "POST") {
       try {
         const body = await req.json();
@@ -1073,7 +1083,7 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify(response), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
-      } catch (error) {
+      } catch {
         return new Response(JSON.stringify({
           jsonrpc: "2.0",
           error: { code: -32700, message: "Parse error" },
@@ -1084,7 +1094,31 @@ Deno.serve(async (req) => {
       }
     }
     
-    // GET for SSE (not implemented, return method not allowed)
+    // GET: Server-Sent Events（Streamable HTTP対応）
+    if (req.method === "GET") {
+      // SSE接続を確立
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          // 初期接続メッセージ
+          const initMessage = JSON.stringify({
+            jsonrpc: "2.0",
+            method: "notifications/initialized",
+          });
+          controller.enqueue(encoder.encode(`data: ${initMessage}\n\n`));
+        },
+      });
+      
+      return new Response(stream, {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+        },
+      });
+    }
+    
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
