@@ -71,7 +71,13 @@ app.use("/blocks/*", authMiddleware);
 async function authMiddleware(c: any, next: () => Promise<void>) {
   const userId = await authenticateUser(c.req.header("Authorization"));
   if (!userId) {
-    return c.json({ success: false, error: "Unauthorized" }, 401);
+    return c.json({ 
+      success: false, 
+      error: "Unauthorized",
+      error_description: "Bearer token required",
+    }, 401, {
+      "WWW-Authenticate": 'Bearer realm="FlowLog API"',
+    });
   }
   c.set("userId", userId);
   await next();
@@ -99,7 +105,13 @@ app.delete("/blocks/:id", authMiddlewareInline, deleteBlock);
 async function authMiddlewareInline(c: any, next: () => Promise<void>) {
   const userId = await authenticateUser(c.req.header("Authorization"));
   if (!userId) {
-    return c.json({ success: false, error: "Unauthorized" }, 401);
+    return c.json({ 
+      success: false, 
+      error: "Unauthorized",
+      error_description: "Bearer token required",
+    }, 401, {
+      "WWW-Authenticate": 'Bearer realm="FlowLog API"',
+    });
   }
   c.set("userId", userId);
   await next();

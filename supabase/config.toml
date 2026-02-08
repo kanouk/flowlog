@@ -2,3 +2,9 @@ project_id = "wdvwnbeofakzihmjacko"
 
 [functions.format-entries]
 verify_jwt = true
+
+[functions.mcp-server]
+verify_jwt = false
+
+[functions.api]
+verify_jwt = false
