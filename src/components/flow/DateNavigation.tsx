@@ -54,10 +54,10 @@ export function DateNavigation({ selectedDate, onDateChange, datesWithEntries = 
   return (
     <div 
       className={`
-        flex items-center gap-2 px-4 py-3 rounded-xl border shadow-sm transition-all duration-200
+        w-full flex items-center px-2 py-1.5 rounded-xl transition-all duration-200
         ${isToday 
-          ? 'bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20' 
-          : 'bg-muted/50 border-border'
+          ? 'bg-gradient-to-r from-primary/5 via-primary/8 to-primary/5' 
+          : 'bg-muted/40'
         }
       `}
     >
@@ -65,11 +65,11 @@ export function DateNavigation({ selectedDate, onDateChange, datesWithEntries = 
       <button
         onClick={handlePrevDay}
         className={`
-          flex items-center justify-center w-10 h-10 rounded-full 
+          flex items-center justify-center w-9 h-9 rounded-full flex-shrink-0
           transition-all duration-200 hover:scale-110 active:scale-95
           ${isToday 
             ? 'text-primary hover:bg-primary/10' 
-            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            : 'text-muted-foreground hover:bg-background/80 hover:text-foreground'
           }
         `}
         aria-label="前日"
@@ -77,47 +77,68 @@ export function DateNavigation({ selectedDate, onDateChange, datesWithEntries = 
         <ChevronLeft className="h-5 w-5" />
       </button>
 
-      {/* 日付表示エリア */}
-      <div className="flex-1 text-center min-w-[120px]">
-        {isToday ? (
-          <>
-            <div className="flex items-center justify-center gap-2">
-              <Sun className="h-5 w-5 text-primary" />
-              <span className="text-lg font-semibold text-primary">今日</span>
-            </div>
-            <span className="text-sm text-muted-foreground">{formattedDate}</span>
-          </>
-        ) : (
-          <div className="flex flex-col">
-            <span className="text-lg font-semibold text-foreground">{formattedDate}</span>
-          </div>
-        )}
+      {/* 中央エリア：日付表示（カレンダー付き） */}
+      <div className="flex-1 flex items-center justify-center min-w-0">
+        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+          <PopoverTrigger asChild>
+            <button 
+              className={`
+                flex items-center gap-2 sm:gap-2.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg
+                transition-all duration-200 active:scale-[0.98]
+                ${isToday 
+                  ? 'hover:bg-primary/10' 
+                  : 'hover:bg-background/60'
+                }
+              `}
+              aria-label="カレンダー"
+            >
+              {isToday ? (
+                <>
+                  <Sun className="h-[18px] w-[18px] text-primary flex-shrink-0" />
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-base sm:text-lg font-semibold text-primary">今日</span>
+                    <span className="text-xs sm:text-sm text-muted-foreground">{formattedDate}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <CalendarDays className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="text-base sm:text-lg font-semibold text-foreground">{formattedDate}</span>
+                </>
+              )}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="center">
+            <Calendar
+              mode="single"
+              selected={selectedDateObj}
+              onSelect={handleCalendarSelect}
+              disabled={(date) => isFuture(date) && !isTodayFn(date)}
+              locale={ja}
+              modifiers={{
+                hasEntry: datesWithEntries.map(d => new Date(d)),
+              }}
+              modifiersClassNames={{
+                hasEntry: 'has-entry',
+              }}
+              className="pointer-events-auto"
+            />
+          </PopoverContent>
+        </Popover>
       </div>
-
-      {/* 今日ボタン（過去日のみ表示） */}
-      {!isToday && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleToday}
-          className="text-primary hover:text-primary hover:bg-primary/10 font-medium"
-        >
-          今日へ
-        </Button>
-      )}
 
       {/* 次日ボタン */}
       <button
         onClick={handleNextDay}
         disabled={isNextDisabled}
         className={`
-          flex items-center justify-center w-10 h-10 rounded-full 
+          flex items-center justify-center w-9 h-9 rounded-full flex-shrink-0
           transition-all duration-200
           ${isNextDisabled 
             ? 'text-muted-foreground/30 cursor-not-allowed' 
             : isToday
               ? 'text-primary hover:bg-primary/10 hover:scale-110 active:scale-95'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground hover:scale-110 active:scale-95'
+              : 'text-muted-foreground hover:bg-background/80 hover:text-foreground hover:scale-110 active:scale-95'
           }
         `}
         aria-label="次日"
@@ -125,40 +146,20 @@ export function DateNavigation({ selectedDate, onDateChange, datesWithEntries = 
         <ChevronRight className="h-5 w-5" />
       </button>
 
-      {/* カレンダーポップオーバー */}
-      <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-        <PopoverTrigger asChild>
-          <button 
-            className={`
-              flex items-center justify-center w-10 h-10 rounded-full 
-              transition-all duration-200 hover:scale-110 active:scale-95
-              ${isToday 
-                ? 'text-primary hover:bg-primary/10' 
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              }
-            `}
-            aria-label="カレンダー"
+      {/* 今日に戻るボタン（過去日のみ表示） */}
+      {!isToday && (
+        <>
+          <div className="w-px h-5 bg-border mx-1.5 flex-shrink-0" />
+          <button
+            onClick={handleToday}
+            className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-primary hover:bg-primary/10 transition-all duration-200 active:scale-95 flex-shrink-0 whitespace-nowrap"
           >
-            <CalendarDays className="h-5 w-5" />
+            <Sun className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">今日に戻る</span>
+            <span className="sm:hidden">今日</span>
           </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="end">
-          <Calendar
-            mode="single"
-            selected={selectedDateObj}
-            onSelect={handleCalendarSelect}
-            disabled={(date) => isFuture(date) && !isTodayFn(date)}
-            locale={ja}
-            modifiers={{
-              hasEntry: datesWithEntries.map(d => new Date(d)),
-            }}
-            modifiersClassNames={{
-              hasEntry: 'has-entry',
-            }}
-            className="pointer-events-auto"
-          />
-        </PopoverContent>
-      </Popover>
+        </>
+      )}
     </div>
   );
 }

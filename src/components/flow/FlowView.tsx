@@ -382,13 +382,11 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
   return (
     <div className="space-y-6">
       {/* Date Navigation - 入力フォームの上 */}
-      <div className="flex items-center justify-center pb-2 border-b border-border">
-        <DateNavigation 
-          selectedDate={selectedDate}
-          onDateChange={onDateChange}
-          datesWithEntries={datesWithEntries}
-        />
-      </div>
+      <DateNavigation 
+        selectedDate={selectedDate}
+        onDateChange={onDateChange}
+        datesWithEntries={datesWithEntries}
+      />
 
       {/* Input Form */}
       <FlowInput 
