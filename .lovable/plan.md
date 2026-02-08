@@ -1,84 +1,192 @@
-# FlowLog API Integration
 
-## 完了した機能
+# MCP OAuth認証ハンドシェイク修正計画
 
-### 1. REST API (完了)
-- Hono ベースの Edge Function `/api`
-- Bearer トークン認証
-- 18 エンドポイント（events, tasks, schedules, memos, search, entries）
+## 問題点の診断
 
-### 2. MCP OAuth認証 (完了)
-Claude Desktop、ChatGPT などの AI アシスタント向けに OAuth 2.0 対応を実装。
+現在の実装には、MCPクライアント（Claude Desktop / ChatGPT）が期待するOAuth発見フローと不整合があります：
 
-#### OAuthエンドポイント
-| エンドポイント | 説明 |
-|---------------|------|
-| `GET /.well-known/oauth-authorization-server` | OAuth Server Metadata |
-| `POST /oauth/register` | 動的クライアント登録 |
-| `GET /oauth/authorize` | 認可エンドポイント |
-| `POST /oauth/token` | トークン交換 |
+| 問題 | 現状 | 仕様要件 |
+|------|------|----------|
+| RFC 9728 Protected Resource Metadata | 未実装（404） | `/.well-known/oauth-protected-resource` が必須 |
+| WWW-Authenticate ヘッダ | `authorization_uri` のみ | `resource_metadata` パラメータが必須 |
+| Mcp-Session-Id | 未実装 | Streamable HTTP でセッション管理が期待される |
+| OAuth Authorization Server Metadata | 実装済み（正常動作） | RFC 8414 準拠 |
 
-#### クライアント設定例（Claude Desktop）
-```json
+---
+
+## 修正方針
+
+### 1. RFC 9728 Protected Resource Metadata エンドポイント追加
+
+```text
+GET /.well-known/oauth-protected-resource
+
 {
-  "mcpServers": {
-    "flowlog": {
-      "url": "https://wdvwnbeofakzihmjacko.supabase.co/functions/v1/mcp-server/mcp",
-      "transport": { "type": "streamable_http" }
-    }
-  }
+  "resource": "https://...supabase.co/functions/v1/mcp-server/mcp",
+  "authorization_servers": [
+    "https://...supabase.co/functions/v1/mcp-server"
+  ],
+  "scopes_supported": ["mcp:full"],
+  "bearer_methods_supported": ["header"]
 }
 ```
 
-初回接続時にブラウザが開き、FlowLogにログイン → 認可確認 → 自動的にトークンが設定されます。
+### 2. WWW-Authenticate ヘッダのRFC 9728準拠化
+
+現在：
+```text
+WWW-Authenticate: Bearer realm="FlowLog MCP", authorization_uri="..."
+```
+
+修正後：
+```text
+WWW-Authenticate: Bearer resource_metadata="https://.../mcp-server/.well-known/oauth-protected-resource"
+```
+
+### 3. Mcp-Session-Id セッション管理
+
+- initialize レスポンスで `Mcp-Session-Id` ヘッダを返す
+- 以降のリクエストでセッションIDを検証（オプション）
+- セッションごとの状態管理を追加
 
 ---
 
-## セキュリティ設計
+## 変更対象ファイル
 
-### RLS（Row Level Security）ポリシー
-
-全テーブルで RLS が有効化されており、`auth.uid() = user_id` による厳密なアクセス制御を実施。
-
-| テーブル | SELECT | INSERT | UPDATE | DELETE | 備考 |
-|----------|--------|--------|--------|--------|------|
-| `profiles` | ✅ own | ✅ own | ✅ own | ✅ own | |
-| `entries` | ✅ own | ✅ own | ✅ own | ✅ own | |
-| `blocks` | ✅ own | ✅ own | ✅ own | ✅ own | |
-| `custom_tags` | ✅ own | ✅ own | ✅ own | ✅ own | |
-| `user_ai_settings` | ✅ own | ✅ own | ✅ own | ✅ own | write-onlyパターン |
-| `user_api_tokens` | ✅ own | ✅ own | ❌ なし | ✅ own | immutableパターン |
-| `oauth_authorization_codes` | ✅ own | service role | ❌ なし | ✅ own | 10分期限・単一使用 |
-| `storage.objects` | ✅ public | ✅ own | ✅ own | ✅ own | block-imagesバケット |
-
-### セキュリティパターン
-
-#### 1. Write-Only パターン（user_ai_settings）
-- APIキー（OpenAI, Anthropic, Google）はフロントエンドに返却しない
-- `get_user_ai_settings_safe()` RPC でフラグのみ返却（`has_openai_key` 等）
-- 実際のキー値は Edge Functions（service role）経由でのみアクセス
-
-#### 2. Immutable パターン（user_api_tokens）
-- トークンは発行後に更新不可（UPDATE ポリシーなし）
-- トークン値変更は「削除 → 新規発行」フローで対応
-- `last_used_at` 更新は Edge Function（service role）で実行
-
-#### 3. 短命トークンパターン（oauth_authorization_codes）
-- 認可コードは10分で期限切れ
-- 単一使用（トークン交換後に削除）
-- PKCE（code_challenge）でセキュリティ強化
-
-### 匿名アクセスについて
-
-セキュリティスキャンで「Anonymous Access Policies」警告が出ることがありますが、これは**誤検知**です：
-
-1. **匿名サインアップは無効化済み** - Supabase Auth 設定で `external_anonymous_users_enabled: false`
-2. **RLS は認証済みユーザーのみ対象** - `auth.uid()` は認証ユーザーでないと NULL を返す
-3. **全 RLS ポリシーで user_id チェック** - `auth.uid() = user_id` で厳密に制限
+| ファイル | 変更内容 |
+|----------|----------|
+| `supabase/functions/mcp-server/index.ts` | OAuth Protected Resource Metadata追加、WWW-Authenticate修正、Session管理追加 |
 
 ---
 
-## 今後の拡張候補
-- 設定画面での OAuth 接続済みアプリ一覧表示
-- REST API ドキュメント UI
+## 詳細実装
 
+### Protected Resource Metadata (新規追加)
+
+```typescript
+function getProtectedResourceMetadata() {
+  const baseUrl = `${supabaseUrl}/functions/v1/mcp-server`;
+  return {
+    resource: `${baseUrl}/mcp`,
+    authorization_servers: [baseUrl],
+    scopes_supported: ["mcp:full"],
+    bearer_methods_supported: ["header"],
+    resource_documentation: "https://flowlog.lovable.app/settings"
+  };
+}
+
+// エンドポイント追加
+if (path.endsWith("/.well-known/oauth-protected-resource")) {
+  return new Response(JSON.stringify(getProtectedResourceMetadata()), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" }
+  });
+}
+```
+
+### WWW-Authenticate ヘッダ修正
+
+```typescript
+// 401レスポンス時
+const resourceMetadataUrl = `${supabaseUrl}/functions/v1/mcp-server/.well-known/oauth-protected-resource`;
+return new Response(JSON.stringify({
+  error: "unauthorized",
+  error_description: "Bearer token required"
+}), {
+  status: 401,
+  headers: {
+    ...corsHeaders,
+    "Content-Type": "application/json",
+    "WWW-Authenticate": `Bearer resource_metadata="${resourceMetadataUrl}"`
+  }
+});
+```
+
+### Mcp-Session-Id セッション管理
+
+```typescript
+// インメモリセッション管理（Edge Functionでは簡易的に）
+const sessions = new Map<string, { userId: string; createdAt: Date }>();
+
+function generateSessionId(): string {
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  return Array.from(array, b => b.toString(16).padStart(2, "0")).join("");
+}
+
+// initialize時にセッションIDを返す
+if (request.method === "initialize") {
+  const sessionId = generateSessionId();
+  sessions.set(sessionId, { userId, createdAt: new Date() });
+  
+  return new Response(JSON.stringify({...}), {
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+      "Mcp-Session-Id": sessionId
+    }
+  });
+}
+```
+
+---
+
+## 修正後のOAuth発見フロー
+
+```text
+┌─────────────────┐         ┌─────────────────┐
+│  MCP Client     │         │  FlowLog MCP    │
+│ (Claude/ChatGPT)│         │    Server       │
+└────────┬────────┘         └────────┬────────┘
+         │                           │
+         │ POST /mcp (no token)      │
+         │──────────────────────────>│
+         │                           │
+         │ 401 + WWW-Authenticate:   │
+         │ Bearer resource_metadata= │
+         │<──────────────────────────│
+         │                           │
+         │ GET /.well-known/         │
+         │     oauth-protected-resource
+         │──────────────────────────>│
+         │                           │
+         │ { authorization_servers,  │
+         │   resource, scopes }      │
+         │<──────────────────────────│
+         │                           │
+         │ GET /.well-known/         │
+         │   oauth-authorization-server
+         │──────────────────────────>│
+         │                           │
+         │ { authorization_endpoint, │
+         │   token_endpoint, ... }   │
+         │<──────────────────────────│
+         │                           │
+         │ ... OAuth 2.1 フロー ...  │
+         │                           │
+         │ POST /mcp (with token)    │
+         │──────────────────────────>│
+         │                           │
+         │ 200 + Mcp-Session-Id      │
+         │<──────────────────────────│
+```
+
+---
+
+## 検証項目
+
+修正後、以下を確認：
+
+1. `GET /.well-known/oauth-protected-resource` → 200 + RFC 9728準拠JSON
+2. `POST /mcp` (トークンなし) → 401 + `WWW-Authenticate: Bearer resource_metadata="..."`
+3. `POST /mcp` (トークンあり、initialize) → 200 + `Mcp-Session-Id` ヘッダ
+4. OAuth発見フローが正常に連携
+
+---
+
+## 実装順序
+
+1. Protected Resource Metadata エンドポイント追加
+2. WWW-Authenticate ヘッダをRFC 9728準拠に修正
+3. Mcp-Session-Id セッション管理を追加
+4. Edge Function デプロイ
+5. 各エンドポイントの動作検証
