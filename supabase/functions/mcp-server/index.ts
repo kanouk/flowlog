@@ -985,7 +985,7 @@ async function handleMcpRequest(ctx: McpRequestContext, body: unknown): Promise<
             jsonrpc: "2.0",
             id: request.id,
             result: {
-              protocolVersion: "2024-11-05",
+              protocolVersion: "2025-03-26",
               capabilities: {
                 tools: { listChanged: false },
               },
@@ -1025,6 +1025,15 @@ async function handleMcpRequest(ctx: McpRequestContext, body: unknown): Promise<
         };
       }
       
+      case "ping":
+        return {
+          response: {
+            jsonrpc: "2.0",
+            id: request.id,
+            result: {},
+          },
+        };
+
       default:
         return {
           response: {
@@ -1160,31 +1169,16 @@ Deno.serve(async (req) => {
       }
     }
     
-    // GET: Server-Sent Events（Streamable HTTP）
-    // ここではサーバーからのプッシュ通知は行わないため、空のSSEストリームを即座にcloseする。
-    if (req.method === "GET") {
-      const encoder = new TextEncoder();
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          // コメント行（任意）→ すぐclose
-          controller.enqueue(encoder.encode(": ok\n\n"));
-          controller.close();
-        },
-      });
-
-      return new Response(stream, {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          "Connection": "keep-alive",
-        },
-      });
+    // DELETE: セッション終了 (MCP 2025-03-26)
+    if (req.method === "DELETE") {
+      return new Response(null, { status: 200, headers: corsHeaders });
     }
-    
+
+    // GET / その他: 405 Method Not Allowed
+    // POST ベースの JSON-RPC のみサポート。GET SSE は不要。
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json", "Allow": "POST, DELETE" },
     });
   }
   
