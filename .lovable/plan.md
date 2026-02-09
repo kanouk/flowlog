@@ -1,40 +1,62 @@
-# MCP OAuth認証ハンドシェイク修正計画
 
-## ステータス: ✅ 完了
 
-## 実装完了内容
+# MCP接続エラー修正計画
 
-### 1. RFC 9728 Protected Resource Metadata エンドポイント ✅
+## 根本原因の特定
 
-- `GET /.well-known/oauth-protected-resource` を追加
-- レスポンス検証済み（200 OK + RFC 9728準拠JSON）
+検証の結果、以下の問題を発見しました：
 
-### 2. WWW-Authenticate ヘッダのRFC 9728準拠化 ✅
+| 問題 | 現状 | 影響 |
+|------|------|------|
+| protocolVersion が古い | `"2024-11-05"` を返している | Streamable HTTP は `2025-03-26` の機能。Claude が互換性エラーで接続拒否する |
+| DELETE /mcp 未対応 | 405 エラーを返す | MCP 2025-03-26 ではセッション終了に DELETE を使用。Claude が正常終了できない |
+| GET /mcp の挙動 | 空の SSE を即 close | 仕様上 GET は任意だが、不完全な実装は混乱を招く |
+| ping メソッド未実装 | Method not found を返す | Claude はヘルスチェックに `ping` を使う場合がある |
 
-- `resource_metadata` パラメータを使用するよう修正
-- 401レスポンス時に正しいヘッダを返却
+**最重要**: `protocolVersion: "2024-11-05"` が Streamable HTTP トランスポートとの不整合を引き起こしている。Claude は `2025-03-26` を期待しているため、接続ハンドシェイクの段階で失敗する。
 
-### 3. Mcp-Session-Id セッション管理 ✅
+## 修正内容
 
-- `initialize` リクエスト時にセッションIDを生成
-- レスポンスヘッダに `Mcp-Session-Id` を付与
-- インメモリセッション管理を実装
+### 変更対象ファイル
 
-## 検証結果
+`supabase/functions/mcp-server/index.ts` のみ
 
-| エンドポイント | ステータス | 結果 |
-|---------------|-----------|------|
-| `GET /.well-known/oauth-protected-resource` | ✅ 200 | RFC 9728準拠JSON |
-| `GET /.well-known/oauth-authorization-server` | ✅ 200 | RFC 8414準拠JSON |
-| `POST /mcp` (トークンなし) | ✅ 401 | `WWW-Authenticate: Bearer resource_metadata="..."` |
-| `POST /mcp` (トークンあり) | ✅ 200 | `Mcp-Session-Id` ヘッダ付与 |
+### 1. protocolVersion を `"2025-03-26"` に更新
 
-## OAuth発見フロー（修正後）
+initialize レスポンスの protocolVersion を修正。これにより Claude が Streamable HTTP 互換サーバーとして認識する。
 
+### 2. DELETE /mcp ハンドラー追加
+
+MCP 2025-03-26 仕様に従い、セッション終了用の DELETE メソッドを処理。認証済みリクエストに対して 200 を返す。
+
+### 3. GET /mcp を 405 に変更
+
+サーバーからのプッシュ通知が不要なため、GET SSE を実装する代わりに 405 Method Not Allowed を返す。POST ベースの JSON-RPC のみで十分に動作する。
+
+### 4. ping メソッド対応
+
+`ping` リクエストに対して空の result を返すよう handleMcpRequest に追加。
+
+## 技術詳細
+
+```text
+initialize レスポンス変更:
+  before: protocolVersion: "2024-11-05"
+  after:  protocolVersion: "2025-03-26"
+
+新規ハンドラー:
+  DELETE /mcp → 200 OK (セッション終了)
+  ping method → { jsonrpc: "2.0", id: ..., result: {} }
+
+変更ハンドラー:
+  GET /mcp → 405 Method Not Allowed
 ```
-MCP Client → POST /mcp (no token) → 401 + WWW-Authenticate: Bearer resource_metadata="..."
-MCP Client → GET /.well-known/oauth-protected-resource → { authorization_servers, resource, scopes }
-MCP Client → GET /.well-known/oauth-authorization-server → { authorization_endpoint, token_endpoint, ... }
-MCP Client → OAuth 2.1 フロー実行
-MCP Client → POST /mcp (with token) → 200 + Mcp-Session-Id
-```
+
+## 検証項目
+
+1. POST /mcp (initialize) が `protocolVersion: "2025-03-26"` を返す
+2. DELETE /mcp が 200 を返す
+3. GET /mcp が 405 を返す
+4. ping メソッドが正常応答する
+5. Edge Function 再デプロイ後に Claude Desktop から接続成功
+
