@@ -362,12 +362,13 @@ function getProtectedResourceMetadata() {
 }
 
 // Session management for Streamable HTTP
-const sessions = new Map<string, { userId: string; createdAt: Date }>();
-
+// NOTE: Edge Functions環境ではプロセスがリクエスト間で保持されない可能性があるため、
+// インメモリMapでのセッション保持は行わない。
+// `Mcp-Session-Id` は initialize レスポンスでランダム値を返すだけにする。
 function generateSessionId(): string {
   const array = new Uint8Array(16);
   crypto.getRandomValues(array);
-  return Array.from(array, b => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(array, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 // 動的クライアント登録
@@ -976,10 +977,9 @@ async function handleMcpRequest(ctx: McpRequestContext, body: unknown): Promise<
   try {
     switch (request.method) {
       case "initialize": {
-        // セッションIDを生成
+        // セッションIDを生成（保持・検証はしない。各リクエストはBearerトークンで認証する）
         const newSessionId = generateSessionId();
-        sessions.set(newSessionId, { userId: ctx.userId, createdAt: new Date() });
-        
+
         return {
           response: {
             jsonrpc: "2.0",
@@ -1160,21 +1160,18 @@ Deno.serve(async (req) => {
       }
     }
     
-    // GET: Server-Sent Events（Streamable HTTP対応）
+    // GET: Server-Sent Events（Streamable HTTP）
+    // ここではサーバーからのプッシュ通知は行わないため、空のSSEストリームを即座にcloseする。
     if (req.method === "GET") {
-      // SSE接続を確立
       const encoder = new TextEncoder();
-      const stream = new ReadableStream({
+      const stream = new ReadableStream<Uint8Array>({
         start(controller) {
-          // 初期接続メッセージ
-          const initMessage = JSON.stringify({
-            jsonrpc: "2.0",
-            method: "notifications/initialized",
-          });
-          controller.enqueue(encoder.encode(`data: ${initMessage}\n\n`));
+          // コメント行（任意）→ すぐclose
+          controller.enqueue(encoder.encode(": ok\n\n"));
+          controller.close();
         },
       });
-      
+
       return new Response(stream, {
         headers: {
           ...corsHeaders,
