@@ -97,7 +97,7 @@ const LAST_TAG_KEY = 'flowlog_last_tag';
 
 export function getLastCategory(): BlockCategory {
   if (typeof window === 'undefined') return 'event';
-  const stored = localStorage.getItem(LAST_CATEGORY_KEY);
+  const stored = sessionStorage.getItem(LAST_CATEGORY_KEY);
   if (stored && CATEGORIES.includes(stored as BlockCategory)) {
     return stored as BlockCategory;
   }
@@ -106,20 +106,20 @@ export function getLastCategory(): BlockCategory {
 
 export function setLastCategory(category: BlockCategory): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(LAST_CATEGORY_KEY, category);
+  sessionStorage.setItem(LAST_CATEGORY_KEY, category);
 }
 
 export function getLastTag(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(LAST_TAG_KEY);
+  return sessionStorage.getItem(LAST_TAG_KEY);
 }
 
 export function setLastTag(tag: string | null): void {
   if (typeof window === 'undefined') return;
   if (tag) {
-    localStorage.setItem(LAST_TAG_KEY, tag);
+    sessionStorage.setItem(LAST_TAG_KEY, tag);
   } else {
-    localStorage.removeItem(LAST_TAG_KEY);
+    sessionStorage.removeItem(LAST_TAG_KEY);
   }
 }
 
