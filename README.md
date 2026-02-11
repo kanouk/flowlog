@@ -46,6 +46,26 @@
 - **空entry削除**: クライアント側実装（将来的にDBトリガー化を検討）
 - **Edge Function**: parseISO + formatInTimeZone に統一
 
+## セキュリティ仕様（RLS）
+
+全テーブルで RLS が有効。すべてのポリシーは `auth.uid() = user_id` を条件とし、認証なしでのアクセスは不可。
+
+| テーブル | SELECT | INSERT | UPDATE | DELETE | 備考 |
+|---------|--------|--------|--------|--------|------|
+| entries | ✅ | ✅ | ✅ | ✅ | |
+| blocks | ✅ | ✅ | ✅ (WITH CHECK付) | ✅ | |
+| profiles | ✅ | ✅ | ✅ | ✅ | |
+| custom_tags | ✅ | ✅ | ✅ | ✅ | |
+| user_ai_settings | ✅ | ✅ | ✅ | ✅ | APIキーはget_user_ai_settings_safe経由のみ。フロントエンドにキー値は返さない |
+| user_api_tokens | ✅ | ✅ | ❌ | ✅ | UPDATE不可（immutable設計、ローテーションはdelete→re-issue） |
+| oauth_authorization_codes | ✅ | ✅ | ❌ | ✅ | UPDATE不可 |
+
+### セキュリティパターン
+
+- **user_ai_settings**: Write-onlyパターン。APIキーはEdge Functions（サービスロール）のみがアクセス。フロントエンドは`get_user_ai_settings_safe`関数経由で`has_*_key`フラグのみ取得
+- **user_api_tokens**: Immutableパターン。トークン更新はdelete→再発行フロー
+- **storage（block-images）**: 公開読み取り（画像共有用）、書き込み・削除は認証ユーザーのみ
+
 ## How can I edit this code?
 
 There are several ways of editing your application.
