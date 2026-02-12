@@ -77,7 +77,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     }, 100);
   }, []);
 
-  // 下書きをsessionStorageから復元
+  // 下書きをsessionStorageから復元 + カテゴリ・タグ・優先度をリセット
   useEffect(() => {
     const draft = sessionStorage.getItem(`${DRAFT_KEY_PREFIX}${selectedDate}`);
     if (draft) {
@@ -92,6 +92,13 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     } else {
       setContent('');
     }
+
+    // 日付移動時にカテゴリ・タグ・優先度をデフォルトにリセット
+    setCategory('event');
+    setLastCategory('event');
+    setTag(null);
+    setLastTag(null);
+    setPriority(0);
   }, [selectedDate]);
 
   // 入力内容をsessionStorageに保存
