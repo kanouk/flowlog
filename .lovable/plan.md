@@ -1,21 +1,27 @@
 
-# localStorage → sessionStorage 変更
+# 日付移動時にカテゴリ・タグをリセット
 
 ## 概要
-`src/lib/categoryUtils.ts` の4つの関数で `localStorage` を `sessionStorage` に変更します。これにより、前回投稿したカテゴリ・タグはブラウザタブを閉じるとリセットされます。
+日付を移動した際に、カテゴリをデフォルト（`event`）に、タグを `null` にリセットします。
 
 ## 変更対象
-`src/lib/categoryUtils.ts` のみ
+`src/components/flow/FlowInput.tsx` のみ
 
-## 変更箇所（4か所）
+## 変更内容
 
-| 関数 | 行 | 変更内容 |
-|------|-----|----------|
-| `getLastCategory()` | 100 | `localStorage.getItem` → `sessionStorage.getItem` |
-| `setLastCategory()` | 108 | `localStorage.setItem` → `sessionStorage.setItem` |
-| `getLastTag()` | 113 | `localStorage.getItem` → `sessionStorage.getItem` |
-| `setLastTag()` | 119-121 | `localStorage.setItem` / `localStorage.removeItem` → `sessionStorage` |
+既存の下書き復元 useEffect（80-95行目）に、カテゴリ・タグのリセット処理を追加します。
 
-## 動作の変化
-- **変更前**: カテゴリ・タグがブラウザを閉じても永続的に保持される
-- **変更後**: タブ/ウィンドウを閉じるとリセットされ、デフォルト値（カテゴリ: `event`、タグ: `null`）に戻る。同一タブ内では引き続き保持される
+```text
+現在: selectedDate が変わると下書きだけ復元/クリア
+変更後: selectedDate が変わると下書き復元に加え、
+        カテゴリを 'event' に、タグを null に、優先度を 0 にリセット
+        sessionStorage の保存値もクリア
+```
+
+初回マウント時の復元（70-78行目）は `selectedDate` 変更時には走らないため、下書き復元の useEffect 内にリセットロジックを統合します。具体的には：
+
+- `setCategory('event')` と `setLastCategory('event')`（sessionStorage更新）
+- `setTag(null)` と `setLastTag(null)`
+- `setPriority(0)`
+
+これにより、同じ日付内での連続投稿ではカテゴリ・タグが維持され、日付を切り替えた瞬間にデフォルトに戻ります。
