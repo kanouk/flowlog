@@ -10,6 +10,17 @@ const corsHeaders = {
 
 const TIMEZONE = 'Asia/Tokyo';
 
+interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
+interface AIResult {
+  text: string;
+  usage: TokenUsage | null;
+}
+
 interface Block {
   id: string;
   content: string | null;
@@ -62,7 +73,7 @@ function getCategoryLabel(category: string): string {
   return labels[category] || category;
 }
 
-async function callOpenAI(apiKey: string, model: string, systemPrompt: string, userPrompt: string): Promise<string> {
+async function callOpenAI(apiKey: string, model: string, systemPrompt: string, userPrompt: string): Promise<AIResult> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -84,10 +95,15 @@ async function callOpenAI(apiKey: string, model: string, systemPrompt: string, u
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  const usage: TokenUsage | null = data.usage ? {
+    prompt_tokens: data.usage.prompt_tokens || 0,
+    completion_tokens: data.usage.completion_tokens || 0,
+    total_tokens: data.usage.total_tokens || 0,
+  } : null;
+  return { text: data.choices?.[0]?.message?.content || '', usage };
 }
 
-async function callAnthropic(apiKey: string, model: string, systemPrompt: string, userPrompt: string): Promise<string> {
+async function callAnthropic(apiKey: string, model: string, systemPrompt: string, userPrompt: string): Promise<AIResult> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -111,10 +127,15 @@ async function callAnthropic(apiKey: string, model: string, systemPrompt: string
   }
 
   const data = await response.json();
-  return data.content?.[0]?.text || '';
+  const usage: TokenUsage | null = data.usage ? {
+    prompt_tokens: data.usage.input_tokens || 0,
+    completion_tokens: data.usage.output_tokens || 0,
+    total_tokens: (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0),
+  } : null;
+  return { text: data.content?.[0]?.text || '', usage };
 }
 
-async function callGoogle(apiKey: string, model: string, systemPrompt: string, userPrompt: string): Promise<string> {
+async function callGoogle(apiKey: string, model: string, systemPrompt: string, userPrompt: string): Promise<AIResult> {
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: {
@@ -136,10 +157,16 @@ async function callGoogle(apiKey: string, model: string, systemPrompt: string, u
   }
 
   const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const meta = data.usageMetadata;
+  const usage: TokenUsage | null = meta ? {
+    prompt_tokens: meta.promptTokenCount || 0,
+    completion_tokens: meta.candidatesTokenCount || 0,
+    total_tokens: meta.totalTokenCount || 0,
+  } : null;
+  return { text: data.candidates?.[0]?.content?.parts?.[0]?.text || '', usage };
 }
 
-async function callLovableAI(model: string, systemPrompt: string, userPrompt: string): Promise<string> {
+async function callLovableAI(model: string, systemPrompt: string, userPrompt: string): Promise<AIResult> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) {
     throw new Error('LOVABLE_API_KEY is not configured');
@@ -172,7 +199,12 @@ async function callLovableAI(model: string, systemPrompt: string, userPrompt: st
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  const usage: TokenUsage | null = data.usage ? {
+    prompt_tokens: data.usage.prompt_tokens || 0,
+    completion_tokens: data.usage.completion_tokens || 0,
+    total_tokens: data.usage.total_tokens || 0,
+  } : null;
+  return { text: data.choices?.[0]?.message?.content || '', usage };
 }
 
 // AI呼び出しの共通ラッパー
@@ -182,7 +214,7 @@ async function callAI(
   systemPrompt: string,
   userPrompt: string,
   aiSettings: AISettings | null
-): Promise<string> {
+): Promise<AIResult> {
   switch (provider) {
     case 'openai':
       if (!aiSettings?.openai_api_key) {
@@ -367,12 +399,15 @@ JSON形式で回答してください。`;
 
     let timeUpdates: TimeUpdate[] = [];
     let questions: TimeQuestion[] = [];
+    const tokenUsages: { phase: string; usage: TokenUsage | null }[] = [];
 
     try {
-      const timeAnalysisResponse = await callAI(provider, model, TIME_ANALYSIS_PROMPT, timeAnalysisPrompt, aiSettings);
+      const timeAnalysisResult = await callAI(provider, model, TIME_ANALYSIS_PROMPT, timeAnalysisPrompt, aiSettings);
+      tokenUsages.push({ phase: 'Phase 1 (Time inference)', usage: timeAnalysisResult.usage });
+      console.log('Phase 1 token usage:', JSON.stringify(timeAnalysisResult.usage));
       
       // JSONを抽出
-      const jsonMatch = timeAnalysisResponse.match(/\{[\s\S]*\}/);
+      const jsonMatch = timeAnalysisResult.text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const analysisResult = JSON.parse(jsonMatch[0]);
         
@@ -512,7 +547,10 @@ ${blocksText}`;
     let formattedContent: string;
 
     try {
-      formattedContent = await callAI(provider, model, systemPrompt, userPrompt, aiSettings);
+      const formatResult = await callAI(provider, model, systemPrompt, userPrompt, aiSettings);
+      formattedContent = formatResult.text;
+      tokenUsages.push({ phase: 'Phase 2 (Formatting)', usage: formatResult.usage });
+      console.log('Phase 2 token usage:', JSON.stringify(formatResult.usage));
     } catch (error) {
       if (error instanceof Error) {
         if (error.message === 'RATE_LIMIT') {
@@ -595,10 +633,12 @@ ${formattedContent}
 上記の日記を行動規範と照らし合わせて、100点からの減点方式でスコアを算出してください。`;
 
       try {
-        const scoreResponse = await callAI(provider, model, SCORE_PROMPT, scoreUserPrompt, aiSettings);
+        const scoreAIResult = await callAI(provider, model, SCORE_PROMPT, scoreUserPrompt, aiSettings);
+        tokenUsages.push({ phase: 'Phase 3 (Scoring)', usage: scoreAIResult.usage });
+        console.log('Phase 3 token usage:', JSON.stringify(scoreAIResult.usage));
         
         // JSONを抽出
-        const scoreJsonMatch = scoreResponse.match(/\{[\s\S]*\}/);
+        const scoreJsonMatch = scoreAIResult.text.match(/\{[\s\S]*\}/);
         if (scoreJsonMatch) {
           const scoreResult = JSON.parse(scoreJsonMatch[0]);
           score = Math.max(0, Math.min(100, scoreResult.score || 100));
@@ -621,6 +661,17 @@ ${formattedContent}
         // スコア計算に失敗しても日記は返す
       }
     }
+
+    // トークン使用量の合計をログ出力
+    const totalUsage: TokenUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+    for (const t of tokenUsages) {
+      if (t.usage) {
+        totalUsage.prompt_tokens += t.usage.prompt_tokens;
+        totalUsage.completion_tokens += t.usage.completion_tokens;
+        totalUsage.total_tokens += t.usage.total_tokens;
+      }
+    }
+    console.log('Total token usage:', JSON.stringify(totalUsage));
 
     // レスポンスを構築
     const responseData: {
