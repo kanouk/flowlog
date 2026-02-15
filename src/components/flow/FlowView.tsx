@@ -211,7 +211,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     };
     
     if (mode !== 'toNow' || isToday) {
-      setBlocks(prev => sortBlocksDesc([...prev, optimisticBlock]));
+      setBlocks(prev => [optimisticBlock, ...prev]);
     }
     
     const { block: savedBlock, navigateToDate } = await addBlockWithDate({
