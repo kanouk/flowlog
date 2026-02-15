@@ -106,7 +106,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     
     // toNowモードでなければローカルに追加（降順ソート）
     if (mode !== 'toNow' || isToday) {
-      setBlocks(prev => sortBlocksDesc([...prev, optimisticBlock]));
+      setBlocks(prev => [optimisticBlock, ...prev]);
     }
     
     // バックエンドに非同期で保存
