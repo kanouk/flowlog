@@ -197,8 +197,17 @@ export default function Dashboard() {
               {TAB_ORDER.map((tab) => {
                 const config = TAB_CONFIG[tab];
                 const Icon = config.icon;
+                const isFlow = tab === 'flow';
                 return (
-                  <TabsTrigger key={tab} value={tab} className="gap-1.5 whitespace-nowrap">
+                  <TabsTrigger 
+                    key={tab} 
+                    value={tab} 
+                    className={`gap-1.5 whitespace-nowrap ${
+                      isFlow 
+                        ? 'bg-primary/10 text-primary font-semibold border border-primary/20 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md' 
+                        : ''
+                    }`}
+                  >
                     <Icon className="h-4 w-4 flex-shrink-0" />
                     <span className="text-sm hidden lg:inline">{config.label}</span>
                   </TabsTrigger>
@@ -254,18 +263,31 @@ export default function Dashboard() {
               const config = TAB_CONFIG[tab];
               const Icon = config.icon;
               const isActive = activeTab === tab;
+              const isFlow = tab === 'flow';
               return (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={`relative flex-1 flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+                    isFlow ? 'border-r border-border' : ''
+                  } ${
                     isActive 
                       ? config.activeColor
                       : 'text-muted-foreground active:scale-95'
                   }`}
                 >
-                  <Icon className={`h-5 w-5 transition-transform duration-200 ${isActive ? 'scale-110' : ''}`} />
-                  {isActive && (
+                  {isFlow ? (
+                    <span className={`rounded-xl p-1.5 transition-transform duration-200 ${
+                      isActive 
+                        ? 'bg-primary text-primary-foreground scale-110' 
+                        : 'bg-primary/10 text-primary'
+                    }`}>
+                      <Icon className="h-5 w-5" />
+                    </span>
+                  ) : (
+                    <Icon className={`h-5 w-5 transition-transform duration-200 ${isActive ? 'scale-110' : ''}`} />
+                  )}
+                  {isActive && !isFlow && (
                     <span className={`absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${TAB_DOT_COLORS[tab]}`} />
                   )}
                 </button>
