@@ -204,12 +204,12 @@ export default function Dashboard() {
                     value={tab} 
                     className={`gap-1.5 whitespace-nowrap ${
                       isFlow 
-                        ? 'bg-primary/10 text-primary font-semibold border border-primary/20 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md' 
+                        ? 'text-primary font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md' 
                         : ''
                     }`}
                   >
                     <Icon className="h-4 w-4 flex-shrink-0" />
-                    <span className="text-sm hidden lg:inline">{config.label}</span>
+                    <span className="text-sm">{config.label}</span>
                   </TabsTrigger>
                 );
               })}
