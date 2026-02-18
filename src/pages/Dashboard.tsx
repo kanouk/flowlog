@@ -1,17 +1,55 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useEntries, Entry } from '@/hooks/useEntries';
 import { FlowView } from '@/components/flow/FlowView';
-import { StockView } from '@/components/stock/StockView';
+import { JournalView } from '@/components/stock/JournalView';
+import { TasksView } from '@/components/stock/TasksView';
+import { ScheduleView } from '@/components/stock/ScheduleView';
+import { MemosView } from '@/components/stock/MemosView';
+import { ReadLaterView } from '@/components/stock/ReadLaterView';
 import { SearchBar } from '@/components/search/SearchBar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, Settings, PenLine, FileText } from 'lucide-react';
+import { LogOut, Settings, PenLine, BookOpen, ListTodo, CalendarClock, Brain, Bookmark } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import { getTodayKey } from '@/lib/dateUtils';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useTabSwipe } from '@/hooks/useTabSwipe';
 import logoImage from '@/assets/logo.png';
+
+type DashboardTab = 'flow' | 'journal' | 'tasks' | 'schedule' | 'memos' | 'readLater';
+
+const TAB_ORDER: DashboardTab[] = ['flow', 'journal', 'tasks', 'schedule', 'memos', 'readLater'];
+
+const TAB_CONFIG: Record<DashboardTab, { label: string; icon: typeof PenLine; activeColor: string; hoverColor: string }> = {
+  flow: { label: '入力', icon: PenLine, activeColor: 'text-primary', hoverColor: '' },
+  journal: { label: '日記', icon: BookOpen, activeColor: 'text-blue-500', hoverColor: 'hover:text-blue-500' },
+  tasks: { label: 'タスク', icon: ListTodo, activeColor: 'text-orange-500', hoverColor: 'hover:text-orange-500' },
+  schedule: { label: '予定', icon: CalendarClock, activeColor: 'text-cyan-500', hoverColor: 'hover:text-cyan-500' },
+  memos: { label: 'メモ', icon: Brain, activeColor: 'text-purple-500', hoverColor: 'hover:text-purple-500' },
+  readLater: { label: 'あとで読む', icon: Bookmark, activeColor: 'text-green-500', hoverColor: 'hover:text-green-500' },
+};
+
+const TAB_DOT_COLORS: Record<DashboardTab, string> = {
+  flow: 'bg-primary',
+  journal: 'bg-blue-500',
+  tasks: 'bg-orange-500',
+  schedule: 'bg-cyan-500',
+  memos: 'bg-purple-500',
+  readLater: 'bg-green-500',
+};
+
+// カテゴリからタブへのマッピング
+const categoryToTab = (category: string): DashboardTab => {
+  switch (category) {
+    case 'task': return 'tasks';
+    case 'memo': return 'memos';
+    case 'schedule': return 'schedule';
+    case 'read_later': return 'readLater';
+    default: return 'flow';
+  }
+};
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -21,7 +59,7 @@ export default function Dashboard() {
   
   const [entries, setEntries] = useState<Entry[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<string>('flow');
+  const [activeTab, setActiveTab] = useState<DashboardTab>('flow');
   const [searchQuery, setSearchQuery] = useState<string | null>(null);
   const isMobile = useIsMobile();
   
@@ -29,10 +67,26 @@ export default function Dashboard() {
   const selectedDate = searchParams.get('date') || today;
   const targetBlockId = searchParams.get('block');
 
-  // カレンダー用：エントリがある日付のリスト
   const datesWithEntries = useMemo(() => {
     return entries.map(e => e.date);
   }, [entries]);
+
+  // 6タブ間スワイプ
+  const goToNextTab = useCallback(() => {
+    const idx = TAB_ORDER.indexOf(activeTab);
+    if (idx < TAB_ORDER.length - 1) setActiveTab(TAB_ORDER[idx + 1]);
+  }, [activeTab]);
+
+  const goToPrevTab = useCallback(() => {
+    const idx = TAB_ORDER.indexOf(activeTab);
+    if (idx > 0) setActiveTab(TAB_ORDER[idx - 1]);
+  }, [activeTab]);
+
+  useTabSwipe({
+    onSwipeLeft: goToNextTab,
+    onSwipeRight: goToPrevTab,
+    enabled: isMobile,
+  });
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -66,16 +120,12 @@ export default function Dashboard() {
     }
   };
 
-  const handleBackToToday = () => {
-    setSearchParams({});
-  };
-
   const handleLogoClick = () => {
     setSearchParams({});
     setActiveTab('flow');
   };
 
-  const handleSearchNavigate = (targetDate: string, tab?: 'flow' | 'stock', blockId?: string, query?: string) => {
+  const handleSearchNavigate = (targetDate: string, tab?: string, blockId?: string, query?: string) => {
     const params: Record<string, string> = {};
     if (targetDate !== today) {
       params.date = targetDate;
@@ -85,7 +135,7 @@ export default function Dashboard() {
     }
     setSearchParams(params);
     if (tab) {
-      setActiveTab(tab);
+      setActiveTab(tab as DashboardTab);
     }
     if (query) {
       setSearchQuery(query);
@@ -93,7 +143,6 @@ export default function Dashboard() {
   };
 
   const handleBlockScrolled = () => {
-    // スクロール完了後、blockパラメータをURLから削除
     const newParams = new URLSearchParams(searchParams);
     newParams.delete('block');
     setSearchParams(newParams);
@@ -104,7 +153,6 @@ export default function Dashboard() {
     navigate('/auth');
   };
 
-  // 初回ロード時のみフルローディング画面を表示
   if (authLoading || (initialLoading && entries.length === 0)) {
     return (
       <div className="min-h-screen flow-gradient flex items-center justify-center">
@@ -130,18 +178,10 @@ export default function Dashboard() {
 
           <div className="flex items-center gap-2">
             <SearchBar onNavigateToDate={handleSearchNavigate} />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate('/settings')}
-            >
+            <Button variant="ghost" size="icon" onClick={() => navigate('/settings')}>
               <Settings className="h-5 w-5" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleSignOut}
-            >
+            <Button variant="ghost" size="icon" onClick={handleSignOut}>
               <LogOut className="h-5 w-5" />
             </Button>
           </div>
@@ -150,18 +190,20 @@ export default function Dashboard() {
 
       {/* Main content */}
       <div className={`container max-w-4xl mx-auto px-4 py-8 ${isMobile ? 'pb-24' : ''}`}>
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          {/* Desktop tabs - hidden on mobile */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as DashboardTab)} className="space-y-6">
+          {/* Desktop tabs */}
           {!isMobile && (
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="flow" className="gap-1.5 whitespace-nowrap">
-                <PenLine className="h-4 w-4 flex-shrink-0" />
-                <span className="text-sm">Flow</span>
-              </TabsTrigger>
-              <TabsTrigger value="stock" className="gap-1.5 whitespace-nowrap">
-                <FileText className="h-4 w-4 flex-shrink-0" />
-                <span className="text-sm">Stock</span>
-              </TabsTrigger>
+            <TabsList className="grid w-full grid-cols-6">
+              {TAB_ORDER.map((tab) => {
+                const config = TAB_CONFIG[tab];
+                const Icon = config.icon;
+                return (
+                  <TabsTrigger key={tab} value={tab} className="gap-1.5 whitespace-nowrap">
+                    <Icon className="h-4 w-4 flex-shrink-0" />
+                    <span className="text-sm hidden lg:inline">{config.label}</span>
+                  </TabsTrigger>
+                );
+              })}
             </TabsList>
           )}
 
@@ -178,48 +220,57 @@ export default function Dashboard() {
             />
           </TabsContent>
 
-          <TabsContent value="stock" className="mt-0">
-            <StockView 
+          <TabsContent value="journal" className="mt-0">
+            <JournalView 
               entries={entries}
               selectedDate={selectedDate}
               onDateSelect={handleDateSelect}
             />
           </TabsContent>
+
+          <TabsContent value="tasks" className="mt-0">
+            <TasksView />
+          </TabsContent>
+
+          <TabsContent value="schedule" className="mt-0">
+            <ScheduleView />
+          </TabsContent>
+
+          <TabsContent value="memos" className="mt-0">
+            <MemosView />
+          </TabsContent>
+
+          <TabsContent value="readLater" className="mt-0">
+            <ReadLaterView />
+          </TabsContent>
         </Tabs>
       </div>
 
-      {/* Mobile Bottom Tab Bar */}
+      {/* Mobile Bottom Tab Bar - 6 tabs, icons only */}
       {isMobile && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-border safe-area-bottom">
           <div className="flex h-16">
-            <button
-              onClick={() => setActiveTab('flow')}
-              className={`relative flex-1 flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
-                activeTab === 'flow' 
-                  ? 'text-primary' 
-                  : 'text-muted-foreground active:scale-95'
-              }`}
-            >
-              <PenLine className={`h-5 w-5 transition-transform duration-200 ${activeTab === 'flow' ? 'scale-110' : ''}`} />
-              <span className="text-xs font-medium">Flow</span>
-              {activeTab === 'flow' && (
-                <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('stock')}
-              className={`relative flex-1 flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
-                activeTab === 'stock' 
-                  ? 'text-primary' 
-                  : 'text-muted-foreground active:scale-95'
-              }`}
-            >
-              <FileText className={`h-5 w-5 transition-transform duration-200 ${activeTab === 'stock' ? 'scale-110' : ''}`} />
-              <span className="text-xs font-medium">Stock</span>
-              {activeTab === 'stock' && (
-                <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
-              )}
-            </button>
+            {TAB_ORDER.map((tab) => {
+              const config = TAB_CONFIG[tab];
+              const Icon = config.icon;
+              const isActive = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`relative flex-1 flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+                    isActive 
+                      ? config.activeColor
+                      : 'text-muted-foreground active:scale-95'
+                  }`}
+                >
+                  <Icon className={`h-5 w-5 transition-transform duration-200 ${isActive ? 'scale-110' : ''}`} />
+                  {isActive && (
+                    <span className={`absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${TAB_DOT_COLORS[tab]}`} />
+                  )}
+                </button>
+              );
+            })}
           </div>
         </nav>
       )}

@@ -9,7 +9,7 @@ import { SearchResults } from './SearchResults';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 interface SearchBarProps {
-  onNavigateToDate: (date: string, tab?: 'flow' | 'stock', blockId?: string, query?: string) => void;
+  onNavigateToDate: (date: string, tab?: string, blockId?: string, query?: string) => void;
 }
 
 export function SearchBar({ onNavigateToDate }: SearchBarProps) {
@@ -31,7 +31,7 @@ export function SearchBar({ onNavigateToDate }: SearchBarProps) {
   };
 
   const handleSelectEntry = (date: string) => {
-    onNavigateToDate(date, 'stock');
+    onNavigateToDate(date, 'journal');
     clearSearch();
   };
 
