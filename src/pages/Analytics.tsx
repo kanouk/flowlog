@@ -44,7 +44,7 @@ function formatDateAxis(dateStr: string) {
 export default function Analytics() {
   const navigate = useNavigate();
   const [days, setDays] = useState<PeriodDays>(30);
-  const { scoreData, categoryData, dailyActivity, isLoading } = useAnalytics(days);
+  const { scoreData, categoryData, dailyActivity, streakInfo, isLoading } = useAnalytics(days);
 
   return (
     <div className="min-h-screen bg-background">
@@ -71,6 +71,24 @@ export default function Analytics() {
             </Button>
           ))}
         </div>
+
+        {/* Streak card */}
+        <Card>
+          <CardContent className="py-4 flex items-center justify-between">
+            <div className="text-lg font-semibold">
+              {streakInfo.currentStreak > 0 ? (
+                streakInfo.isActiveToday
+                  ? <span>🔥 {streakInfo.currentStreak}日連続投稿中</span>
+                  : <span>⚡ 昨日まで{streakInfo.currentStreak}日連続！</span>
+              ) : (
+                <span>✨ 今日から始めよう</span>
+              )}
+            </div>
+            <div className="text-sm text-muted-foreground">
+              🏆 最長記録: {streakInfo.longestStreak}日
+            </div>
+          </CardContent>
+        </Card>
 
         {isLoading ? (
           <p className="text-muted-foreground text-center py-12">読み込み中...</p>
