@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
-import { subDays, format } from 'date-fns';
+import { subDays, format, parseISO } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { TIMEZONE } from '@/lib/dateUtils';
 
@@ -62,6 +62,59 @@ export function useAnalytics(days: PeriodDays) {
     enabled: !!userId,
   });
 
+  // Streak: fetch all entry dates (independent of period filter)
+  const allDatesQuery = useQuery({
+    queryKey: ['analytics-all-dates', userId],
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await supabase
+        .from('entries')
+        .select('date')
+        .order('date', { ascending: true });
+
+      if (error) throw error;
+      return (data ?? []).map(e => e.date);
+    },
+    enabled: !!userId,
+  });
+
+  const streakInfo = (() => {
+    if (!allDatesQuery.data || allDatesQuery.data.length === 0) {
+      return { currentStreak: 0, longestStreak: 0, isActiveToday: false };
+    }
+
+    const dateSet = new Set(allDatesQuery.data);
+    const today = formatInTimeZone(new Date(), TIMEZONE, 'yyyy-MM-dd');
+    const yesterday = format(subDays(parseISO(today), 1), 'yyyy-MM-dd');
+
+    // Current streak
+    let currentStreak = 0;
+    const isActiveToday = dateSet.has(today);
+    let checkDate = isActiveToday ? today : yesterday;
+
+    while (dateSet.has(checkDate)) {
+      currentStreak++;
+      checkDate = format(subDays(parseISO(checkDate), 1), 'yyyy-MM-dd');
+    }
+
+    // Longest streak
+    const sortedDates = [...allDatesQuery.data].sort();
+    let longestStreak = 0;
+    let streak = 1;
+    for (let i = 1; i < sortedDates.length; i++) {
+      const prev = parseISO(sortedDates[i - 1]);
+      const curr = parseISO(sortedDates[i]);
+      if (format(subDays(curr, 1), 'yyyy-MM-dd') === format(prev, 'yyyy-MM-dd')) {
+        streak++;
+      } else {
+        longestStreak = Math.max(longestStreak, streak);
+        streak = 1;
+      }
+    }
+    longestStreak = Math.max(longestStreak, streak);
+
+    return { currentStreak, longestStreak, isActiveToday };
+  })();
+
   const categoryData: CategoryCount[] = (() => {
     if (!blocksQuery.data) return [];
     const counts: Record<string, number> = {};
@@ -91,6 +144,7 @@ export function useAnalytics(days: PeriodDays) {
     scoreData: scoreQuery.data ?? [],
     categoryData,
     dailyActivity,
+    streakInfo,
     isLoading: scoreQuery.isLoading || blocksQuery.isLoading,
   };
 }
