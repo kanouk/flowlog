@@ -11,7 +11,7 @@ import { ReadLaterView } from '@/components/stock/ReadLaterView';
 import { SearchBar } from '@/components/search/SearchBar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, Settings, PenLine, BookOpen, ListTodo, CalendarClock, Brain, Bookmark } from 'lucide-react';
+import { LogOut, Settings, PenLine, BookOpen, ListTodo, CalendarClock, Brain, Bookmark, BarChart3 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import { getTodayKey } from '@/lib/dateUtils';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -178,6 +178,9 @@ export default function Dashboard() {
 
           <div className="flex items-center gap-2">
             <SearchBar onNavigateToDate={handleSearchNavigate} />
+            <Button variant="ghost" size="icon" onClick={() => navigate('/analytics')}>
+              <BarChart3 className="h-5 w-5" />
+            </Button>
             <Button variant="ghost" size="icon" onClick={() => navigate('/settings')}>
               <Settings className="h-5 w-5" />
             </Button>
