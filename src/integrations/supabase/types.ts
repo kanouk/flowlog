@@ -22,6 +22,7 @@ export type Database = {
           done_at: string | null
           ends_at: string | null
           entry_id: string
+          extracted_text: string | null
           id: string
           images: string[] | null
           is_all_day: boolean | null
@@ -40,6 +41,7 @@ export type Database = {
           done_at?: string | null
           ends_at?: string | null
           entry_id: string
+          extracted_text?: string | null
           id?: string
           images?: string[] | null
           is_all_day?: boolean | null
@@ -58,6 +60,7 @@ export type Database = {
           done_at?: string | null
           ends_at?: string | null
           entry_id?: string
+          extracted_text?: string | null
           id?: string
           images?: string[] | null
           is_all_day?: boolean | null

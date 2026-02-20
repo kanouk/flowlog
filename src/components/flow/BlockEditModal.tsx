@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { X, Trash2, ImagePlus, Camera, Clock, Calendar } from 'lucide-react';
+import { X, Trash2, ImagePlus, Camera, Clock, Calendar, ScanText, Loader2, Copy } from 'lucide-react';
 import { Block, BlockUpdatePayload } from '@/hooks/useEntries';
+import { supabase } from '@/integrations/supabase/client';
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { useCustomTags } from '@/hooks/useCustomTags';
 import { Button } from '@/components/ui/button';
@@ -111,6 +112,8 @@ export function BlockEditModal({
   // UI State
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractedText, setExtractedText] = useState(block.extracted_text || '');
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -138,6 +141,8 @@ export function BlockEditModal({
       setScheduleEndTime(formatTimeFromISO(block.ends_at));
       setIsSaving(false);
       setIsDeleting(false);
+      setIsExtracting(false);
+      setExtractedText(block.extracted_text || '');
     }
   }, [open, block]);
   
@@ -354,6 +359,11 @@ export function BlockEditModal({
         updates.priority = priority;
       }
       
+      // Extracted text
+      if (extractedText !== (block.extracted_text || '')) {
+        updates.extracted_text = extractedText || null;
+      }
+      
       const originalImages = block.images || [];
       const imagesChanged = 
         finalImages.length !== originalImages.length ||
@@ -532,6 +542,82 @@ export function BlockEditModal({
               </div>
             )}
           </div>
+          
+          {/* OCR テキスト抽出 */}
+          {(existingImages.length > 0 || newImagePreviews.length > 0) && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+                  <ScanText className="h-3.5 w-3.5" />
+                  テキスト抽出
+                </span>
+                <div className="flex gap-1">
+                  {extractedText && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => {
+                        navigator.clipboard.writeText(extractedText);
+                        toast.success('コピーしました');
+                      }}
+                    >
+                      <Copy className="h-3 w-3 mr-1" />
+                      コピー
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    disabled={isExtracting}
+                    onClick={async () => {
+                      setIsExtracting(true);
+                      try {
+                        const allImageUrls = [...existingImages];
+                        // New images can't be OCR'd until uploaded
+                        if (allImageUrls.length === 0) {
+                          toast.error('保存済みの画像がありません');
+                          return;
+                        }
+                        const response = await supabase.functions.invoke('ocr-image', {
+                          body: { block_id: block.id, image_urls: allImageUrls },
+                        });
+                        if (response.error) throw new Error(response.error.message);
+                        const text = response.data?.extracted_text || '';
+                        setExtractedText(text);
+                        toast.success('テキストを抽出しました');
+                      } catch (error) {
+                        console.error('OCR error:', error);
+                        toast.error('テキスト抽出に失敗しました');
+                      } finally {
+                        setIsExtracting(false);
+                      }
+                    }}
+                  >
+                    {isExtracting ? (
+                      <>
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        抽出中...
+                      </>
+                    ) : extractedText ? (
+                      '再抽出'
+                    ) : (
+                      '抽出する'
+                    )}
+                  </Button>
+                </div>
+              </div>
+              {extractedText && (
+                <textarea
+                  value={extractedText}
+                  onChange={(e) => setExtractedText(e.target.value)}
+                  className="w-full min-h-[80px] bg-muted/30 border border-input rounded-md px-3 py-2 text-xs text-muted-foreground leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="抽出されたテキスト..."
+                />
+              )}
+            </div>
+          )}
           
           {/* Schedule category - special date/time UI */}
           {category === 'schedule' && (

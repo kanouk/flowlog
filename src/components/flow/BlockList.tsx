@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, Pencil, GripVertical, CalendarClock } from 'lucide-react';
+import { Trash2, Pencil, GripVertical, CalendarClock, ScanText, Loader2, ChevronDown, ChevronUp, Copy, RefreshCw } from 'lucide-react';
 import { icons } from 'lucide-react';
 import { Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,8 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEn
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { BlockEditModal } from './BlockEditModal';
-
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 interface BlockListProps {
   blocks: Block[];
   onDelete?: (blockId: string) => void;
@@ -153,6 +154,8 @@ export function BlockList({
 }: BlockListProps) {
   const [modalImage, setModalImage] = useState<string | null>(null);
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
+  const [extractingBlockId, setExtractingBlockId] = useState<string | null>(null);
+  const [expandedExtractedText, setExpandedExtractedText] = useState<Set<string>>(new Set());
   const { customTags } = useCustomTags();
 
   const sensors = useSensors(
@@ -182,6 +185,49 @@ export function BlockList({
     onUpdate(editingBlock.id, updates);
   };
 
+  const handleExtractText = async (block: Block) => {
+    if (!block.images || block.images.length === 0) return;
+    setExtractingBlockId(block.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('ログインが必要です');
+        return;
+      }
+      const response = await supabase.functions.invoke('ocr-image', {
+        body: { block_id: block.id, image_urls: block.images },
+      });
+      if (response.error) {
+        throw new Error(response.error.message || 'テキスト抽出に失敗しました');
+      }
+      const extracted = response.data?.extracted_text;
+      if (extracted && onUpdate) {
+        // Update local block state via onUpdate
+        onUpdate(block.id, { extracted_text: extracted } as BlockUpdatePayload);
+      }
+      toast.success('テキストを抽出しました');
+      setExpandedExtractedText(prev => new Set(prev).add(block.id));
+    } catch (error) {
+      console.error('OCR error:', error);
+      toast.error('テキスト抽出に失敗しました');
+    } finally {
+      setExtractingBlockId(null);
+    }
+  };
+
+  const toggleExtractedText = (blockId: string) => {
+    setExpandedExtractedText(prev => {
+      const next = new Set(prev);
+      if (next.has(blockId)) next.delete(blockId);
+      else next.add(blockId);
+      return next;
+    });
+  };
+
+  const copyExtractedText = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('コピーしました');
+  };
   const handleEditDelete = () => {
     if (!editingBlock || !onDelete) return;
     onDelete(editingBlock.id);
@@ -290,7 +336,70 @@ export function BlockList({
                           </div>
                         )}
                         
-                        {/* スケジュール日時表示 */}
+                        {/* OCR テキスト抽出 */}
+                        {hasImages && (
+                          <div className="mt-2 space-y-1.5">
+                            {block.extracted_text ? (
+                              <>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    onClick={() => toggleExtractedText(block.id)}
+                                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                  >
+                                    <ScanText className="h-3 w-3" />
+                                    <span>抽出テキスト</span>
+                                    {expandedExtractedText.has(block.id) ? (
+                                      <ChevronUp className="h-3 w-3" />
+                                    ) : (
+                                      <ChevronDown className="h-3 w-3" />
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={() => copyExtractedText(block.extracted_text!)}
+                                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                    title="コピー"
+                                  >
+                                    <Copy className="h-3 w-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleExtractText(block)}
+                                    disabled={extractingBlockId === block.id}
+                                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                    title="再抽出"
+                                  >
+                                    <RefreshCw className={`h-3 w-3 ${extractingBlockId === block.id ? 'animate-spin' : ''}`} />
+                                  </button>
+                                </div>
+                                {expandedExtractedText.has(block.id) && (
+                                  <div className="text-xs bg-muted/50 rounded-md p-2.5 whitespace-pre-wrap text-muted-foreground border border-border/50">
+                                    {block.extracted_text}
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1.5 px-2"
+                                onClick={() => handleExtractText(block)}
+                                disabled={extractingBlockId === block.id}
+                              >
+                                {extractingBlockId === block.id ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    抽出中...
+                                  </>
+                                ) : (
+                                  <>
+                                    <ScanText className="h-3 w-3" />
+                                    テキスト抽出
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                        
                         {isSchedule && block.starts_at && (
                           <div className="flex items-center gap-1.5 text-sm text-cyan-600 dark:text-cyan-400 mt-2">
                             <CalendarClock className="h-3.5 w-3.5" />
