@@ -1,0 +1,1 @@
+ALTER TABLE public.blocks ADD COLUMN extracted_text text;

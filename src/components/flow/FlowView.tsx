@@ -208,6 +208,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       ends_at: scheduleData?.ends_at || null,
       is_all_day: scheduleData?.is_all_day || false,
       priority: 0,
+      extracted_text: null,
     };
     
     if (mode !== 'toNow' || isToday) {

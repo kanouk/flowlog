@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.api]
 verify_jwt = false
+
+[functions.ocr-image]
+verify_jwt = false

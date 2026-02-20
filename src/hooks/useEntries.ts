@@ -40,6 +40,8 @@ export interface Block {
   is_all_day: boolean;
   // Task priority (0=none, 1=low, 2=medium, 3=high)
   priority: number;
+  // OCR extracted text
+  extracted_text: string | null;
 }
 
 export interface Entry {
@@ -71,6 +73,8 @@ export interface BlockUpdatePayload {
   is_all_day?: boolean;
   // Task priority
   priority?: number;
+  // OCR extracted text
+  extracted_text?: string | null;
 }
 
 export interface GetBlocksByCategoryOptions {
@@ -372,7 +376,7 @@ export function useEntries() {
       
       const oldEntryId = currentBlock?.entry_id;
       
-      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at' | 'images' | 'starts_at' | 'ends_at' | 'is_all_day' | 'priority'>> = {};
+      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at' | 'images' | 'starts_at' | 'ends_at' | 'is_all_day' | 'priority' | 'extracted_text'>> = {};
       
       if (updates.content !== undefined) {
         updateData.content = updates.content;
@@ -405,6 +409,10 @@ export function useEntries() {
       // Priority field
       if (updates.priority !== undefined) {
         updateData.priority = updates.priority;
+      }
+      // Extracted text field
+      if (updates.extracted_text !== undefined) {
+        updateData.extracted_text = updates.extracted_text;
       }
       if (updates.occurred_at) {
         const newDayKey = getOccurredAtDayKey(updates.occurred_at);
