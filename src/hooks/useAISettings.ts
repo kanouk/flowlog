@@ -58,6 +58,8 @@ export interface AISettings {
   // Score feature
   score_enabled: boolean;
   behavior_rules: string | null;
+  // Auto OCR
+  auto_ocr: boolean;
 }
 
 export const DEFAULT_SYSTEM_PROMPT = `あなたは思考ログを整形するアシスタントです。ユーザーが一日の中で書き留めた短いメモやつぶやきを、読みやすい日記形式に整形してください。
@@ -93,6 +95,7 @@ const DEFAULT_SETTINGS: AISettings = {
   has_google_key: false,
   score_enabled: false,
   behavior_rules: null,
+  auto_ocr: false,
 };
 
 // Settings update interface (for saving - can include new API keys)
@@ -107,6 +110,8 @@ export interface AISettingsUpdate {
   // Score feature
   score_enabled?: boolean;
   behavior_rules?: string | null;
+  // Auto OCR
+  auto_ocr?: boolean;
 }
 
 export function useAISettings() {
@@ -131,6 +136,14 @@ export function useAISettings() {
 
       if (data && data.length > 0) {
         const row = data[0] as Record<string, unknown>;
+        
+        // Fetch auto_ocr separately (not in safe RPC)
+        const { data: rawData } = await supabase
+          .from('user_ai_settings')
+          .select('auto_ocr')
+          .eq('user_id', user!.id)
+          .single();
+
         setSettings({
           id: row.id as string,
           selected_provider: row.selected_provider as AIProvider,
@@ -142,6 +155,7 @@ export function useAISettings() {
           has_google_key: row.has_google_key as boolean,
           score_enabled: row.score_enabled as boolean,
           behavior_rules: (row.behavior_rules as string) || null,
+          auto_ocr: (rawData as Record<string, unknown>)?.auto_ocr as boolean ?? false,
         });
       } else {
         setSettings(DEFAULT_SETTINGS);
@@ -178,6 +192,7 @@ export function useAISettings() {
         google_api_key?: string | null;
         score_enabled?: boolean;
         behavior_rules?: string | null;
+        auto_ocr?: boolean;
       };
 
       const upsertData: UpsertData = {
@@ -194,6 +209,9 @@ export function useAISettings() {
       }
       if (newSettings.behavior_rules !== undefined) {
         upsertData.behavior_rules = newSettings.behavior_rules;
+      }
+      if (newSettings.auto_ocr !== undefined) {
+        upsertData.auto_ocr = newSettings.auto_ocr;
       }
 
       // Only include API keys if they were explicitly set (not undefined)

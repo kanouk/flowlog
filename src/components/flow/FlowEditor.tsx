@@ -6,9 +6,11 @@ import { FlowInput } from '@/components/flow/FlowInput';
 import { BlockList } from '@/components/flow/BlockList';
 import { FormattedView } from '@/components/flow/FormattedView';
 import { useEntries, Block, Entry, AddBlockMode, BlockUpdatePayload } from '@/hooks/useEntries';
+import { useAISettings } from '@/hooks/useAISettings';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDateJST, calculateMiddleOccurredAt } from '@/lib/dateUtils';
 import { BlockCategory, BlockTag } from '@/lib/categoryUtils';
 import { arrayMove } from '@dnd-kit/sortable';
@@ -43,6 +45,8 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     updateBlock,
     formatEntry,
   } = useEntries();
+
+  const { settings: aiSettings } = useAISettings();
 
   const [entry, setEntry] = useState<Entry | null>(null);
   const [blocks, setBlocks] = useState<Block[]>([]);
@@ -131,6 +135,24 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       } else {
         // 成功: 仮IDを本物のIDに置換して再ソート
         setBlocks(prev => sortBlocksDesc(prev.map(b => b.id === tempId ? savedBlock : b)));
+      }
+
+      // Auto OCR: バックグラウンドで実行
+      if (aiSettings.auto_ocr && images.length > 0) {
+        supabase.functions.invoke('ocr-image', {
+          body: { block_id: savedBlock.id, image_urls: savedBlock.images || images },
+        }).then(({ data, error }) => {
+          if (error) {
+            console.error('Auto OCR error:', error);
+            return;
+          }
+          if (data?.extracted_text) {
+            setBlocks(prev => prev.map(b => 
+              b.id === savedBlock.id ? { ...b, extracted_text: data.extracted_text } : b
+            ));
+            toast.success('テキストを自動抽出しました');
+          }
+        });
       }
     } else {
       // 失敗: 仮ブロックを削除してロールバック

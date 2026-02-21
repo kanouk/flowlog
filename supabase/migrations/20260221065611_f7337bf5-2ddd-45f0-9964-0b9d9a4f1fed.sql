@@ -1,0 +1,1 @@
+ALTER TABLE public.user_ai_settings ADD COLUMN auto_ocr boolean NOT NULL DEFAULT false;
