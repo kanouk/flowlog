@@ -310,26 +310,13 @@ export function BlockList({
                           )}
                           <div className="flex-1">
                           {hasContent && (
-                              <div className="relative group/content">
-                                <p 
-                                  className={`text-foreground leading-relaxed whitespace-pre-wrap break-words break-anywhere ${
-                                    block.is_done ? 'line-through text-muted-foreground' : ''
-                                  }`}
-                                >
-                                  {highlightText(block.content!, highlightQuery)}
-                                </p>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigator.clipboard.writeText(block.content!);
-                                    toast.success('コピーしました');
-                                  }}
-                                  className="absolute top-0 right-0 text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover/content:opacity-100"
-                                  title="本文をコピー"
-                                >
-                                  <Copy className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
+                              <p 
+                                className={`text-foreground leading-relaxed whitespace-pre-wrap break-words break-anywhere ${
+                                  block.is_done ? 'line-through text-muted-foreground' : ''
+                                }`}
+                              >
+                                {highlightText(block.content!, highlightQuery)}
+                              </p>
                             )}
                           </div>
                         </div>
@@ -395,10 +382,11 @@ export function BlockList({
                                       onUpdate(block.id, { content: newContent });
                                       toast.success('本文に追加しました');
                                     }}
-                                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors bg-muted/50 hover:bg-muted rounded px-1.5 py-0.5"
                                     title="本文に追加"
                                   >
                                     <Pencil className="h-3 w-3" />
+                                    <span>本文に追加</span>
                                   </button>
                                 </div>
                                 {expandedExtractedText.has(block.id) && (
@@ -451,6 +439,21 @@ export function BlockList({
                       {/* Action buttons */}
                       {!isTemporary && (
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {hasContent && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(block.content!);
+                                toast.success('コピーしました');
+                              }}
+                              title="本文をコピー"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          )}
                           {editable && onUpdate && (
                             <Button
                               variant="ghost"
