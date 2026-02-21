@@ -1,31 +1,50 @@
 
-# 抽出テキストを本文にappendする機能
+# 画像アップロード時の自動テキスト抽出オプション
 
 ## 概要
-OCRで抽出したテキストを、ブロックの本文（content）の末尾に追記するボタンを追加する。
+画像付きブロックを投稿した際に、自動で OCR（テキスト抽出）を実行するオン/オフ設定を追加する。
 
-## 変更対象
+## 変更内容
 
-### `src/components/flow/BlockList.tsx`
-- 抽出テキスト表示エリア（コピーボタンの横）に「本文に追加」ボタンを追加
-- クリック時に `onUpdate(block.id, { content: (block.content || '') + '\n' + block.extracted_text })` を実行
-- 追加後に toast で「本文に追加しました」と通知
+### 1. データベース
+- `user_ai_settings` テーブルに `auto_ocr` カラム（boolean, default false）を追加
 
-### `src/components/flow/BlockEditModal.tsx`
-- 抽出テキスト表示エリアに「本文に追加」ボタンを追加
-- クリック時にモーダル内の `content` state の末尾に `extracted_text` を追記
-- textarea に反映されるので、ユーザーが保存前に編集可能
+### 2. `src/hooks/useAISettings.ts`
+- `AISettings` インターフェースに `auto_ocr: boolean` を追加
+- `DEFAULT_SETTINGS` に `auto_ocr: false` を追加
+- フェッチ・保存ロジックで `auto_ocr` を扱うようにする
 
-## UI イメージ
+### 3. `src/components/settings/AISettingsSection.tsx`
+- 生成AI設定セクションの下部に「画像アップロード時に自動テキスト抽出」のスイッチ（Switch コンポーネント）を追加
+- 説明文: 「画像を添付して投稿した際、自動でテキスト抽出を実行します」
+
+### 4. `src/components/flow/FlowEditor.tsx`
+- `useAISettings` フックをインポート
+- `handleAddBlock` 内で、ブロック保存成功後に以下を実行:
+  - `settings.auto_ocr` が true かつ `images.length > 0` の場合
+  - `ocr-image` Edge Function を呼び出し（block ID と画像 URL を送信）
+  - 抽出完了後、ローカル state のブロックに `extracted_text` を反映
+  - バックグラウンドで実行するため、ユーザーの操作をブロックしない
+
+## 処理フロー
 
 ```text
-抽出テキスト:
-[▼ 展開] [再抽出] [コピー] [📝 本文に追加]
+ユーザーが画像付きブロックを投稿
+  ↓
+ブロック保存成功
+  ↓
+auto_ocr が ON？ → Yes → バックグラウンドで ocr-image を呼び出し
+                 → No  → 何もしない
+  ↓
+抽出完了 → blocks state を更新（extracted_text を反映）
+         → toast で「テキストを自動抽出しました」
 ```
 
-## 技術詳細
+## 変更対象ファイル
 
-- 本文が空の場合は改行なしでそのまま設定
-- 本文がある場合は `\n\n` で区切って追記
-- BlockList 側は即座に DB 更新（onUpdate 経由）
-- BlockEditModal 側はローカル state 更新のみ（保存ボタンで確定）
+| ファイル | 変更内容 |
+|---|---|
+| DB migration | `auto_ocr` カラム追加 |
+| `src/hooks/useAISettings.ts` | `auto_ocr` フィールド追加 |
+| `src/components/settings/AISettingsSection.tsx` | Switch トグル追加 |
+| `src/components/flow/FlowEditor.tsx` | 自動 OCR トリガーロジック追加 |
