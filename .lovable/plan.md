@@ -1,50 +1,37 @@
 
-# 画像アップロード時の自動テキスト抽出オプション
+# 抽出テキスト削除機能 + コピーボタン移動
 
 ## 概要
-画像付きブロックを投稿した際に、自動で OCR（テキスト抽出）を実行するオン/オフ設定を追加する。
+1. 抽出テキストを削除（クリア）するボタンを追加
+2. コピーボタンを抽出テキストではなく本文側に移動
 
 ## 変更内容
 
-### 1. データベース
-- `user_ai_settings` テーブルに `auto_ocr` カラム（boolean, default false）を追加
+### `src/components/flow/BlockList.tsx`
 
-### 2. `src/hooks/useAISettings.ts`
-- `AISettings` インターフェースに `auto_ocr: boolean` を追加
-- `DEFAULT_SETTINGS` に `auto_ocr: false` を追加
-- フェッチ・保存ロジックで `auto_ocr` を扱うようにする
+**本文にコピーボタンを追加:**
+- 本文（content）表示の横にコピーボタンを追加（hover時に表示）
+- クリックで `block.content` をクリップボードにコピー
 
-### 3. `src/components/settings/AISettingsSection.tsx`
-- 生成AI設定セクションの下部に「画像アップロード時に自動テキスト抽出」のスイッチ（Switch コンポーネント）を追加
-- 説明文: 「画像を添付して投稿した際、自動でテキスト抽出を実行します」
+**抽出テキストからコピーボタンを削除、削除ボタンを追加:**
+- 抽出テキスト行のコピーボタン（Copy アイコン）を削除
+- 代わりに削除ボタン（Trash2 アイコン）を追加
+- クリック時に `onUpdate(block.id, { extracted_text: null })` を実行
+- toast で「抽出テキストを削除しました」と通知
 
-### 4. `src/components/flow/FlowEditor.tsx`
-- `useAISettings` フックをインポート
-- `handleAddBlock` 内で、ブロック保存成功後に以下を実行:
-  - `settings.auto_ocr` が true かつ `images.length > 0` の場合
-  - `ocr-image` Edge Function を呼び出し（block ID と画像 URL を送信）
-  - 抽出完了後、ローカル state のブロックに `extracted_text` を反映
-  - バックグラウンドで実行するため、ユーザーの操作をブロックしない
+### `src/components/flow/BlockEditModal.tsx`
 
-## 処理フロー
+**本文 textarea の近くにコピーボタンを追加:**
+- textarea の上部ラベル付近にコピーボタンを配置
+- クリックで `content` state をコピー
 
-```text
-ユーザーが画像付きブロックを投稿
-  ↓
-ブロック保存成功
-  ↓
-auto_ocr が ON？ → Yes → バックグラウンドで ocr-image を呼び出し
-                 → No  → 何もしない
-  ↓
-抽出完了 → blocks state を更新（extracted_text を反映）
-         → toast で「テキストを自動抽出しました」
-```
+**抽出テキストのコピーボタンを削除、削除ボタンを追加:**
+- OCR セクションのコピーボタンを削除
+- 削除ボタンを追加（クリックで `setExtractedText('')` → 保存時に `null` として反映）
 
 ## 変更対象ファイル
 
 | ファイル | 変更内容 |
 |---|---|
-| DB migration | `auto_ocr` カラム追加 |
-| `src/hooks/useAISettings.ts` | `auto_ocr` フィールド追加 |
-| `src/components/settings/AISettingsSection.tsx` | Switch トグル追加 |
-| `src/components/flow/FlowEditor.tsx` | 自動 OCR トリガーロジック追加 |
+| `src/components/flow/BlockList.tsx` | 本文にコピー追加、抽出テキストのコピー→削除に変更 |
+| `src/components/flow/BlockEditModal.tsx` | 同上 |
