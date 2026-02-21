@@ -441,17 +441,32 @@ export function BlockEditModal({
           )}
           
           {/* Textarea */}
-          <textarea
-            ref={textareaRef}
-            value={content}
-            onChange={handleTextareaChange}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
-            placeholder="内容を入力..."
-            className="w-full min-h-[160px] bg-muted/30 border border-input rounded-md px-3 py-3 text-foreground leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-          />
+          <div className="relative">
+            {content && (
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(content);
+                  toast.success('コピーしました');
+                }}
+                className="absolute top-2 right-2 z-10 text-muted-foreground hover:text-foreground transition-colors"
+                title="本文をコピー"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <textarea
+              ref={textareaRef}
+              value={content}
+              onChange={handleTextareaChange}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={() => setIsComposing(false)}
+              placeholder="内容を入力..."
+              className="w-full min-h-[160px] bg-muted/30 border border-input rounded-md px-3 py-3 text-foreground leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
           
           {/* Images */}
           <div className="space-y-2">
@@ -557,14 +572,14 @@ export function BlockEditModal({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 px-2 text-xs"
+                        className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
                         onClick={() => {
-                          navigator.clipboard.writeText(extractedText);
-                          toast.success('コピーしました');
+                          setExtractedText('');
+                          toast.success('抽出テキストを削除しました');
                         }}
                       >
-                        <Copy className="h-3 w-3 mr-1" />
-                        コピー
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        削除
                       </Button>
                       <Button
                         variant="ghost"
