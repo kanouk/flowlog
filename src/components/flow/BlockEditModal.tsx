@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { X, Trash2, ImagePlus, Camera, Clock, Calendar, ScanText, Loader2, Copy } from 'lucide-react';
+import { X, Trash2, ImagePlus, Camera, Clock, Calendar, ScanText, Loader2, Copy, Pencil } from 'lucide-react';
 import { Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { supabase } from '@/integrations/supabase/client';
 import { useImageUpload } from '@/hooks/useImageUpload';
@@ -553,18 +553,35 @@ export function BlockEditModal({
                 </span>
                 <div className="flex gap-1">
                   {extractedText && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => {
-                        navigator.clipboard.writeText(extractedText);
-                        toast.success('コピーしました');
-                      }}
-                    >
-                      <Copy className="h-3 w-3 mr-1" />
-                      コピー
-                    </Button>
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => {
+                          navigator.clipboard.writeText(extractedText);
+                          toast.success('コピーしました');
+                        }}
+                      >
+                        <Copy className="h-3 w-3 mr-1" />
+                        コピー
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => {
+                          const newContent = content
+                            ? content + '\n\n' + extractedText
+                            : extractedText;
+                          setContent(newContent);
+                          toast.success('本文に追加しました');
+                        }}
+                      >
+                        <Pencil className="h-3 w-3 mr-1" />
+                        本文に追加
+                      </Button>
+                    </>
                   )}
                   <Button
                     variant="outline"

@@ -369,6 +369,20 @@ export function BlockList({
                                   >
                                     <RefreshCw className={`h-3 w-3 ${extractingBlockId === block.id ? 'animate-spin' : ''}`} />
                                   </button>
+                                  <button
+                                    onClick={() => {
+                                      if (!onUpdate || !block.extracted_text) return;
+                                      const newContent = block.content
+                                        ? block.content + '\n\n' + block.extracted_text
+                                        : block.extracted_text;
+                                      onUpdate(block.id, { content: newContent });
+                                      toast.success('本文に追加しました');
+                                    }}
+                                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                    title="本文に追加"
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </button>
                                 </div>
                                 {expandedExtractedText.has(block.id) && (
                                   <div className="text-xs bg-muted/50 rounded-md p-2.5 whitespace-pre-wrap text-muted-foreground border border-border/50">
