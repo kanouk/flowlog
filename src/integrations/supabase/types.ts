@@ -220,6 +220,7 @@ export type Database = {
       user_ai_settings: {
         Row: {
           anthropic_api_key: string | null
+          auto_ocr: boolean
           behavior_rules: string | null
           created_at: string
           custom_summarize_prompt: string | null
@@ -235,6 +236,7 @@ export type Database = {
         }
         Insert: {
           anthropic_api_key?: string | null
+          auto_ocr?: boolean
           behavior_rules?: string | null
           created_at?: string
           custom_summarize_prompt?: string | null
@@ -250,6 +252,7 @@ export type Database = {
         }
         Update: {
           anthropic_api_key?: string | null
+          auto_ocr?: boolean
           behavior_rules?: string | null
           created_at?: string
           custom_summarize_prompt?: string | null

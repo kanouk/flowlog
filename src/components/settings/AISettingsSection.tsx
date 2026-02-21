@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,7 +18,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { useAISettings, AIProvider, DEFAULT_SYSTEM_PROMPT, DEFAULT_SUMMARIZE_PROMPT } from '@/hooks/useAISettings';
-import { Bot, Key, Eye, EyeOff, Loader2, Check, Sparkles, Zap, XCircle, CheckCircle, ChevronDown, RotateCcw, FileText, Trash2, Bookmark } from 'lucide-react';
+import { Bot, Key, Eye, EyeOff, Loader2, Check, Sparkles, Zap, XCircle, CheckCircle, ChevronDown, RotateCcw, FileText, Trash2, Bookmark, ImageIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -458,6 +459,23 @@ export function AISettingsSection() {
           </div>
         </CollapsibleContent>
       </Collapsible>
+
+      {/* Auto OCR Toggle */}
+      <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30">
+        <div className="flex items-center gap-3">
+          <ImageIcon className="h-5 w-5 text-primary" />
+          <div>
+            <p className="text-sm font-medium">画像アップロード時に自動テキスト抽出</p>
+            <p className="text-xs text-muted-foreground">画像を添付して投稿した際、自動でテキスト抽出を実行します</p>
+          </div>
+        </div>
+        <Switch
+          checked={settings.auto_ocr}
+          onCheckedChange={async (checked) => {
+            await saveSettings({ auto_ocr: checked });
+          }}
+        />
+      </div>
 
       {/* Save Button */}
       <Button
