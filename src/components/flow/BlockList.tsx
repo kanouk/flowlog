@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, Pencil, GripVertical, CalendarClock, ScanText, Loader2, ChevronDown, ChevronUp, Copy, RefreshCw } from 'lucide-react';
+import { Trash2, Pencil, FileInput, GripVertical, CalendarClock, ScanText, Loader2, ChevronDown, ChevronUp, Copy, RefreshCw } from 'lucide-react';
 import { icons } from 'lucide-react';
 import { Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
@@ -382,11 +382,10 @@ export function BlockList({
                                       onUpdate(block.id, { content: newContent });
                                       toast.success('本文に追加しました');
                                     }}
-                                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors bg-muted/50 hover:bg-muted rounded px-1.5 py-0.5"
+                                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                                     title="本文に追加"
                                   >
-                                    <Pencil className="h-3 w-3" />
-                                    <span>本文に追加</span>
+                                    <FileInput className="h-3 w-3" />
                                   </button>
                                 </div>
                                 {expandedExtractedText.has(block.id) && (
