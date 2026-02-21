@@ -309,14 +309,27 @@ export function BlockList({
                             <PriorityIndicator priority={block.priority || 0} className="mt-1 flex-shrink-0" />
                           )}
                           <div className="flex-1">
-                            {hasContent && (
-                              <p 
-                                className={`text-foreground leading-relaxed whitespace-pre-wrap break-words break-anywhere ${
-                                  block.is_done ? 'line-through text-muted-foreground' : ''
-                                }`}
-                              >
-                                {highlightText(block.content!, highlightQuery)}
-                              </p>
+                          {hasContent && (
+                              <div className="relative group/content">
+                                <p 
+                                  className={`text-foreground leading-relaxed whitespace-pre-wrap break-words break-anywhere ${
+                                    block.is_done ? 'line-through text-muted-foreground' : ''
+                                  }`}
+                                >
+                                  {highlightText(block.content!, highlightQuery)}
+                                </p>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard.writeText(block.content!);
+                                    toast.success('コピーしました');
+                                  }}
+                                  className="absolute top-0 right-0 text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover/content:opacity-100"
+                                  title="本文をコピー"
+                                >
+                                  <Copy className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -355,11 +368,15 @@ export function BlockList({
                                     )}
                                   </button>
                                   <button
-                                    onClick={() => copyExtractedText(block.extracted_text!)}
-                                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                                    title="コピー"
+                                    onClick={() => {
+                                      if (!onUpdate) return;
+                                      onUpdate(block.id, { extracted_text: null } as BlockUpdatePayload);
+                                      toast.success('抽出テキストを削除しました');
+                                    }}
+                                    className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                                    title="抽出テキストを削除"
                                   >
-                                    <Copy className="h-3 w-3" />
+                                    <Trash2 className="h-3 w-3" />
                                   </button>
                                   <button
                                     onClick={() => handleExtractText(block)}
