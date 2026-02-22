@@ -1,17 +1,52 @@
 
-# 「本文に追加」ボタン改善
 
-## 変更内容
+# タスク一括登録機能の追加
 
-### `src/components/flow/BlockList.tsx`
+## 概要
+カテゴリが「タスク」の場合に、複数行入力で各行を個別のタスクとして一括登録できるオプションを追加します。
 
-- `Pencil` アイコンを `FileInput` に変更
-- `<span>本文に追加</span>` ラベルを削除
-- `bg-muted/50 hover:bg-muted rounded px-1.5 py-0.5` など余分なスタイルを削除し、隣の削除ボタン（Trash2）と同じ `text-xs text-muted-foreground hover:text-foreground transition-colors` スタイルに統一
-- import に `FileInput` を追加、不要になった `Pencil` を削除
+## UI の変更
+
+### `src/components/flow/FlowInput.tsx`
+- タスクカテゴリ選択時に、優先度セレクターの横に「一括登録」トグル（Switch）を追加
+- トグル ON の場合、保存ボタン押下時にテキストを改行で分割し、空行を除いた各行を個別のタスクブロックとして登録
+- トグル OFF の場合は従来通り1つのブロックとして保存
+- トグルの状態は sessionStorage に保存し、セッション内で記憶
+
+### `src/components/flow/FlowView.tsx`
+- `handleAddBlock` に一括登録用の分岐を追加
+- 複数行の場合、各行に対して `addBlockWithDate` を順次呼び出し
+- 楽観的更新も各行ごとに適用
+- 登録完了後に「X件のタスクを登録しました」とトースト表示
+
+## 動作イメージ
+
+```text
+[タスク] が選択されている状態:
+
+  優先度: ○なし ○低 ○中 ○高    [一括登録 ON/OFF]
+
+  テキストエリア:
+  ┌─────────────────────┐
+  │ 牛乳を買う           │
+  │ 掃除する             │
+  │ メール返信           │
+  └─────────────────────┘
+
+  → 保存で3つのタスクが個別に登録される
+```
+
+## 技術的な詳細
+
+- 一括登録時は全行に同じタグ・優先度を適用
+- 空行はスキップ
+- 画像が添付されている場合は一括登録を無効化（画像は1ブロックにしか紐づけられないため）
+- 一括登録時は `addBlockWithDate` を順次呼び出し（各ブロックの `occurred_at` を1分ずつずらすのは既存ロジックで自動対応）
 
 ## 変更対象ファイル
 
 | ファイル | 変更内容 |
 |---|---|
-| `src/components/flow/BlockList.tsx` | アイコン変更、ラベル削除、スタイル統一 |
+| `src/components/flow/FlowInput.tsx` | 一括登録トグル追加、送信ロジック分岐 |
+| `src/components/flow/FlowView.tsx` | 一括登録の呼び出しロジック追加 |
+
