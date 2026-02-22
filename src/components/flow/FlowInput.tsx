@@ -3,6 +3,7 @@ import { Loader2, Send, ImagePlus, X, Camera } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
@@ -34,7 +35,8 @@ interface FlowInputProps {
       ends_at: string | null;
       is_all_day: boolean;
     },
-    priority?: number
+    priority?: number,
+    batchMode?: boolean
   ) => void;
   disabled?: boolean;
   selectedDate: string;
@@ -52,6 +54,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const [category, setCategory] = useState<BlockCategory>('event');
   const [tag, setTag] = useState<string | null>(null);
   const [priority, setPriority] = useState<TaskPriority>(0);
+  const [batchMode, setBatchMode] = useState<boolean>(() => {
+    return sessionStorage.getItem('flowlog_batch_mode') === 'true';
+  });
   
   // Schedule states
   const [isAllDay, setIsAllDay] = useState(false);
@@ -262,7 +267,8 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
         };
       }
 
-      onSubmit(content.trim(), mode, uploadedUrls, category, tag, scheduleData, category === 'task' ? priority : 0);
+      const isBatch = category === 'task' && batchMode && selectedImages.length === 0;
+      onSubmit(content.trim(), mode, uploadedUrls, category, tag, scheduleData, category === 'task' ? priority : 0, isBatch);
       
       // リセット
       setContent('');
@@ -436,14 +442,31 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
           })}
         </div>
 
-        {/* タスク優先度セレクター */}
+        {/* タスク優先度セレクター + 一括登録トグル */}
         {category === 'task' && (
-          <div className="mb-3">
+          <div className="mb-3 flex items-center gap-4 flex-wrap">
             <PrioritySelector
               value={priority}
               onChange={setPriority}
               disabled={disabled || isSubmitting}
             />
+            <div className="flex items-center gap-1.5">
+              <Switch
+                id="batch-mode"
+                checked={batchMode && selectedImages.length === 0}
+                onCheckedChange={(checked) => {
+                  setBatchMode(checked);
+                  sessionStorage.setItem('flowlog_batch_mode', String(checked));
+                }}
+                disabled={disabled || isSubmitting || selectedImages.length > 0}
+              />
+              <label 
+                htmlFor="batch-mode" 
+                className={`text-sm ${selectedImages.length > 0 ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}
+              >
+                一括登録
+              </label>
+            </div>
           </div>
         )}
 
