@@ -188,8 +188,57 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       ends_at: string | null;
       is_all_day: boolean;
     },
-    priority: number = 0
+    priority: number = 0,
+    batchMode: boolean = false
   ) => {
+    // 一括登録モード：各行を個別タスクとして登録
+    if (batchMode && category === 'task') {
+      const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length === 0) return;
+
+      for (const line of lines) {
+        const tempId = `temp-${Date.now()}-${Math.random()}`;
+        const optimisticBlock: Block = {
+          id: tempId,
+          entry_id: entry?.id || '',
+          user_id: '',
+          content: line,
+          images: [],
+          occurred_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          category: 'task',
+          tag,
+          is_done: false,
+          done_at: null,
+          url_metadata: null,
+          starts_at: null,
+          ends_at: null,
+          is_all_day: false,
+          priority,
+          extracted_text: null,
+        };
+        setBlocks(prev => [optimisticBlock, ...prev]);
+
+        const { block: savedBlock } = await addBlockWithDate({
+          content: line,
+          selectedDate,
+          mode,
+          images: [],
+          category: 'task',
+          tag,
+          priority,
+        });
+
+        if (savedBlock) {
+          setBlocks(prev => sortBlocksDesc(prev.map(b => b.id === tempId ? savedBlock : b)));
+        } else {
+          setBlocks(prev => prev.filter(b => b.id !== tempId));
+        }
+      }
+
+      toast.success(`${lines.length}件のタスクを登録しました`);
+      return;
+    }
     const tempId = `temp-${Date.now()}`;
     const optimisticBlock: Block = {
       id: tempId,
