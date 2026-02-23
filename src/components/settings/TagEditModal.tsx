@@ -121,7 +121,7 @@ export function TagEditModal({ open, onOpenChange, tag, onSave }: TagEditModalPr
           {/* Color selection */}
           <div className="space-y-2">
             <label className="text-sm font-medium">色</label>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-8 gap-2">
               {(Object.keys(TAG_COLORS) as TagColor[]).map((colorKey) => {
                 const config = TAG_COLORS[colorKey];
                 return (
@@ -129,7 +129,7 @@ export function TagEditModal({ open, onOpenChange, tag, onSave }: TagEditModalPr
                     key={colorKey}
                     type="button"
                     onClick={() => setColor(colorKey)}
-                    className={`w-10 h-10 rounded-full ${config.bg} ${config.text} flex items-center justify-center transition-all ${
+                    className={`w-9 h-9 rounded-full ${config.bg} ${config.text} flex items-center justify-center transition-all ${
                       color === colorKey
                         ? 'ring-2 ring-offset-2 ring-current scale-110'
                         : 'hover:scale-105'
@@ -137,7 +137,7 @@ export function TagEditModal({ open, onOpenChange, tag, onSave }: TagEditModalPr
                     title={config.label}
                   >
                     {color === colorKey && (
-                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
                     )}
