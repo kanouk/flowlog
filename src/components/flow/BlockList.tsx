@@ -4,6 +4,16 @@ import { icons } from 'lucide-react';
 import { Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { TaskCheckbox } from '@/components/ui/task-checkbox';
 import { formatTimeJST } from '@/lib/dateUtils';
 import { BlockCategory, BlockTag, CATEGORY_CONFIG, TAG_CONFIG, TAGS, formatScheduleRange } from '@/lib/categoryUtils';
@@ -154,6 +164,7 @@ export function BlockList({
 }: BlockListProps) {
   const [modalImage, setModalImage] = useState<string | null>(null);
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
+  const [blockToDelete, setBlockToDelete] = useState<string | null>(null);
   const [extractingBlockId, setExtractingBlockId] = useState<string | null>(null);
   const [expandedExtractedText, setExpandedExtractedText] = useState<Set<string>>(new Set());
   const { customTags } = useCustomTags();
@@ -468,7 +479,7 @@ export function BlockList({
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                              onClick={() => onDelete(block.id)}
+                              onClick={() => setBlockToDelete(block.id)}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -507,6 +518,32 @@ export function BlockList({
           onDelete={showDelete ? handleEditDelete : undefined}
         />
       )}
+
+      {/* 削除確認ダイアログ */}
+      <AlertDialog open={!!blockToDelete} onOpenChange={(open) => !open && setBlockToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>このログを削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              この操作は取り消せません。ログとそれに紐づく画像が完全に削除されます。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (blockToDelete && onDelete) {
+                  onDelete(blockToDelete);
+                }
+                setBlockToDelete(null);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              削除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

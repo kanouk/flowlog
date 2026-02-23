@@ -17,6 +17,16 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useAISettings, AIProvider, DEFAULT_SYSTEM_PROMPT, DEFAULT_SUMMARIZE_PROMPT } from '@/hooks/useAISettings';
 import { Bot, Key, Eye, EyeOff, Loader2, Check, Sparkles, Zap, XCircle, CheckCircle, ChevronDown, RotateCcw, FileText, Trash2, Bookmark, ImageIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -57,6 +67,7 @@ export function AISettingsSection() {
   // Connection test state
   const [testingProvider, setTestingProvider] = useState<AIProvider | null>(null);
   const [testResult, setTestResult] = useState<{ provider: AIProvider; success: boolean; message: string } | null>(null);
+  const [providerToDelete, setProviderToDelete] = useState<AIProvider | null>(null);
 
   useEffect(() => {
     if (!loading) {
@@ -239,7 +250,7 @@ export function AISettingsSection() {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleClearApiKey(provider)}
+                        onClick={() => setProviderToDelete(provider)}
                         className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30 gap-1"
                       >
                         <Trash2 className="h-3 w-3" />
@@ -497,6 +508,31 @@ export function AISettingsSection() {
           </>
         )}
       </Button>
+
+      <AlertDialog open={!!providerToDelete} onOpenChange={(open) => !open && setProviderToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>APIキーを削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              {providerToDelete && PROVIDER_LABELS[providerToDelete]}のAPIキーを削除します。このプロバイダーを利用するには再度キーの設定が必要になります。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (providerToDelete) {
+                  handleClearApiKey(providerToDelete);
+                  setProviderToDelete(null);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              削除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

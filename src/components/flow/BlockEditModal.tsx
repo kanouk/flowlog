@@ -6,6 +6,16 @@ import { useImageUpload } from '@/hooks/useImageUpload';
 import { useCustomTags } from '@/hooks/useCustomTags';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
@@ -112,6 +122,7 @@ export function BlockEditModal({
   // UI State
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractedText, setExtractedText] = useState(block.extracted_text || '');
   
@@ -389,6 +400,7 @@ export function BlockEditModal({
     setIsDeleting(true);
     try {
       onDelete();
+      setShowDeleteConfirm(false);
       onOpenChange(false);
     } finally {
       setIsDeleting(false);
@@ -782,7 +794,7 @@ export function BlockEditModal({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleDelete}
+                onClick={() => setShowDeleteConfirm(true)}
                 disabled={isDeleting || isSaving}
                 className="text-destructive hover:text-destructive hover:bg-destructive/10"
               >
@@ -811,6 +823,26 @@ export function BlockEditModal({
           </div>
         </DialogFooter>
       </DialogContent>
+
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>このログを削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              この操作は取り消せません。ログとそれに紐づく画像が完全に削除されます。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              削除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

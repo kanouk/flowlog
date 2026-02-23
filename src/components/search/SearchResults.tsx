@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { CheckCircle2, FileText, Calendar, StickyNote, BookmarkCheck, BookOpen } from 'lucide-react';
@@ -11,6 +12,7 @@ interface SearchResultsProps {
   query: string;
   onSelectBlock: (date: string, blockId: string) => void;
   onSelectEntry: (date: string) => void;
+  selectedIndex?: number;
 }
 
 const getCategoryIcon = (category: string) => {
@@ -43,7 +45,6 @@ const truncateText = (text: string | null, maxLength: number = 50) => {
   return text.slice(0, maxLength) + '...';
 };
 
-// マッチしたキーワードをハイライト表示
 const highlightMatch = (text: string, query: string) => {
   if (!query.trim()) return text;
   
@@ -65,8 +66,25 @@ export function SearchResults({
   loading, 
   query, 
   onSelectBlock, 
-  onSelectEntry 
+  onSelectEntry,
+  selectedIndex = -1
 }: SearchResultsProps) {
+  const selectedRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (selectedIndex < 0 || !selectedRef.current) return;
+    const el = selectedRef.current;
+    const viewport = el.closest('[data-radix-scroll-area-viewport]');
+    if (!viewport) return;
+    const elRect = el.getBoundingClientRect();
+    const vpRect = viewport.getBoundingClientRect();
+    if (elRect.bottom > vpRect.bottom) {
+      viewport.scrollTop += elRect.bottom - vpRect.bottom;
+    } else if (elRect.top < vpRect.top) {
+      viewport.scrollTop -= vpRect.top - elRect.top;
+    }
+  }, [selectedIndex]);
+
   if (loading) {
     return (
       <div className="p-4 space-y-3">
@@ -108,13 +126,17 @@ export function SearchResults({
               </span>
             </div>
             <div className="space-y-1">
-              {results.blocks.map((block) => {
+              {results.blocks.map((block, index) => {
                 const dateKey = block.occurred_at.split('T')[0];
+                const isSelected = index === selectedIndex;
                 return (
                   <button
                     key={block.id}
+                    ref={isSelected ? selectedRef : null}
                     onClick={() => onSelectBlock(dateKey, block.id)}
-                    className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-accent transition-colors text-left"
+                    className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg transition-colors text-left ${
+                      isSelected ? 'bg-accent' : 'hover:bg-accent'
+                    }`}
                   >
                     {getCategoryIcon(block.category)}
                     <span className="text-xs text-muted-foreground min-w-[32px]">
@@ -138,21 +160,27 @@ export function SearchResults({
               </span>
             </div>
             <div className="space-y-1">
-              {results.entries.map((entry) => (
-                <button
-                  key={entry.id}
-                  onClick={() => onSelectEntry(entry.date)}
-                  className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-accent transition-colors text-left"
-                >
-                  <BookOpen className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" />
-                  <span className="text-xs text-muted-foreground min-w-[32px]">
-                    {formatDate(entry.date)}
-                  </span>
-                  <span className="text-sm truncate flex-1">
-                    {highlightMatch(truncateText(entry.summary || entry.formatted_content, 40), query)}
-                  </span>
-                </button>
-              ))}
+              {results.entries.map((entry, index) => {
+                const isSelected = (results.blocks.length + index) === selectedIndex;
+                return (
+                  <button
+                    key={entry.id}
+                    ref={isSelected ? selectedRef : null}
+                    onClick={() => onSelectEntry(entry.date)}
+                    className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg transition-colors text-left ${
+                      isSelected ? 'bg-accent' : 'hover:bg-accent'
+                    }`}
+                  >
+                    <BookOpen className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" />
+                    <span className="text-xs text-muted-foreground min-w-[32px]">
+                      {formatDate(entry.date)}
+                    </span>
+                    <span className="text-sm truncate flex-1">
+                      {highlightMatch(truncateText(entry.summary || entry.formatted_content, 40), query)}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

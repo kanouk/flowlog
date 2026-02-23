@@ -1057,6 +1057,7 @@ async function handleMcpRequest(ctx: McpRequestContext, body: unknown): Promise<
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   const path = url.pathname;
+  const normalizedPath = path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
   
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -1066,50 +1067,50 @@ Deno.serve(async (req) => {
   // ===== OAuth 2.0 エンドポイント =====
   
   // OAuth Server Metadata (RFC 8414)
-  if (path.endsWith("/.well-known/oauth-authorization-server")) {
+  if (normalizedPath.endsWith("/.well-known/oauth-authorization-server")) {
     return new Response(JSON.stringify(getOAuthMetadata()), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
   
   // Protected Resource Metadata (RFC 9728)
-  if (path.endsWith("/.well-known/oauth-protected-resource")) {
+  if (normalizedPath.endsWith("/.well-known/oauth-protected-resource")) {
     return new Response(JSON.stringify(getProtectedResourceMetadata()), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
   
   // 動的クライアント登録
-  if (path.endsWith("/oauth/register") && req.method === "POST") {
+  if (normalizedPath.endsWith("/oauth/register") && req.method === "POST") {
     return await handleClientRegistration(req);
   }
   
   // 認可エンドポイント
-  if (path.endsWith("/oauth/authorize") && req.method === "GET") {
+  if (normalizedPath.endsWith("/oauth/authorize") && req.method === "GET") {
     return handleAuthorize(url);
   }
   
   // トークンエンドポイント
-  if (path.endsWith("/oauth/token") && req.method === "POST") {
+  if (normalizedPath.endsWith("/oauth/token") && req.method === "POST") {
     return await handleToken(req);
   }
   
   // 認可コード作成API（フロントエンドから呼ばれる）
-  if (path.endsWith("/oauth/create-code") && req.method === "POST") {
+  if (normalizedPath.endsWith("/oauth/create-code") && req.method === "POST") {
     return await handleCreateAuthorizationCode(req);
   }
   
   // ===== 既存のMCPエンドポイント =====
   
   // Health check
-  if (path.endsWith("/health")) {
+  if (normalizedPath.endsWith("/health")) {
     return new Response(JSON.stringify({ status: "ok", version: "1.0.0" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
   
   // MCP endpoint
-  if (path.endsWith("/mcp") || path.includes("/mcp/")) {
+  if (normalizedPath.endsWith("/mcp") || normalizedPath.includes("/mcp/")) {
     const authHeader = req.headers.get("Authorization");
     const userId = await authenticateUser(authHeader ?? undefined);
     

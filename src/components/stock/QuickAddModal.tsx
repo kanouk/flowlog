@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { ListTodo, CalendarClock, Brain, Bookmark, Loader2 } from 'lucide-react';
+import { useState, useEffect, useRef, KeyboardEvent } from 'react';
+import { ListTodo, CalendarClock, Brain, Bookmark, Loader2, ImagePlus, Camera, X } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,7 @@ import { TagDropdown } from '@/components/flow/TagDropdown';
 import { PrioritySelector, TaskPriority } from '@/components/flow/PrioritySelector';
 import { useCustomTags } from '@/hooks/useCustomTags';
 import { useEntries, Block } from '@/hooks/useEntries';
+import { useImageUpload } from '@/hooks/useImageUpload';
 import { getTodayKey } from '@/lib/dateUtils';
 import { toast } from 'sonner';
 import { BlockCategory, CATEGORY_CONFIG } from '@/lib/categoryUtils';
@@ -60,11 +61,17 @@ const MODAL_CONFIG: Record<QuickAddCategory, { title: string; placeholder: strin
 export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: QuickAddModalProps) {
   const { addBlockWithDate } = useEntries();
   const { customTags, createCustomTag } = useCustomTags();
+  const { uploadImages, maxImages } = useImageUpload();
   
   const [content, setContent] = useState('');
   const [tag, setTag] = useState<string | null>(null);
   const [priority, setPriority] = useState<TaskPriority>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
+  
+  // Image states
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   
   // Schedule states
   const [isAllDay, setIsAllDay] = useState(false);
@@ -74,12 +81,13 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
   const [endTime, setEndTime] = useState('10:00');
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const config = MODAL_CONFIG[category];
   const categoryConfig = CATEGORY_CONFIG[category];
   const Icon = config.icon;
 
-  // 30分刻みの時刻を計算するヘルパー関数（切り上げロジック）
   const getRoundedTime = (date: Date): { 
     time: string; 
     endTime: string; 
@@ -115,13 +123,15 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
     return { time, endTime: calculatedEndTime, startNextDay, endNextDay };
   };
 
-  // Initialize schedule defaults when modal opens
   useEffect(() => {
     if (open) {
       setContent('');
       setTag(null);
       setPriority(0);
       setIsAllDay(false);
+      setSelectedImages([]);
+      previewUrls.forEach(url => URL.revokeObjectURL(url));
+      setPreviewUrls([]);
       
       if (category === 'schedule') {
         const now = new Date();
@@ -149,7 +159,12 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
     }
   }, [open, category]);
 
-  // Build schedule datetime string
+  useEffect(() => {
+    return () => {
+      previewUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, []);
+
   const buildScheduleDateTime = (date: Date | undefined, time: string, allDay: boolean): string | null => {
     if (!date) return null;
     
@@ -173,21 +188,97 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
     return `${month}月${day}日`;
   };
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const remaining = maxImages - selectedImages.length;
+    if (remaining <= 0) {
+      toast.error(`画像は最大${maxImages}枚までです`);
+      return;
+    }
+
+    const toAdd = files.slice(0, remaining);
+    if (files.length > remaining) {
+      toast.warning(`最大${maxImages}枚のため、${remaining}枚のみ追加しました`);
+    }
+
+    const newPreviews = toAdd.map(f => URL.createObjectURL(f));
+    setSelectedImages(prev => [...prev, ...toAdd]);
+    setPreviewUrls(prev => [...prev, ...newPreviews]);
+    e.target.value = '';
+  };
+
+  const removeImage = (index: number) => {
+    URL.revokeObjectURL(previewUrls[index]);
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setPreviewUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const imageFiles: File[] = [];
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
+      }
+    }
+
+    if (imageFiles.length === 0) return;
+    e.preventDefault();
+
+    const remaining = maxImages - selectedImages.length;
+    if (remaining <= 0) {
+      toast.error(`画像は最大${maxImages}枚までです`);
+      return;
+    }
+
+    const toAdd = imageFiles.slice(0, remaining);
+    if (imageFiles.length > remaining) {
+      toast.warning(`最大${maxImages}枚のため、${remaining}枚のみ追加しました`);
+    }
+
+    const newPreviews = toAdd.map(f => URL.createObjectURL(f));
+    setSelectedImages(prev => [...prev, ...toAdd]);
+    setPreviewUrls(prev => [...prev, ...newPreviews]);
+    toast.success(`画像を${toAdd.length}枚追加しました`);
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isComposing) return;
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
   const handleSubmit = async () => {
     const hasContent = content.trim().length > 0;
+    const hasImages = selectedImages.length > 0;
     
     if (category === 'schedule' && !startDate) {
       toast.error('開始日を選択してください');
       return;
     }
     
-    if (!hasContent && category !== 'schedule') {
+    if (!hasContent && !hasImages && category !== 'schedule') {
       toast.error('内容を入力してください');
       return;
     }
 
     setIsSubmitting(true);
     try {
+      let uploadedUrls: string[] = [];
+      if (hasImages) {
+        uploadedUrls = await uploadImages(selectedImages);
+        if (uploadedUrls.length !== selectedImages.length) {
+          toast.warning('一部の画像のアップロードに失敗しました');
+        }
+      }
+
       let scheduleData = undefined;
       if (category === 'schedule') {
         const startsAt = buildScheduleDateTime(startDate, startTime, isAllDay);
@@ -210,6 +301,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
         content: content.trim(),
         selectedDate: getTodayKey(),
         mode: 'toNow',
+        images: uploadedUrls,
         category,
         tag: tag as import('@/lib/categoryUtils').BlockTag | null,
         starts_at: scheduleData?.starts_at || null,
@@ -244,7 +336,6 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
           {/* Schedule Input UI */}
           {category === 'schedule' && (
             <div className="p-4 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800 space-y-3">
-              {/* 終日チェックボックス */}
               <div className="flex items-center gap-2">
                 <Checkbox 
                   id="quick-all-day"
@@ -254,7 +345,6 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
                 <label htmlFor="quick-all-day" className="text-sm font-medium cursor-pointer">終日</label>
               </div>
               
-              {/* 開始日時 */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm text-muted-foreground w-12 flex-shrink-0">開始:</span>
                 <Popover>
@@ -311,7 +401,6 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
                 )}
               </div>
               
-              {/* 終了日時 */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm text-muted-foreground w-12 flex-shrink-0">終了:</span>
                 <Popover>
@@ -366,19 +455,90 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
             ref={textareaRef}
             value={content}
             onChange={(e) => setContent(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
             placeholder={config.placeholder}
             className="min-h-[100px] resize-none"
           />
 
-          {/* Tag Selection */}
+          {/* Image Previews */}
+          {previewUrls.length > 0 && (
+            <div className="flex gap-2 flex-wrap">
+              {previewUrls.map((url, i) => (
+                <div
+                  key={url}
+                  className="relative w-20 h-20 group animate-thumbnail-enter"
+                  style={{ animationDelay: `${i * 50}ms` }}
+                >
+                  <img
+                    src={url}
+                    alt=""
+                    className="w-full h-full object-cover rounded-md border border-border shadow-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(i)}
+                    className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Tag & Image buttons */}
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">タグ:</span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handleImageSelect}
+              disabled={selectedImages.length >= maxImages || isSubmitting}
+            />
+            <button
+              type="button"
+              disabled={selectedImages.length >= maxImages || isSubmitting}
+              onClick={() => fileInputRef.current?.click()}
+              className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
+            >
+              <ImagePlus className="h-4 w-4" />
+            </button>
+
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleImageSelect}
+              disabled={selectedImages.length >= maxImages || isSubmitting}
+            />
+            <button
+              type="button"
+              disabled={selectedImages.length >= maxImages || isSubmitting}
+              onClick={() => cameraInputRef.current?.click()}
+              className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
+            >
+              <Camera className="h-4 w-4" />
+            </button>
+
             <TagDropdown
               value={tag}
               onChange={setTag}
               customTags={customTags}
               onCreateTag={createCustomTag}
             />
+
+            {selectedImages.length > 0 && (
+              <span className="text-xs text-muted-foreground">
+                画像 {selectedImages.length}/{maxImages}
+              </span>
+            )}
           </div>
 
           {/* Actions */}

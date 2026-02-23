@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ interface SearchBarProps {
 export function SearchBar({ onNavigateToDate }: SearchBarProps) {
   const isMobile = useIsMobile();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const { 
     query, 
     setQuery, 
@@ -25,15 +26,90 @@ export function SearchBar({ onNavigateToDate }: SearchBarProps) {
     clearSearch 
   } = useSearch();
 
+  const totalResults = results
+    ? results.blocks.length + results.entries.length
+    : 0;
+
+  useEffect(() => {
+    setSelectedIndex(-1);
+  }, [results]);
+
   const handleSelectBlock = (date: string, blockId: string) => {
     onNavigateToDate(date, 'flow', blockId, query);
     clearSearch();
+    setSelectedIndex(-1);
   };
 
   const handleSelectEntry = (date: string) => {
     onNavigateToDate(date, 'journal');
     clearSearch();
+    setSelectedIndex(-1);
   };
+
+  const handleSelectByIndex = useCallback((index: number) => {
+    if (!results || index < 0) return;
+
+    if (index < results.blocks.length) {
+      const block = results.blocks[index];
+      const dateKey = block.occurred_at.split('T')[0];
+      onNavigateToDate(dateKey, 'flow', block.id, query);
+    } else {
+      const entryIndex = index - results.blocks.length;
+      if (entryIndex < results.entries.length) {
+        const entry = results.entries[entryIndex];
+        onNavigateToDate(entry.date, 'journal');
+      }
+    }
+    clearSearch();
+    setSelectedIndex(-1);
+  }, [results, query, onNavigateToDate, clearSearch]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      clearSearch();
+      inputRef.current?.blur();
+      return;
+    }
+
+    if (totalResults === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedIndex(prev =>
+        prev < totalResults - 1 ? prev + 1 : 0
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIndex(prev =>
+        prev > 0 ? prev - 1 : totalResults - 1
+      );
+    } else if (e.key === 'Enter' && selectedIndex >= 0) {
+      e.preventDefault();
+      handleSelectByIndex(selectedIndex);
+    }
+  }, [totalResults, selectedIndex, handleSelectByIndex, clearSearch]);
+
+  // Ctrl+K グローバルショートカット
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey && e.key === 'k')) return;
+
+      e.preventDefault();
+      if (isMobile) {
+        setIsOpen(true);
+      } else {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+        if (query.trim()) {
+          setIsOpen(true);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleGlobalKeyDown);
+    return () => document.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [isMobile, setIsOpen, query]);
 
   // モバイル: ダイアログ形式
   if (isMobile) {
@@ -60,6 +136,7 @@ export function SearchBar({ onNavigateToDate }: SearchBarProps) {
                   placeholder="ブロック・日記を検索..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={handleKeyDown}
                   className="pl-9 pr-9"
                   autoFocus
                 />
@@ -81,6 +158,7 @@ export function SearchBar({ onNavigateToDate }: SearchBarProps) {
               query={query}
               onSelectBlock={handleSelectBlock}
               onSelectEntry={handleSelectEntry}
+              selectedIndex={selectedIndex}
             />
           </DialogContent>
         </Dialog>
@@ -97,7 +175,7 @@ export function SearchBar({ onNavigateToDate }: SearchBarProps) {
           <Input
             ref={inputRef}
             type="text"
-            placeholder="検索..."
+            placeholder="検索... (Ctrl+K)"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -110,6 +188,7 @@ export function SearchBar({ onNavigateToDate }: SearchBarProps) {
                 setIsOpen(true);
               }
             }}
+            onKeyDown={handleKeyDown}
             className="pl-9 pr-9 h-9"
           />
           {query && (
@@ -135,6 +214,7 @@ export function SearchBar({ onNavigateToDate }: SearchBarProps) {
           query={query}
           onSelectBlock={handleSelectBlock}
           onSelectEntry={handleSelectEntry}
+          selectedIndex={selectedIndex}
         />
       </PopoverContent>
     </Popover>
