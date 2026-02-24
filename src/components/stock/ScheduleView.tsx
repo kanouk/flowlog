@@ -3,7 +3,7 @@ import { CalendarClock, ChevronDown, ChevronUp, ChevronRight, Plus } from 'lucid
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { BlockEditModal } from '@/components/flow/BlockEditModal';
 import { Button } from '@/components/ui/button';
-import { formatScheduleRange, CATEGORY_CONFIG } from '@/lib/categoryUtils';
+import { CATEGORY_CONFIG } from '@/lib/categoryUtils';
 import { TagFilterDropdown } from './TagFilterDropdown';
 import { QuickAddModal } from './QuickAddModal';
 
@@ -14,6 +14,90 @@ const parseContent = (content: string | null): { title: string; details: string 
   const title = lines[0] || '';
   const details = lines.length > 1 ? lines.slice(1).join('\n').trim() : null;
   return { title, details };
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'] as const;
+
+const startOfDay = (date: Date) => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const getScheduleStartDate = (block: Block): Date | null => {
+  if (!block.starts_at) return null;
+  return new Date(block.starts_at);
+};
+
+const getScheduleEndDate = (block: Block): Date | null => {
+  if (block.ends_at) return new Date(block.ends_at);
+  if (block.starts_at) return new Date(block.starts_at);
+  return null;
+};
+
+const isScheduleOnToday = (block: Block, today: Date): boolean => {
+  const start = getScheduleStartDate(block);
+  const end = getScheduleEndDate(block);
+  if (!start || !end) return false;
+
+  const todayStart = startOfDay(today);
+  const tomorrowStart = new Date(todayStart.getTime() + DAY_MS);
+
+  return start < tomorrowStart && end >= todayStart;
+};
+
+const getDaysLabel = (block: Block, today: Date): string | null => {
+  const start = getScheduleStartDate(block);
+  if (!start) return null;
+
+  const diffDays = Math.round((startOfDay(start).getTime() - startOfDay(today).getTime()) / DAY_MS);
+  if (diffDays === 0) return null;
+  if (diffDays > 0) return `あと${diffDays}日`;
+  return `${Math.abs(diffDays)}日前`;
+};
+
+const formatDateWithWeekday = (date: Date) => {
+  return `${date.getMonth() + 1}月${date.getDate()}日 (${WEEKDAY_LABELS[date.getDay()]})`;
+};
+
+const formatTime = (date: Date) => {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
+const isSameDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() &&
+  a.getMonth() === b.getMonth() &&
+  a.getDate() === b.getDate();
+
+const formatScheduleRangeWithWeekday = (
+  startsAt: string | null,
+  endsAt: string | null,
+  isAllDay: boolean,
+) => {
+  if (!startsAt) return '';
+
+  const start = new Date(startsAt);
+
+  if (isAllDay) {
+    if (!endsAt) return formatDateWithWeekday(start);
+    const end = new Date(endsAt);
+    if (isSameDay(start, end)) return formatDateWithWeekday(start);
+    return `${formatDateWithWeekday(start)} ~ ${formatDateWithWeekday(end)}`;
+  }
+
+  if (!endsAt) {
+    return `${formatDateWithWeekday(start)} ${formatTime(start)}~`;
+  }
+
+  const end = new Date(endsAt);
+  if (isSameDay(start, end)) {
+    return `${formatDateWithWeekday(start)} ${formatTime(start)}~${formatTime(end)}`;
+  }
+
+  return `${formatDateWithWeekday(start)} ${formatTime(start)} ~ ${formatDateWithWeekday(end)} ${formatTime(end)}`;
 };
 
 export function ScheduleView() {
@@ -110,22 +194,50 @@ export function ScheduleView() {
     const { title, details } = parseContent(block.content);
     const isExpanded = expandedBlocks.has(block.id);
     const hasDetails = !!details;
+    const isTodaySchedule = isScheduleOnToday(block, now);
+    const daysLabel = getDaysLabel(block, now);
 
     return (
       <div
         key={block.id}
-        className={`block-card p-4 cursor-pointer hover:shadow-md transition-shadow ${isPast ? 'opacity-60' : ''}`}
+        className={`block-card p-4 cursor-pointer hover:shadow-md transition-all border ${
+          isTodaySchedule
+            ? 'border-cyan-300 bg-cyan-50/60 dark:border-cyan-700 dark:bg-cyan-900/20 shadow-sm'
+            : 'border-border'
+        } ${isPast ? 'opacity-60' : ''}`}
       >
         <div className="flex items-start gap-3">
           <div 
-            className={`p-2 rounded-lg ${config.bgColor}`}
+            className={`p-2 rounded-lg ${isTodaySchedule ? 'bg-cyan-200 dark:bg-cyan-900/50 ring-1 ring-cyan-300 dark:ring-cyan-700' : config.bgColor}`}
             onClick={() => setEditingBlock(block)}
           >
             <CalendarClock className={`h-5 w-5 ${config.color}`} />
           </div>
           <div className="flex-1 min-w-0" onClick={() => setEditingBlock(block)}>
-            <div className={`text-sm font-medium ${config.color}`}>
-              {formatScheduleRange(block.starts_at, block.ends_at, block.is_all_day)}
+            <div className="flex items-start justify-between gap-3">
+              <div className={`text-sm font-medium ${config.color} min-w-0`}>
+                {formatScheduleRangeWithWeekday(block.starts_at, block.ends_at, block.is_all_day)}
+              </div>
+              {(isTodaySchedule || daysLabel) && (
+                <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                  {isTodaySchedule && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-500 text-white whitespace-nowrap min-w-[4.5rem] text-center">
+                      今日
+                    </span>
+                  )}
+                  {daysLabel && (
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap min-w-[4.5rem] text-center ${
+                        isTodaySchedule
+                          ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300'
+                          : 'bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {daysLabel}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             {title && (
               <p className="text-foreground font-medium mt-1">{title}</p>

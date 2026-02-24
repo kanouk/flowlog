@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -17,9 +18,15 @@ import { PrioritySelector, TaskPriority } from '@/components/flow/PrioritySelect
 import { useCustomTags } from '@/hooks/useCustomTags';
 import { useEntries, Block } from '@/hooks/useEntries';
 import { useImageUpload } from '@/hooks/useImageUpload';
+import { useImageAttachments } from '@/hooks/useImageAttachments';
 import { getTodayKey } from '@/lib/dateUtils';
 import { toast } from 'sonner';
 import { BlockCategory, CATEGORY_CONFIG } from '@/lib/categoryUtils';
+import {
+  buildScheduleDateTime,
+  formatScheduleDateDisplay,
+  getDefaultScheduleState,
+} from '@/lib/entryFormUtils';
 
 type QuickAddCategory = 'event' | 'task' | 'schedule' | 'thought' | 'read_later';
 
@@ -68,11 +75,11 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
   const [priority, setPriority] = useState<TaskPriority>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
+  const [batchMode, setBatchMode] = useState<boolean>(() => {
+    return sessionStorage.getItem('flowlog_batch_mode') === 'true';
+  });
   
   // Image states
-  const [selectedImages, setSelectedImages] = useState<File[]>([]);
-  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
-  
   // Schedule states
   const [isAllDay, setIsAllDay] = useState(false);
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
@@ -83,45 +90,18 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const {
+    selectedImages,
+    previewUrls,
+    handleImageSelect,
+    handlePaste,
+    removeImage,
+    resetImages,
+  } = useImageAttachments({ maxImages });
 
   const config = MODAL_CONFIG[category];
   const categoryConfig = CATEGORY_CONFIG[category];
   const Icon = config.icon;
-
-  const getRoundedTime = (date: Date): { 
-    time: string; 
-    endTime: string; 
-    startNextDay: boolean;
-    endNextDay: boolean;
-  } => {
-    const hours = date.getHours();
-    const minutes = date.getMinutes();
-    
-    let roundedHours: number;
-    let roundedMinutes: number;
-    
-    if (minutes === 0) {
-      roundedHours = hours;
-      roundedMinutes = 0;
-    } else if (minutes <= 30) {
-      roundedHours = hours;
-      roundedMinutes = 30;
-    } else {
-      roundedHours = hours + 1;
-      roundedMinutes = 0;
-    }
-    
-    const startNextDay = roundedHours >= 24;
-    roundedHours = roundedHours % 24;
-    
-    const endRoundedHours = (roundedHours + 1) % 24;
-    const endNextDay = roundedHours + 1 >= 24;
-    
-    const time = `${String(roundedHours).padStart(2, '0')}:${String(roundedMinutes).padStart(2, '0')}`;
-    const calculatedEndTime = `${String(endRoundedHours).padStart(2, '0')}:${String(roundedMinutes).padStart(2, '0')}`;
-    
-    return { time, endTime: calculatedEndTime, startNextDay, endNextDay };
-  };
 
   useEffect(() => {
     if (open) {
@@ -129,27 +109,14 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
       setTag(null);
       setPriority(0);
       setIsAllDay(false);
-      setSelectedImages([]);
-      previewUrls.forEach(url => URL.revokeObjectURL(url));
-      setPreviewUrls([]);
+      resetImages();
       
       if (category === 'schedule') {
-        const now = new Date();
-        const { time, endTime: calculatedEndTime, startNextDay, endNextDay } = getRoundedTime(now);
-        
-        const startDateValue = new Date(now);
-        if (startNextDay) {
-          startDateValue.setDate(startDateValue.getDate() + 1);
-        }
-        setStartDate(startDateValue);
-        setStartTime(time);
-        
-        const endDateValue = new Date(startDateValue);
-        if (endNextDay) {
-          endDateValue.setDate(endDateValue.getDate() + 1);
-        }
-        setEndDate(endDateValue);
-        setEndTime(calculatedEndTime);
+        const defaults = getDefaultScheduleState();
+        setStartDate(defaults.startDate);
+        setStartTime(defaults.startTime);
+        setEndDate(defaults.endDate);
+        setEndTime(defaults.endTime);
       } else {
         setStartDate(undefined);
         setEndDate(undefined);
@@ -157,95 +124,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
       
       setTimeout(() => textareaRef.current?.focus(), 100);
     }
-  }, [open, category]);
-
-  useEffect(() => {
-    return () => {
-      previewUrls.forEach(url => URL.revokeObjectURL(url));
-    };
-  }, []);
-
-  const buildScheduleDateTime = (date: Date | undefined, time: string, allDay: boolean): string | null => {
-    if (!date) return null;
-    
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    
-    if (allDay) {
-      return `${year}-${month}-${day}T00:00:00.000Z`;
-    }
-    
-    const [hours, minutes] = time.split(':');
-    const localDate = new Date(year, date.getMonth(), date.getDate(), parseInt(hours), parseInt(minutes));
-    return localDate.toISOString();
-  };
-
-  const formatDateDisplay = (date: Date | undefined): string => {
-    if (!date) return '日付を選択';
-    const month = date.getMonth() + 1;
-    const day = date.getDate();
-    return `${month}月${day}日`;
-  };
-
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-
-    const remaining = maxImages - selectedImages.length;
-    if (remaining <= 0) {
-      toast.error(`画像は最大${maxImages}枚までです`);
-      return;
-    }
-
-    const toAdd = files.slice(0, remaining);
-    if (files.length > remaining) {
-      toast.warning(`最大${maxImages}枚のため、${remaining}枚のみ追加しました`);
-    }
-
-    const newPreviews = toAdd.map(f => URL.createObjectURL(f));
-    setSelectedImages(prev => [...prev, ...toAdd]);
-    setPreviewUrls(prev => [...prev, ...newPreviews]);
-    e.target.value = '';
-  };
-
-  const removeImage = (index: number) => {
-    URL.revokeObjectURL(previewUrls[index]);
-    setSelectedImages(prev => prev.filter((_, i) => i !== index));
-    setPreviewUrls(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-
-    const imageFiles: File[] = [];
-    for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        const file = item.getAsFile();
-        if (file) imageFiles.push(file);
-      }
-    }
-
-    if (imageFiles.length === 0) return;
-    e.preventDefault();
-
-    const remaining = maxImages - selectedImages.length;
-    if (remaining <= 0) {
-      toast.error(`画像は最大${maxImages}枚までです`);
-      return;
-    }
-
-    const toAdd = imageFiles.slice(0, remaining);
-    if (imageFiles.length > remaining) {
-      toast.warning(`最大${maxImages}枚のため、${remaining}枚のみ追加しました`);
-    }
-
-    const newPreviews = toAdd.map(f => URL.createObjectURL(f));
-    setSelectedImages(prev => [...prev, ...toAdd]);
-    setPreviewUrls(prev => [...prev, ...newPreviews]);
-    toast.success(`画像を${toAdd.length}枚追加しました`);
-  };
+  }, [open, category, resetImages]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (isComposing) return;
@@ -254,6 +133,8 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
       handleSubmit();
     }
   };
+
+  const isBatchActive = category === 'task' && batchMode && selectedImages.length === 0;
 
   const handleSubmit = async () => {
     const hasContent = content.trim().length > 0;
@@ -295,6 +176,33 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
           ends_at: endsAt,
           is_all_day: isAllDay,
         };
+      }
+
+      // 一括登録モード
+      if (isBatchActive) {
+        const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        if (lines.length === 0) return;
+
+        let lastBlock: import('@/hooks/useEntries').Block | null = null;
+        for (const line of lines) {
+          const { block } = await addBlockWithDate({
+            content: line,
+            selectedDate: getTodayKey(),
+            mode: 'toNow',
+            images: [],
+            category: 'task',
+            tag: tag as import('@/lib/categoryUtils').BlockTag | null,
+            priority,
+          });
+          if (block) lastBlock = block;
+        }
+
+        if (lastBlock) {
+          onBlockAdded(lastBlock);
+          toast.success(`${lines.length}件のタスクを登録しました`);
+          onOpenChange(false);
+        }
+        return;
       }
 
       const { block } = await addBlockWithDate({
@@ -350,7 +258,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button variant="outline" size="sm" className="h-8 px-3 text-sm">
-                      {formatDateDisplay(startDate)}
+                      {formatScheduleDateDisplay(startDate)}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
@@ -406,7 +314,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button variant="outline" size="sm" className="h-8 px-3 text-sm">
-                      {formatDateDisplay(endDate)}
+                      {formatScheduleDateDisplay(endDate)}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
@@ -441,13 +349,35 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
             </div>
           )}
 
-          {/* タスク優先度セレクター */}
+          {/* タスク優先度セレクター + 一括登録トグル */}
           {category === 'task' && (
-            <PrioritySelector
-              value={priority}
-              onChange={setPriority}
-              disabled={isSubmitting}
-            />
+            <div className="flex items-center gap-4 flex-wrap">
+              <PrioritySelector
+                value={priority}
+                onChange={setPriority}
+                disabled={isSubmitting}
+              />
+              <div className="flex items-center gap-1.5">
+                <Switch
+                  id="quick-batch-mode"
+                  checked={batchMode && selectedImages.length === 0}
+                  onCheckedChange={(checked) => {
+                    setBatchMode(checked);
+                    sessionStorage.setItem('flowlog_batch_mode', String(checked));
+                  }}
+                  disabled={isSubmitting || selectedImages.length > 0}
+                />
+                <label
+                  htmlFor="quick-batch-mode"
+                  className={`text-sm ${selectedImages.length > 0 ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}
+                >
+                  一括登録
+                </label>
+                {batchMode && selectedImages.length === 0 && (
+                  <span className="text-xs text-muted-foreground/70">※ 1行1タスクとして登録します</span>
+                )}
+              </div>
+            </div>
           )}
 
           {/* Content Textarea */}

@@ -1,6 +1,5 @@
 import { useState, useRef, KeyboardEvent, useEffect } from 'react';
 import { Loader2, Send, ImagePlus, X, Camera } from 'lucide-react';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
@@ -9,6 +8,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
 import { AddBlockMode } from '@/hooks/useEntries';
 import { useImageUpload } from '@/hooks/useImageUpload';
+import { useImageAttachments } from '@/hooks/useImageAttachments';
 import { useCustomTags } from '@/hooks/useCustomTags';
 import { toast } from 'sonner';
 import { TagDropdown } from './TagDropdown';
@@ -22,6 +22,11 @@ import {
   getLastTag,
   setLastTag,
 } from '@/lib/categoryUtils';
+import {
+  buildScheduleDateTime,
+  formatScheduleDateDisplay,
+  getDefaultScheduleState,
+} from '@/lib/entryFormUtils';
 
 interface FlowInputProps {
   onSubmit: (
@@ -49,8 +54,6 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
-  const [selectedImages, setSelectedImages] = useState<File[]>([]);
-  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [category, setCategory] = useState<BlockCategory>('event');
   const [tag, setTag] = useState<string | null>(null);
   const [priority, setPriority] = useState<TaskPriority>(0);
@@ -68,8 +71,15 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const isMobile = useIsMobile();
   const { uploadImages, maxImages } = useImageUpload();
+  const {
+    selectedImages,
+    previewUrls,
+    handleImageSelect,
+    handlePaste,
+    removeImage,
+    resetImages,
+  } = useImageAttachments({ maxImages });
   const { customTags, createCustomTag } = useCustomTags();
 
   // 初回マウント時にlocalStorageからカテゴリとタグを復元し、フォーカス
@@ -115,70 +125,14 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     }
   }, [content, selectedDate]);
 
-  // 30分刻みの時刻を計算するヘルパー関数（切り上げロジック）
-  const getRoundedTime = (date: Date): { 
-    time: string; 
-    endTime: string; 
-    startNextDay: boolean;  // 開始日が翌日になるか
-    endNextDay: boolean;    // 終了日が翌日になるか（開始日基準）
-  } => {
-    const hours = date.getHours();
-    const minutes = date.getMinutes();
-    
-    // 切り上げロジック: 次の30分枠に進める
-    // 00分ちょうど → 00分のまま
-    // 01-30分 → 30分に切り上げ
-    // 31-59分 → 次の時間の00分に切り上げ
-    let roundedHours: number;
-    let roundedMinutes: number;
-    
-    if (minutes === 0) {
-      roundedHours = hours;
-      roundedMinutes = 0;
-    } else if (minutes <= 30) {
-      roundedHours = hours;
-      roundedMinutes = 30;
-    } else {
-      roundedHours = hours + 1;
-      roundedMinutes = 0;
-    }
-    
-    // 開始日が翌日になるかどうか
-    const startNextDay = roundedHours >= 24;
-    roundedHours = roundedHours % 24;
-    
-    // 終了時刻（1時間後）
-    const endRoundedHours = (roundedHours + 1) % 24;
-    // 終了日が翌日になるか（開始時刻基準で+1時間が24を超える場合）
-    const endNextDay = roundedHours + 1 >= 24;
-    
-    const time = `${String(roundedHours).padStart(2, '0')}:${String(roundedMinutes).padStart(2, '0')}`;
-    const endTime = `${String(endRoundedHours).padStart(2, '0')}:${String(roundedMinutes).padStart(2, '0')}`;
-    
-    return { time, endTime, startNextDay, endNextDay };
-  };
-
   // カテゴリ変更時にスケジュールのデフォルト値を設定
   useEffect(() => {
     if (category === 'schedule' && !startDate) {
-      const now = new Date();
-      const { time, endTime: calculatedEndTime, startNextDay, endNextDay } = getRoundedTime(now);
-      
-      // 開始日を設定（切り上げで翌日になる場合は翌日）
-      const startDateValue = new Date(now);
-      if (startNextDay) {
-        startDateValue.setDate(startDateValue.getDate() + 1);
-      }
-      setStartDate(startDateValue);
-      setStartTime(time);
-      
-      // 終了日を設定（開始日基準で、+1時間が翌日になる場合）
-      const endDateValue = new Date(startDateValue);
-      if (endNextDay) {
-        endDateValue.setDate(endDateValue.getDate() + 1);
-      }
-      setEndDate(endDateValue);
-      setEndTime(calculatedEndTime);
+      const defaults = getDefaultScheduleState();
+      setStartDate(defaults.startDate);
+      setStartTime(defaults.startTime);
+      setEndDate(defaults.endDate);
+      setEndTime(defaults.endTime);
     }
   }, [category, startDate]);
 
@@ -202,24 +156,6 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
 
   const handleCompositionEnd = () => {
     setIsComposing(false);
-  };
-
-  // Build schedule datetime string
-  const buildScheduleDateTime = (date: Date | undefined, time: string, allDay: boolean): string | null => {
-    if (!date) return null;
-    
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    
-    if (allDay) {
-      return `${year}-${month}-${day}T00:00:00.000Z`;
-    }
-    
-    const [hours, minutes] = time.split(':');
-    // Create as local time, then convert to ISO
-    const localDate = new Date(year, date.getMonth(), date.getDate(), parseInt(hours), parseInt(minutes));
-    return localDate.toISOString();
   };
 
   const handleSubmitWithMode = async (mode: AddBlockMode) => {
@@ -274,9 +210,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
       setContent('');
       // 送信成功時に下書きをクリア
       sessionStorage.removeItem(`${DRAFT_KEY_PREFIX}${selectedDate}`);
-      setSelectedImages([]);
-      previewUrls.forEach(url => URL.revokeObjectURL(url));
-      setPreviewUrls([]);
+      resetImages();
       
       // スケジュール関連もリセット
       if (category === 'schedule') {
@@ -323,88 +257,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     }
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-
-    const remaining = maxImages - selectedImages.length;
-    if (remaining <= 0) {
-      toast.error(`画像は最大${maxImages}枚までです`);
-      return;
-    }
-
-    const toAdd = files.slice(0, remaining);
-    if (files.length > remaining) {
-      toast.warning(`最大${maxImages}枚のため、${remaining}枚のみ追加しました`);
-    }
-
-    // プレビューURL生成
-    const newPreviews = toAdd.map(f => URL.createObjectURL(f));
-    setSelectedImages(prev => [...prev, ...toAdd]);
-    setPreviewUrls(prev => [...prev, ...newPreviews]);
-
-    // input をリセット（同じファイルを再選択可能に）
-    e.target.value = '';
-  };
-
   const handleCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     console.log('Camera capture triggered', e.target.files);
     handleImageSelect(e);
-  };
-
-  const removeImage = (index: number) => {
-    URL.revokeObjectURL(previewUrls[index]);
-    setSelectedImages(prev => prev.filter((_, i) => i !== index));
-    setPreviewUrls(prev => prev.filter((_, i) => i !== index));
-  };
-
-  // クリップボードから画像を貼り付け
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-
-    const imageFiles: File[] = [];
-    
-    for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        const file = item.getAsFile();
-        if (file) {
-          imageFiles.push(file);
-        }
-      }
-    }
-
-    // 画像がなければ通常のテキスト貼り付けを許可
-    if (imageFiles.length === 0) return;
-
-    // 画像がある場合のみデフォルト動作を防ぐ
-    e.preventDefault();
-
-    const remaining = maxImages - selectedImages.length;
-    if (remaining <= 0) {
-      toast.error(`画像は最大${maxImages}枚までです`);
-      return;
-    }
-
-    const toAdd = imageFiles.slice(0, remaining);
-    if (imageFiles.length > remaining) {
-      toast.warning(`最大${maxImages}枚のため、${remaining}枚のみ追加しました`);
-    }
-
-    // プレビューURL生成
-    const newPreviews = toAdd.map(f => URL.createObjectURL(f));
-    setSelectedImages(prev => [...prev, ...toAdd]);
-    setPreviewUrls(prev => [...prev, ...newPreviews]);
-    
-    toast.success(`画像を${toAdd.length}枚追加しました`);
-  };
-
-  // 日付フォーマット関数
-  const formatDateDisplay = (date: Date | undefined): string => {
-    if (!date) return '日付を選択';
-    const month = date.getMonth() + 1;
-    const day = date.getDate();
-    return `${month}月${day}日`;
   };
 
   const currentConfig = CATEGORY_CONFIG[category];
@@ -466,6 +321,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
               >
                 一括登録
               </label>
+              {batchMode && selectedImages.length === 0 && (
+                <span className="text-xs text-muted-foreground/70">※ 1行1タスクとして登録します</span>
+              )}
             </div>
           </div>
         )}
@@ -489,7 +347,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" size="sm" className="h-8 px-3 text-sm">
-                    {formatDateDisplay(startDate)}
+                    {formatScheduleDateDisplay(startDate)}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
@@ -549,7 +407,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" size="sm" className="h-8 px-3 text-sm">
-                    {formatDateDisplay(endDate)}
+                    {formatScheduleDateDisplay(endDate)}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
