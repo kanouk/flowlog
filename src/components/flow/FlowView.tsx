@@ -167,6 +167,20 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     }
   }, [selectedDate, updateBlock, triggerAutoFormat]);
 
+  const handleExactTimeAnswer = useCallback(async (blockId: string, time: string) => {
+    const newOccurredAt = createOccurredAt(selectedDate, time);
+
+    const updated = await updateBlock(blockId, { occurred_at: newOccurredAt });
+
+    if (updated) {
+      setBlocks(prev => sortBlocksDesc(
+        prev.map(b => b.id === blockId ? { ...b, occurred_at: newOccurredAt } : b)
+      ));
+      setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
+      triggerAutoFormat(selectedDate);
+    }
+  }, [selectedDate, updateBlock, triggerAutoFormat]);
+
   /**
    * 時刻質問を無視
    */
@@ -455,6 +469,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
               contentPreview={q.content_preview}
               question={q.question}
               onAnswer={handleTimeAnswer}
+              onAnswerExactTime={handleExactTimeAnswer}
               onDismiss={handleTimeDismiss}
             />
           ))}
