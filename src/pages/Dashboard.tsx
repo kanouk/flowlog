@@ -95,13 +95,29 @@ export default function Dashboard() {
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadEntries() {
       if (!user) return;
-      const data = await getEntries();
-      setEntries(data);
-      setInitialLoading(false);
+      try {
+        const data = await getEntries();
+        if (!cancelled) {
+          setEntries(data);
+        }
+      } catch (error) {
+        console.error('Failed to load dashboard entries:', error);
+      } finally {
+        if (!cancelled) {
+          setInitialLoading(false);
+        }
+      }
     }
+
     loadEntries();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user, getEntries]);
 
   const handleDateSelect = (date: string) => {
