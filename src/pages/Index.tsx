@@ -2,7 +2,8 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, PenLine, Sparkles, Layers, History, Loader2, CalendarDays, Brain, CheckSquare, Bookmark } from 'lucide-react';
+import { ArrowRight, PenLine, Sparkles, Layers, History, CalendarDays, Brain, CheckSquare, Bookmark } from 'lucide-react';
+import { AppSplash } from '@/components/common/AppSplash';
 import logoImage from '@/assets/logo.png';
 
 const Index = () => {
@@ -16,11 +17,7 @@ const Index = () => {
   }, [user, loading, navigate]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen flow-gradient flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <AppSplash />;
   }
 
   const categories = [

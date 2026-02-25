@@ -12,7 +12,7 @@ import { SearchBar } from '@/components/search/SearchBar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LogOut, Settings, PenLine, BookOpen, ListTodo, CalendarClock, Brain, Bookmark, BarChart3 } from 'lucide-react';
-import { Loader2 } from 'lucide-react';
+import { AppSplash } from '@/components/common/AppSplash';
 import { getTodayKey } from '@/lib/dateUtils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useTabSwipe } from '@/hooks/useTabSwipe';
@@ -154,11 +154,7 @@ export default function Dashboard() {
   };
 
   if (authLoading || (initialLoading && entries.length === 0)) {
-    return (
-      <div className="min-h-screen flow-gradient flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <AppSplash />;
   }
 
   if (!user) return null;

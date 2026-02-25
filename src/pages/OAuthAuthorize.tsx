@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Shield, Check, X, Loader2, AlertTriangle } from 'lucide-react';
+import { Shield, Check, X, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { AppSplash } from '@/components/common/AppSplash';
 
 const PERMISSIONS = [
   { label: '出来事、タスク、予定、メモの読み取り', description: 'あなたのログデータを閲覧できます' },
@@ -126,11 +127,7 @@ export default function OAuthAuthorize() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <AppSplash fullScreenClassName="min-h-screen bg-background" />;
   }
 
   if (error) {

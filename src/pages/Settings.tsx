@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, User, LogOut, Loader2, Tag, Sparkles, Target, ChevronRight, Plug } from 'lucide-react';
+import { ChevronLeft, User, LogOut, Tag, Sparkles, Target, ChevronRight, Plug } from 'lucide-react';
 import { AISettingsSection } from '@/components/settings/AISettingsSection';
 import { ScoreSettingsSection } from '@/components/settings/ScoreSettingsSection';
 import { TagManagementSection } from '@/components/settings/TagManagementSection';
 import { McpSettingsSection } from '@/components/settings/McpSettingsSection';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+import { AppSplash } from '@/components/common/AppSplash';
 
 type SettingsSection = 'tags' | 'score' | 'ai' | 'mcp' | 'account';
 
@@ -51,11 +52,7 @@ export default function Settings() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flow-gradient flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <AppSplash />;
   }
 
   if (!user) return null;
