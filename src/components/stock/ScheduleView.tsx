@@ -36,6 +36,18 @@ const getScheduleEndDate = (block: Block): Date | null => {
   return null;
 };
 
+const isPastSchedule = (block: Block, now: Date): boolean => {
+  const end = getScheduleEndDate(block);
+  if (!end) return false;
+
+  // 終日予定は終了日を当日いっぱい有効として扱う
+  if (block.is_all_day) {
+    return startOfDay(end) < startOfDay(now);
+  }
+
+  return end < now;
+};
+
 const isScheduleOnToday = (block: Block, today: Date): boolean => {
   const start = getScheduleStartDate(block);
   const end = getScheduleEndDate(block);
@@ -153,9 +165,8 @@ export function ScheduleView() {
     if (filterTag && block.tag !== filterTag) return false;
     
     // 過去のスケジュール
-    if (!showPast && block.starts_at) {
-      const startTime = new Date(block.starts_at);
-      if (startTime < now) return false;
+    if (!showPast && isPastSchedule(block, now)) {
+      return false;
     }
     
     return true;
@@ -163,14 +174,16 @@ export function ScheduleView() {
 
   // 過去と未来で分ける
   const futureBlocks = filtered.filter(b => {
-    if (!b.starts_at) return true;
-    return new Date(b.starts_at) >= now;
+    return !isPastSchedule(b, now);
   });
   
   const pastBlocks = blocks.filter(b => {
     if (filterTag && b.tag !== filterTag) return false;
-    if (!b.starts_at) return false;
-    return new Date(b.starts_at) < now;
+    return isPastSchedule(b, now);
+  }).sort((a, b) => {
+    const aTime = a.starts_at ? new Date(a.starts_at).getTime() : 0;
+    const bTime = b.starts_at ? new Date(b.starts_at).getTime() : 0;
+    return bTime - aTime;
   });
 
   const config = CATEGORY_CONFIG['schedule'];

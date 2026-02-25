@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import logoImage from '@/assets/logo.png';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Loader2, Mail, Lock, User } from 'lucide-react';
+import { Loader2, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { z } from 'zod';
 
 const emailSchema = z.string().email('有効なメールアドレスを入力してください');
@@ -18,6 +19,7 @@ export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [anonLoading, setAnonLoading] = useState(false);
 
@@ -82,29 +84,66 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flow-gradient flex flex-col">
-      {/* Header */}
-      <header className="p-6">
-        <h1 className="text-2xl font-semibold text-gradient">FlowLog</h1>
+    <div className="min-h-screen flow-gradient relative overflow-hidden">
+      <header className="relative z-10 p-6 md:p-8">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+          >
+            <img src={logoImage} alt="FlowLog" className="h-7 w-7" />
+            <h1 className="text-2xl font-semibold text-gradient">FlowLog</h1>
+          </button>
+        </div>
       </header>
 
-      {/* Main content */}
-      <main className="flex-1 flex items-center justify-center px-6 pb-12">
-        <div className="w-full max-w-md space-y-8 animate-fade-up">
-          {/* Hero copy */}
-          <div className="text-center space-y-3">
-            <h2 className="text-3xl md:text-4xl font-semibold text-foreground leading-tight">
-              思い浮かんだ順に書いていい。
-              <br />
-              <span className="text-gradient">読むときは、AIが整える。</span>
-            </h2>
-            <p className="text-muted-foreground">
-              思考がほどける日記アプリ
-            </p>
-          </div>
+      <main className="relative z-10 flex min-h-[calc(100vh-96px)] items-center justify-center px-6 pb-12">
+        <div className="w-full max-w-md animate-fade-up">
+          <div className="glass-card rounded-3xl border-border/60 p-6 sm:p-8 space-y-6 shadow-[0_20px_60px_-24px_rgba(0,0,0,0.22)]">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground">
+                    Account
+                  </p>
+                  <h2 className="mt-1 text-2xl font-semibold text-foreground">
+                    {isLogin ? 'ログイン' : 'アカウント作成'}
+                  </h2>
+                </div>
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-cyan-400/70 to-blue-500/70 p-[1px] shrink-0">
+                  <div className="flex h-full w-full items-center justify-center rounded-full bg-card/90 p-2">
+                    <Lock className="h-4 w-4 text-cyan-600 dark:text-cyan-300" />
+                  </div>
+                </div>
+              </div>
 
-          {/* Auth form */}
-          <div className="glass-card rounded-3xl p-8 space-y-6">
+              <div className="grid grid-cols-2 gap-1 rounded-2xl border border-border/60 bg-muted/40 p-1">
+                <button
+                  type="button"
+                  onClick={() => setIsLogin(true)}
+                  className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                    isLogin
+                      ? 'bg-card text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  ログイン
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsLogin(false)}
+                  className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                    !isLogin
+                      ? 'bg-card text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  新規登録
+                </button>
+              </div>
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-sm font-medium">
@@ -118,7 +157,7 @@ export default function Auth() {
                     placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 h-11 bg-background/70 border-border/70"
                   />
                 </div>
               </div>
@@ -131,18 +170,31 @@ export default function Auth() {
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="password"
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     placeholder="6文字以上"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 pr-10 h-11 bg-background/70 border-border/70"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                    aria-label={showPassword ? 'パスワードを非表示' : 'パスワードを表示'}
+                    aria-pressed={showPassword}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
                 </div>
               </div>
 
               <Button 
                 type="submit" 
-                className="w-full" 
+                className="w-full h-11" 
                 size="lg"
                 disabled={loading}
               >
@@ -154,18 +206,20 @@ export default function Auth() {
               </Button>
             </form>
 
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
+              <div className="relative py-1">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="rounded-full border border-border/60 bg-card px-3 py-1 text-[10px] tracking-[0.12em] text-muted-foreground">
+                    または
+                  </span>
+                </div>
               </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">または</span>
-              </div>
-            </div>
 
             <Button
               variant="outline"
-              className="w-full"
+              className="w-full h-11"
               size="lg"
               onClick={handleAnonymous}
               disabled={anonLoading}
@@ -205,6 +259,10 @@ export default function Auth() {
                 </>
               )}
             </p>
+            <div className="flex items-center justify-center gap-2 pt-1 text-xs text-muted-foreground">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-cyan-400/80" />
+              <span>メールログイン / 匿名ログインに対応</span>
+            </div>
           </div>
         </div>
       </main>
