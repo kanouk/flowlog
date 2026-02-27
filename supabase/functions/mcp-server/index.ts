@@ -9,8 +9,65 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// FlowLogアプリのURL（環境変数から取得、フォールバックあり）
-const FLOWLOG_APP_URL = Deno.env.get("FLOWLOG_APP_URL") || "https://flowlog.lovable.app";
+// FlowLogアプリのURL（環境変数から取得）
+const FLOWLOG_APP_URL = Deno.env.get("FLOWLOG_APP_URL")?.trim();
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function resolveFlowlogAppUrl(): string | null {
+  if (FLOWLOG_APP_URL && isValidHttpUrl(FLOWLOG_APP_URL)) {
+    return FLOWLOG_APP_URL;
+  }
+
+  // Supabase hosted environments sometimes expose site URL via these names.
+  const siteUrl = Deno.env.get("SITE_URL")?.trim();
+  if (siteUrl && isValidHttpUrl(siteUrl)) {
+    return siteUrl;
+  }
+
+  const supabaseSiteUrl = Deno.env.get("SUPABASE_SITE_URL")?.trim();
+  if (supabaseSiteUrl && isValidHttpUrl(supabaseSiteUrl)) {
+    return supabaseSiteUrl;
+  }
+
+  return null;
+}
+
+function validateRedirectUri(redirectUri: string): string | null {
+  if (!redirectUri || redirectUri.length > 2048) {
+    return "redirect_uri is invalid";
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(redirectUri);
+  } catch {
+    return "redirect_uri must be a valid URL";
+  }
+
+  const protocol = parsed.protocol.toLowerCase();
+
+  if (protocol === "javascript:" || protocol === "data:" || protocol === "file:") {
+    return "redirect_uri protocol is not allowed";
+  }
+
+  if (protocol === "http:") {
+    const host = parsed.hostname.toLowerCase();
+    const isLoopback = host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+    if (!isLoopback) {
+      return "redirect_uri must use https unless loopback";
+    }
+  }
+
+  return null;
+}
 
 // ユーザー認証（APIトークンから）
 async function authenticateUser(authHeader: string | undefined): Promise<string | null> {
@@ -352,12 +409,13 @@ function getOAuthMetadata() {
 // Protected Resource Metadata (RFC 9728)
 function getProtectedResourceMetadata() {
   const baseUrl = `${supabaseUrl}/functions/v1/mcp-server`;
+  const flowlogAppUrl = resolveFlowlogAppUrl();
   return {
     resource: `${baseUrl}/mcp`,
     authorization_servers: [baseUrl],
     scopes_supported: ["mcp:full"],
     bearer_methods_supported: ["header"],
-    resource_documentation: `${FLOWLOG_APP_URL}/settings`,
+    resource_documentation: flowlogAppUrl ? `${flowlogAppUrl}/settings` : `${baseUrl}/health`,
   };
 }
 
@@ -430,6 +488,14 @@ function handleAuthorize(url: URL): Response {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+
+  const redirectUriError = validateRedirectUri(redirectUri);
+  if (redirectUriError) {
+    return new Response(JSON.stringify({ error: "invalid_request", error_description: redirectUriError }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
   
   if (responseType !== "code") {
     return new Response(JSON.stringify({ error: "unsupported_response_type" }), {
@@ -438,8 +504,19 @@ function handleAuthorize(url: URL): Response {
     });
   }
   
+  const flowlogAppUrl = resolveFlowlogAppUrl();
+  if (!flowlogAppUrl) {
+    return new Response(JSON.stringify({
+      error: "server_error",
+      error_description: "FLOWLOG_APP_URL is not configured or invalid",
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   // FlowLogアプリの認可画面にリダイレクト
-  const authPageUrl = new URL("/oauth/authorize", FLOWLOG_APP_URL);
+  const authPageUrl = new URL("/oauth/authorize", flowlogAppUrl);
   authPageUrl.searchParams.set("client_id", clientId);
   authPageUrl.searchParams.set("redirect_uri", redirectUri);
   authPageUrl.searchParams.set("scope", scope);
@@ -620,7 +697,15 @@ async function handleCreateAuthorizationCode(req: Request): Promise<Response> {
     const { client_id, redirect_uri, scope, state, code_challenge, code_challenge_method } = body;
     
     if (!client_id || !redirect_uri) {
-      return new Response(JSON.stringify({ error: "invalid_request" }), {
+      return new Response(JSON.stringify({ error: "invalid_request", error_description: "client_id and redirect_uri are required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const redirectUriError = validateRedirectUri(redirect_uri);
+    if (redirectUriError) {
+      return new Response(JSON.stringify({ error: "invalid_request", error_description: redirectUriError }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -1058,6 +1143,8 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const path = url.pathname;
   const normalizedPath = path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+  const hasAuthorizationServerWellKnown = normalizedPath.includes("/.well-known/oauth-authorization-server");
+  const hasProtectedResourceWellKnown = normalizedPath.includes("/.well-known/oauth-protected-resource");
   
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -1067,14 +1154,20 @@ Deno.serve(async (req) => {
   // ===== OAuth 2.0 エンドポイント =====
   
   // OAuth Server Metadata (RFC 8414)
-  if (normalizedPath.endsWith("/.well-known/oauth-authorization-server")) {
+  if (
+    (normalizedPath.endsWith("/.well-known/oauth-authorization-server") || hasAuthorizationServerWellKnown) &&
+    req.method === "GET"
+  ) {
     return new Response(JSON.stringify(getOAuthMetadata()), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
   
   // Protected Resource Metadata (RFC 9728)
-  if (normalizedPath.endsWith("/.well-known/oauth-protected-resource")) {
+  if (
+    (normalizedPath.endsWith("/.well-known/oauth-protected-resource") || hasProtectedResourceWellKnown) &&
+    req.method === "GET"
+  ) {
     return new Response(JSON.stringify(getProtectedResourceMetadata()), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -1125,7 +1218,8 @@ Deno.serve(async (req) => {
         headers: { 
           ...corsHeaders, 
           "Content-Type": "application/json",
-          "WWW-Authenticate": `Bearer resource_metadata="${resourceMetadataUrl}"`,
+          "WWW-Authenticate": `Bearer realm="FlowLog MCP", resource_metadata="${resourceMetadataUrl}"`,
+          "Link": `<${resourceMetadataUrl}>; rel="oauth-protected-resource"`,
         },
       });
     }

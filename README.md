@@ -46,6 +46,12 @@
 - **空entry削除**: クライアント側実装（将来的にDBトリガー化を検討）
 - **Edge Function**: parseISO + formatInTimeZone に統一
 
+## MCP連携仕様
+
+MCP/OAuth/PAT連携の詳細仕様と運用確認観点は以下を参照:
+
+- `docs/mcp-integration.md`
+
 ## セキュリティ仕様（RLS）
 
 全テーブルで RLS が有効。すべてのポリシーは `auth.uid() = user_id` を条件とし、認証なしでのアクセスは不可。

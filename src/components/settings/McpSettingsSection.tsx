@@ -56,7 +56,7 @@ export function McpSettingsSection() {
     }
   };
 
-  const handleCopyConfig = async () => {
+  const handleCopyPatConfig = async () => {
     const config = {
       mcpServers: {
         flowlog: {
@@ -65,6 +65,18 @@ export function McpSettingsSection() {
           headers: {
             Authorization: "Bearer YOUR_API_TOKEN"
           }
+        }
+      }
+    };
+    await navigator.clipboard.writeText(JSON.stringify(config, null, 2));
+  };
+
+  const handleCopyOAuthConfig = async () => {
+    const config = {
+      mcpServers: {
+        flowlog: {
+          url: MCP_SERVER_URL,
+          transport: { type: "streamable_http" }
         }
       }
     };
@@ -176,7 +188,35 @@ export function McpSettingsSection() {
           </div>
 
           <div className="space-y-2">
-            <div className="text-sm font-medium">Claude Code / Cursor 設定例</div>
+            <div className="text-sm font-medium">OAuth 設定例（URLのみ）</div>
+            <div className="relative">
+              <pre className="text-xs bg-muted p-3 rounded overflow-x-auto">
+{`{
+  "mcpServers": {
+    "flowlog": {
+      "url": "${MCP_SERVER_URL}",
+      "transport": { "type": "streamable_http" }
+    }
+  }
+}`}
+              </pre>
+              <Button
+                variant="outline"
+                size="sm"
+                className="absolute top-2 right-2"
+                onClick={handleCopyOAuthConfig}
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                コピー
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              OAuth対応クライアントでは、接続時にブラウザでFlowLog認証・許可画面が開きます。
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-sm font-medium">APIトークン（PAT）設定例</div>
             <div className="relative">
               <pre className="text-xs bg-muted p-3 rounded overflow-x-auto">
 {`{
@@ -195,14 +235,14 @@ export function McpSettingsSection() {
                 variant="outline"
                 size="sm"
                 className="absolute top-2 right-2"
-                onClick={handleCopyConfig}
+                onClick={handleCopyPatConfig}
               >
                 <Copy className="h-3 w-3 mr-1" />
                 コピー
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              YOUR_API_TOKEN を実際のトークンに置き換えてください。
+              OAuthが使えないクライアントでは、事前に発行したAPIトークンを `Authorization` ヘッダーに設定してください。
             </p>
           </div>
 
