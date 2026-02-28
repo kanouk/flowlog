@@ -34,8 +34,20 @@ The MCP server returns metadata at:
 
 When MCP is accessed without bearer token, server returns `401` with:
 
-- `WWW-Authenticate: Bearer realm="FlowLog MCP", resource_metadata="<protected-resource-metadata-url>"`
+- `WWW-Authenticate: Bearer realm="<mcp-server-base-url>", resource_metadata="<protected-resource-metadata-url>"`
 - `Link: <<protected-resource-metadata-url>>; rel="oauth-protected-resource"`
+
+For client compatibility, the `401` JSON body also duplicates OAuth bootstrap hints:
+
+- `resource_metadata_url`
+- `authorization_server`
+- `authorization_servers`
+- `authorization_endpoint`
+- `token_endpoint`
+- `registration_endpoint`
+- `scopes_supported`
+
+Additionally, `WWW-Authenticate` uses the MCP server base URL as `realm`.
 
 ## Redirect URI Validation Rules
 

@@ -438,6 +438,22 @@ function getProtectedResourceMetadata() {
   };
 }
 
+function getOAuthCompatibilityHints() {
+  const baseUrl = `${supabaseUrl}/functions/v1/mcp-server`;
+  const protectedResourceUrl = `${baseUrl}/.well-known/oauth-protected-resource`;
+  const metadata = getOAuthMetadata();
+
+  return {
+    resource_metadata_url: protectedResourceUrl,
+    authorization_server: metadata.issuer,
+    authorization_servers: [metadata.issuer],
+    authorization_endpoint: metadata.authorization_endpoint,
+    token_endpoint: metadata.token_endpoint,
+    registration_endpoint: metadata.registration_endpoint,
+    scopes_supported: metadata.scopes_supported,
+  };
+}
+
 // Session management for Streamable HTTP
 // NOTE: Edge Functions環境ではプロセスがリクエスト間で保持されない可能性があるため、
 // インメモリMapでのセッション保持は行わない。
@@ -1244,15 +1260,18 @@ Deno.serve(async (req) => {
       logRequest("mcp_unauthorized", req, url);
       // RFC 9728準拠: resource_metadataパラメータで認証方式を通知
       const resourceMetadataUrl = `${supabaseUrl}/functions/v1/mcp-server/.well-known/oauth-protected-resource`;
+      const authBaseUrl = `${supabaseUrl}/functions/v1/mcp-server`;
+      const compatibilityHints = getOAuthCompatibilityHints();
       return new Response(JSON.stringify({ 
         error: "unauthorized",
         error_description: "Bearer token required. Obtain via OAuth or API token.",
+        ...compatibilityHints,
       }), {
         status: 401,
         headers: { 
           ...corsHeaders, 
           "Content-Type": "application/json",
-          "WWW-Authenticate": `Bearer realm="FlowLog MCP", resource_metadata="${resourceMetadataUrl}"`,
+          "WWW-Authenticate": `Bearer realm="${authBaseUrl}", resource_metadata="${resourceMetadataUrl}"`,
           "Link": `<${resourceMetadataUrl}>; rel="oauth-protected-resource"`,
         },
       });
