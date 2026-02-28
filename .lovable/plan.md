@@ -1,52 +1,22 @@
 
 
-# タスク一括登録機能の追加
+# Edge Function デプロイ
 
-## 概要
-カテゴリが「タスク」の場合に、複数行入力で各行を個別のタスクとして一括登録できるオプションを追加します。
+現在のプロジェクトにある全Edge Functionを再デプロイします。
 
-## UI の変更
+## 対象ファイル
 
-### `src/components/flow/FlowInput.tsx`
-- タスクカテゴリ選択時に、優先度セレクターの横に「一括登録」トグル（Switch）を追加
-- トグル ON の場合、保存ボタン押下時にテキストを改行で分割し、空行を除いた各行を個別のタスクブロックとして登録
-- トグル OFF の場合は従来通り1つのブロックとして保存
-- トグルの状態は sessionStorage に保存し、セッション内で記憶
-
-### `src/components/flow/FlowView.tsx`
-- `handleAddBlock` に一括登録用の分岐を追加
-- 複数行の場合、各行に対して `addBlockWithDate` を順次呼び出し
-- 楽観的更新も各行ごとに適用
-- 登録完了後に「X件のタスクを登録しました」とトースト表示
-
-## 動作イメージ
-
-```text
-[タスク] が選択されている状態:
-
-  優先度: ○なし ○低 ○中 ○高    [一括登録 ON/OFF]
-
-  テキストエリア:
-  ┌─────────────────────┐
-  │ 牛乳を買う           │
-  │ 掃除する             │
-  │ メール返信           │
-  └─────────────────────┘
-
-  → 保存で3つのタスクが個別に登録される
-```
-
-## 技術的な詳細
-
-- 一括登録時は全行に同じタグ・優先度を適用
-- 空行はスキップ
-- 画像が添付されている場合は一括登録を無効化（画像は1ブロックにしか紐づけられないため）
-- 一括登録時は `addBlockWithDate` を順次呼び出し（各ブロックの `occurred_at` を1分ずつずらすのは既存ロジックで自動対応）
-
-## 変更対象ファイル
-
-| ファイル | 変更内容 |
+| Function | パス |
 |---|---|
-| `src/components/flow/FlowInput.tsx` | 一括登録トグル追加、送信ロジック分岐 |
-| `src/components/flow/FlowView.tsx` | 一括登録の呼び出しロジック追加 |
+| `format-entries` | `supabase/functions/format-entries/index.ts` |
+| `mcp-server` | `supabase/functions/mcp-server/index.ts` |
+| `api` | `supabase/functions/api/index.ts` |
+| `summarize-url` | `supabase/functions/summarize-url/index.ts` |
+| `test-ai-connection` | `supabase/functions/test-ai-connection/index.ts` |
+| `ocr-image` | `supabase/functions/ocr-image/index.ts` |
+
+## 実行内容
+
+- 上記6つのEdge Functionすべてを `deploy_edge_functions` ツールで一括デプロイ
+- コード変更は不要（GitHub経由で更新済みのコードをそのままデプロイ）
 
