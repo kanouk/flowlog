@@ -55,7 +55,7 @@ const Index = () => {
     {
       icon: PenLine,
       title: 'なんでも書く',
-      description: '出来事、メモ、タスク、気になる記事\nカテゴリを選んでポンポン入力',
+      description: 'まずはテキストや写真をそのまま記録\n保存前にカテゴリをタップで選ぶだけ',
     },
     {
       icon: Layers,

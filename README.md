@@ -12,12 +12,24 @@
 - **occurred_at**: 編集可能（未来日時は禁止、+5分まで許容）
   - 日付が変わった場合、ブロックは自動的に該当日に移動
   - 元の日のentryが空になった場合、自動削除
-- **category**: 4種類（event, thought, task, read_later）
-  - FlowInputで選択可能、直前の選択をlocalStorageで保持
-  - BlockListでPopoverから変更可能
+- **category**: 5種類（event, thought, task, read_later, schedule）
+  - FlowInputでは入力後の確認シートで選択する
+  - デフォルトは `event`（出来事）
+- BlockListでPopoverから変更可能
 - **is_done / done_at**: taskカテゴリのみ有効
   - チェックボックスで完了/未完了を切り替え
   - done_atは完了時刻を記録
+
+## 入力フロー仕様
+
+- **1段階目（キャプチャ）**: テキスト、写真、カメラのみを表示し、まだ保存しない
+- **2段階目（整理）**: 下から出る確認シートでカテゴリを選択して保存する
+  - カテゴリは大きいタップターゲットで選択
+  - タグはドロップダウンではなくチップで単一選択
+  - タグ未選択のまま保存可能
+  - `task` は優先度と一括登録、`schedule` は日時入力を2段階目で補足する
+- **保存タイミング**: Supabase への保存は2段階目でのみ実行し、1段階目では一時 state のみを更新する
+- **データモデル**: `blocks.category` と `blocks.tag` のスキーマ変更は行わない
 
 ## 表示仕様
 
@@ -51,6 +63,7 @@
 MCP/OAuth/PAT連携の詳細仕様と運用確認観点は以下を参照:
 
 - `docs/mcp-integration.md`
+- `docs/input-flow.md`
 
 ## セキュリティ仕様（RLS）
 

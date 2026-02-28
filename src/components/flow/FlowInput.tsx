@@ -1,27 +1,32 @@
-import { useState, useRef, KeyboardEvent, useEffect } from 'react';
-import { Loader2, Send, ImagePlus, X, Camera } from 'lucide-react';
+import { useState, useRef, KeyboardEvent, useEffect, useCallback } from 'react';
+import { ArrowLeft, ArrowRight, Camera, ChevronDown, ChevronUp, ImagePlus, Loader2, Send, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
+import {
+  Sheet,
+  SheetContent,
+} from '@/components/ui/sheet';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
 import { AddBlockMode } from '@/hooks/useEntries';
+import { useAuth } from '@/hooks/useAuth';
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { useImageAttachments } from '@/hooks/useImageAttachments';
 import { useCustomTags } from '@/hooks/useCustomTags';
 import { toast } from 'sonner';
-import { TagDropdown } from './TagDropdown';
 import { PrioritySelector, TaskPriority } from './PrioritySelector';
-import { 
-  BlockCategory, 
-  CATEGORIES, 
-  CATEGORY_CONFIG, 
-  getLastCategory, 
+import { TagChipSelector } from './TagChipSelector';
+import {
+  BlockCategory,
+  CATEGORIES,
+  CATEGORY_CONFIG,
+  TAGS,
   setLastCategory,
-  getLastTag,
   setLastTag,
 } from '@/lib/categoryUtils';
+import { supabase } from '@/integrations/supabase/client';
 import {
   buildScheduleDateTime,
   formatScheduleDateDisplay,
@@ -30,10 +35,10 @@ import {
 
 interface FlowInputProps {
   onSubmit: (
-    content: string, 
-    mode: AddBlockMode, 
-    images: string[], 
-    category: BlockCategory, 
+    content: string,
+    mode: AddBlockMode,
+    images: string[],
+    category: BlockCategory,
     tag: string | null,
     scheduleData?: {
       starts_at: string | null;
@@ -49,28 +54,41 @@ interface FlowInputProps {
 }
 
 const DRAFT_KEY_PREFIX = 'flowlog_draft_';
+const CATEGORY_KEYBOARD_ORDER: BlockCategory[] = CATEGORIES;
+
+function triggerLightHaptic(): void {
+  if (typeof window === 'undefined') return;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if ('vibrate' in navigator) {
+    navigator.vibrate(10);
+  }
+}
 
 export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInputProps) {
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
+  const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [category, setCategory] = useState<BlockCategory>('event');
   const [tag, setTag] = useState<string | null>(null);
   const [priority, setPriority] = useState<TaskPriority>(0);
+  const [showAllTags, setShowAllTags] = useState(false);
+  const [topTagIds, setTopTagIds] = useState<string[]>([]);
+  const [animatingCategory, setAnimatingCategory] = useState<BlockCategory | null>(null);
   const [batchMode, setBatchMode] = useState<boolean>(() => {
     return sessionStorage.getItem('flowlog_batch_mode') === 'true';
   });
-  
-  // Schedule states
+
   const [isAllDay, setIsAllDay] = useState(false);
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [startTime, setStartTime] = useState('09:00');
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [endTime, setEndTime] = useState('10:00');
-  
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const reviewOpenedAtRef = useRef<number>(0);
   const { uploadImages, maxImages } = useImageUpload();
   const {
     selectedImages,
@@ -80,24 +98,19 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     removeImage,
     resetImages,
   } = useImageAttachments({ maxImages });
+  const { user } = useAuth();
   const { customTags, createCustomTag } = useCustomTags();
 
-  // 初回マウント時にlocalStorageからカテゴリとタグを復元し、フォーカス
   useEffect(() => {
-    setCategory(getLastCategory());
-    setTag(getLastTag());
-    // テキストエリアにフォーカス
     setTimeout(() => {
       textareaRef.current?.focus();
     }, 100);
   }, []);
 
-  // 下書きをsessionStorageから復元 + カテゴリ・タグ・優先度をリセット
   useEffect(() => {
     const draft = sessionStorage.getItem(`${DRAFT_KEY_PREFIX}${selectedDate}`);
     if (draft) {
       setContent(draft);
-      // textareaの高さを調整
       setTimeout(() => {
         if (textareaRef.current) {
           textareaRef.current.style.height = 'auto';
@@ -108,15 +121,20 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
       setContent('');
     }
 
-    // 日付移動時にカテゴリ・タグ・優先度をデフォルトにリセット
+    setIsReviewOpen(false);
     setCategory('event');
-    setLastCategory('event');
     setTag(null);
-    setLastTag(null);
     setPriority(0);
-  }, [selectedDate]);
+    setShowAllTags(false);
+    setIsAllDay(false);
+    setStartDate(undefined);
+    setStartTime('09:00');
+    setEndDate(undefined);
+    setEndTime('10:00');
+    setLastCategory('event');
+    setLastTag(null);
+  }, [resetImages, selectedDate]);
 
-  // 入力内容をsessionStorageに保存
   useEffect(() => {
     if (content) {
       sessionStorage.setItem(`${DRAFT_KEY_PREFIX}${selectedDate}`, content);
@@ -125,7 +143,6 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     }
   }, [content, selectedDate]);
 
-  // カテゴリ変更時にスケジュールのデフォルト値を設定
   useEffect(() => {
     if (category === 'schedule' && !startDate) {
       const defaults = getDefaultScheduleState();
@@ -136,18 +153,62 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     }
   }, [category, startDate]);
 
-  const handleCategoryChange = (cat: BlockCategory) => {
+  useEffect(() => {
+    if (!user) {
+      setTopTagIds([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadTopTags = async () => {
+      const { data, error } = await supabase
+        .from('blocks')
+        .select('tag, occurred_at')
+        .eq('user_id', user.id)
+        .not('tag', 'is', null)
+        .order('occurred_at', { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error('Failed to load recent tags:', error);
+        return;
+      }
+
+      const nextTopTagIds: string[] = [];
+      for (const row of data ?? []) {
+        const tagId = row.tag;
+        if (!tagId || nextTopTagIds.includes(tagId)) continue;
+        nextTopTagIds.push(tagId);
+        if (nextTopTagIds.length === 3) break;
+      }
+
+      if (!cancelled) {
+        setTopTagIds(nextTopTagIds);
+      }
+    };
+
+    loadTopTags();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const handleCategoryChange = useCallback((cat: BlockCategory) => {
     setCategory(cat);
     setLastCategory(cat);
-    // カテゴリ変更時にタグと優先度をクリア
     setTag(null);
     setLastTag(null);
     setPriority(0);
-  };
+    setAnimatingCategory(cat);
+    triggerLightHaptic();
+  }, []);
 
-  const handleTagChange = (t: string | null) => {
-    setTag(t);
-    setLastTag(t);
+  const handleTagChange = (nextTag: string | null) => {
+    setTag(nextTag);
+    setLastTag(nextTag);
+    triggerLightHaptic();
   };
 
   const handleCompositionStart = () => {
@@ -158,44 +219,73 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setIsComposing(false);
   };
 
-  const handleSubmitWithMode = async (mode: AddBlockMode) => {
+  const canContinue = (content.trim().length > 0 || selectedImages.length > 0) && !disabled && !isSubmitting;
+  const canSaveSchedule = category === 'schedule' && startDate;
+  const canSave = (content.trim().length > 0 || selectedImages.length > 0 || canSaveSchedule) && !disabled && !isSubmitting;
+
+  const resetForm = useCallback(() => {
+    setContent('');
+    sessionStorage.removeItem(`${DRAFT_KEY_PREFIX}${selectedDate}`);
+    resetImages();
+    setIsReviewOpen(false);
+    setCategory('event');
+    setTag(null);
+    setPriority(0);
+    setShowAllTags(false);
+    setIsAllDay(false);
+    setStartDate(undefined);
+    setEndDate(undefined);
+    setStartTime('09:00');
+    setEndTime('10:00');
+    setLastCategory('event');
+    setLastTag(null);
+
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.focus();
+    }
+  }, [resetImages, selectedDate]);
+
+  const handleOpenReview = () => {
+    if (!canContinue) return;
+    reviewOpenedAtRef.current = Date.now();
+    triggerLightHaptic();
+    setIsReviewOpen(true);
+  };
+
+  const handleSubmitWithMode = useCallback(async (mode: AddBlockMode) => {
     const hasContent = content.trim().length > 0;
     const hasImages = selectedImages.length > 0;
-    
-    // スケジュールカテゴリの場合、開始日時が必須
+
     if (category === 'schedule' && !startDate) {
       toast.error('開始日を選択してください');
       return;
     }
-    
+
     if (!hasContent && !hasImages && category !== 'schedule') return;
     if (disabled) return;
 
     setIsSubmitting(true);
     try {
-      // 画像をアップロード
       let uploadedUrls: string[] = [];
       if (hasImages) {
         uploadedUrls = await uploadImages(selectedImages);
         if (uploadedUrls.length !== selectedImages.length) {
-          // 一部アップロード失敗
           toast.warning('一部の画像のアップロードに失敗しました');
         }
       }
 
-      // スケジュールデータを構築
       let scheduleData = undefined;
       if (category === 'schedule') {
         const startsAt = buildScheduleDateTime(startDate, startTime, isAllDay);
         const endsAt = buildScheduleDateTime(endDate, endTime, isAllDay);
-        
-        // 終了日時のバリデーション
+
         if (endsAt && startsAt && new Date(endsAt) < new Date(startsAt)) {
           toast.error('終了日時は開始日時より後にしてください');
           setIsSubmitting(false);
           return;
         }
-        
+
         scheduleData = {
           starts_at: startsAt,
           ends_at: endsAt,
@@ -204,47 +294,96 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
       }
 
       const isBatch = category === 'task' && batchMode && selectedImages.length === 0;
-      onSubmit(content.trim(), mode, uploadedUrls, category, tag, scheduleData, category === 'task' ? priority : 0, isBatch);
-      
-      // リセット
-      setContent('');
-      // 送信成功時に下書きをクリア
-      sessionStorage.removeItem(`${DRAFT_KEY_PREFIX}${selectedDate}`);
-      resetImages();
-      
-      // スケジュール関連もリセット
-      if (category === 'schedule') {
-        setStartDate(undefined);
-        setEndDate(undefined);
-        setStartTime('09:00');
-        setEndTime('10:00');
-        setIsAllDay(false);
-      }
-      // 優先度リセット
-      setPriority(0);
-      
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-        textareaRef.current.focus();
-      }
+      onSubmit(
+        content.trim(),
+        mode,
+        uploadedUrls,
+        category,
+        tag,
+        scheduleData,
+        category === 'task' ? priority : 0,
+        isBatch
+      );
+
+      resetForm();
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [
+    category,
+    content,
+    disabled,
+    endDate,
+    endTime,
+    isAllDay,
+    onSubmit,
+    priority,
+    resetForm,
+    selectedImages,
+    startDate,
+    startTime,
+    tag,
+    uploadImages,
+    batchMode,
+  ]);
 
-  // デスクトップ: Cmd/Ctrl + Enter で保存
+  useEffect(() => {
+    if (!isReviewOpen) return;
+
+    const handleReviewKeydown = (event: globalThis.KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isFormField = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        if (Date.now() - reviewOpenedAtRef.current < 300) {
+          event.preventDefault();
+          return;
+        }
+        event.preventDefault();
+        handleSubmitWithMode('toSelectedDate');
+        return;
+      }
+
+      if (isFormField) return;
+
+      const currentIndex = CATEGORY_KEYBOARD_ORDER.indexOf(category);
+      if (currentIndex === -1) return;
+
+      let nextIndex = currentIndex;
+      switch (event.key) {
+        case 'ArrowRight':
+          nextIndex = Math.min(currentIndex + 1, CATEGORY_KEYBOARD_ORDER.length - 1);
+          break;
+        case 'ArrowLeft':
+          nextIndex = Math.max(currentIndex - 1, 0);
+          break;
+        case 'ArrowDown':
+          nextIndex = Math.min(currentIndex + 1, CATEGORY_KEYBOARD_ORDER.length - 1);
+          break;
+        case 'ArrowUp':
+          nextIndex = Math.max(currentIndex - 1, 0);
+          break;
+        default:
+          return;
+      }
+
+      event.preventDefault();
+      handleCategoryChange(CATEGORY_KEYBOARD_ORDER[nextIndex]);
+    };
+
+    window.addEventListener('keydown', handleReviewKeydown);
+    return () => {
+      window.removeEventListener('keydown', handleReviewKeydown);
+    };
+  }, [category, handleCategoryChange, handleSubmitWithMode, isReviewOpen]);
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // IME入力中は無視
     if (isComposing) return;
-    
-    // Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux) で送信
+
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      const hasContent = content.trim().length > 0;
-      const hasImages = selectedImages.length > 0;
-      const canSubmitSchedule = category === 'schedule' && startDate;
-      if ((hasContent || hasImages || canSubmitSchedule) && !disabled && !isSubmitting) {
-        handleSubmitWithMode('toSelectedDate');
+      if (canContinue) {
+        handleOpenReview();
       }
     }
   };
@@ -258,305 +397,385 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   };
 
   const handleCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log('Camera capture triggered', e.target.files);
     handleImageSelect(e);
   };
 
   const currentConfig = CATEGORY_CONFIG[category];
-  const canSubmitSchedule = category === 'schedule' && startDate;
-  const canSubmit = (content.trim().length > 0 || selectedImages.length > 0 || canSubmitSchedule) && !disabled && !isSubmitting;
+  const allTagIds = [...TAGS, ...customTags.map((customTag) => customTag.id)];
+  const visibleTopTagIds = topTagIds.filter((tagId) => allTagIds.includes(tagId)).slice(0, 3);
+  const remainingTagIds = allTagIds.filter((tagId) => !visibleTopTagIds.includes(tagId));
 
   return (
-    <div className={`relative bg-card rounded-2xl overflow-hidden ${!isToday ? 'bg-muted/50' : ''}`}
-         style={{ boxShadow: '0 4px 20px -4px rgba(0,0,0,0.1)' }}>
-      {/* カテゴリカラーのアクセントストライプ */}
-      <div className={`absolute left-0 top-0 bottom-0 w-1 ${currentConfig.accentColor}`} />
-      <div className="p-6 pl-8">
-        {/* カテゴリ選択チップ */}
-        <div className="flex gap-2 mb-3 flex-wrap">
-          {CATEGORIES.map((cat) => {
-            const config = CATEGORY_CONFIG[cat];
-            const Icon = config.icon;
-            const isSelected = category === cat;
-            
-            return (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => handleCategoryChange(cat)}
-                className={`inline-flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                  isSelected 
-                    ? `${config.bgColor} ${config.color} ring-2 ring-offset-1 ring-current`
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{config.label}</span>
-              </button>
-            );
-          })}
-        </div>
+    <>
+      <div
+        className={`relative overflow-hidden rounded-2xl bg-card ${!isToday ? 'bg-muted/50' : ''}`}
+        style={{ boxShadow: '0 4px 20px -4px rgba(0,0,0,0.1)' }}
+      >
+        <div className="p-6">
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            onCompositionStart={handleCompositionStart}
+            onCompositionEnd={handleCompositionEnd}
+            placeholder="今、思い出したことを書く…"
+            disabled={disabled || isSubmitting}
+            className="input-flow w-full min-h-[120px] text-lg leading-relaxed"
+            rows={4}
+          />
 
-        {/* タスク優先度セレクター + 一括登録トグル */}
-        {category === 'task' && (
-          <div className="mb-3 flex items-center gap-4 flex-wrap">
-            <PrioritySelector
-              value={priority}
-              onChange={setPriority}
-              disabled={disabled || isSubmitting}
-            />
-            <div className="flex items-center gap-1.5">
-              <Switch
-                id="batch-mode"
-                checked={batchMode && selectedImages.length === 0}
-                onCheckedChange={(checked) => {
-                  setBatchMode(checked);
-                  sessionStorage.setItem('flowlog_batch_mode', String(checked));
-                }}
-                disabled={disabled || isSubmitting || selectedImages.length > 0}
-              />
-              <label 
-                htmlFor="batch-mode" 
-                className={`text-sm ${selectedImages.length > 0 ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}
-              >
-                一括登録
-              </label>
-              {batchMode && selectedImages.length === 0 && (
-                <span className="text-xs text-muted-foreground/70">※ 1行1タスクとして登録します</span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* スケジュール入力UI */}
-        {category === 'schedule' && (
-          <div className="mb-4 p-4 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800 space-y-3">
-            {/* 終日チェックボックス */}
-            <div className="flex items-center gap-2">
-              <Checkbox 
-                id="all-day"
-                checked={isAllDay}
-                onCheckedChange={(checked) => setIsAllDay(checked as boolean)}
-              />
-              <label htmlFor="all-day" className="text-sm font-medium cursor-pointer">終日</label>
-            </div>
-            
-            {/* 開始日時 */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm text-muted-foreground w-12 flex-shrink-0">開始:</span>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8 px-3 text-sm">
-                    {formatScheduleDateDisplay(startDate)}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={startDate}
-                    onSelect={(date) => {
-                      setStartDate(date);
-                      // 開始日を変更したら終了日も連動
-                      if (date) {
-                        const [hours] = startTime.split(':').map(Number);
-                        if (hours + 1 >= 24) {
-                          const nextDay = new Date(date);
-                          nextDay.setDate(nextDay.getDate() + 1);
-                          setEndDate(nextDay);
-                        } else {
-                          setEndDate(date);
-                        }
-                      }
-                    }}
-                    initialFocus
-                    className="pointer-events-auto"
-                  />
-                </PopoverContent>
-              </Popover>
-              {!isAllDay && (
-                <Input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => {
-                    const newStartTime = e.target.value;
-                    setStartTime(newStartTime);
-                    // 終了時刻を開始時刻の1時間後に自動設定
-                    const [hours, minutes] = newStartTime.split(':').map(Number);
-                    const endHours = (hours + 1) % 24;
-                    const newEndTime = `${String(endHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-                    setEndTime(newEndTime);
-                    // 終了日も設定（常に更新：24時を超えた場合は翌日）
-                    if (startDate) {
-                      if (hours + 1 >= 24) {
-                        const nextDay = new Date(startDate);
-                        nextDay.setDate(nextDay.getDate() + 1);
-                        setEndDate(nextDay);
-                      } else {
-                        setEndDate(new Date(startDate));
-                      }
-                    }
-                  }}
-                  className="h-8 w-28 text-sm"
-                />
-              )}
-            </div>
-            
-            {/* 終了日時 */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm text-muted-foreground w-12 flex-shrink-0">終了:</span>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8 px-3 text-sm">
-                    {formatScheduleDateDisplay(endDate)}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={endDate}
-                    onSelect={setEndDate}
-                    initialFocus
-                    className="pointer-events-auto"
-                  />
-                </PopoverContent>
-              </Popover>
-              {!isAllDay && (
-                <Input
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="h-8 w-28 text-sm"
-                />
-              )}
-              {endDate && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2 text-sm text-muted-foreground"
-                  onClick={() => setEndDate(undefined)}
+          {previewUrls.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {previewUrls.map((url, i) => (
+                <div
+                  key={url}
+                  className="group relative h-20 w-20 animate-thumbnail-enter"
+                  style={{ animationDelay: `${i * 50}ms` }}
                 >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              )}
+                  <img
+                    src={url}
+                    alt=""
+                    className="h-full w-full rounded-md border border-border object-cover shadow-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(i)}
+                    className="absolute -right-2 -top-2 rounded-full bg-destructive p-0.5 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
             </div>
-          </div>
-        )}
+          )}
 
-      
-      <textarea
-        ref={textareaRef}
-        value={content}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        onPaste={handlePaste}
-        onCompositionStart={handleCompositionStart}
-        onCompositionEnd={handleCompositionEnd}
-        placeholder={category === 'schedule' ? 'スケジュールのメモ（任意）' : '今、思い出したことを書く…'}
-        disabled={disabled || isSubmitting}
-        className="input-flow w-full min-h-[120px] text-lg leading-relaxed"
-        rows={4}
-      />
-
-{/* 画像プレビュー */}
-      {previewUrls.length > 0 && (
-        <div className="flex gap-2 mt-4 flex-wrap">
-          {previewUrls.map((url, i) => (
-            <div 
-              key={url} 
-              className="relative w-20 h-20 group animate-thumbnail-enter"
-              style={{ animationDelay: `${i * 50}ms` }}
-            >
-              <img 
-                src={url} 
-                alt="" 
-                className="w-full h-full object-cover rounded-md border border-border shadow-sm"
+          <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleImageSelect}
+                disabled={selectedImages.length >= maxImages || isSubmitting}
               />
               <button
                 type="button"
-                onClick={() => removeImage(i)}
-                className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                disabled={selectedImages.length >= maxImages || isSubmitting}
+                onClick={() => fileInputRef.current?.click()}
+                className={`rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
               >
-                <X className="h-3 w-3" />
+                <ImagePlus className="h-4 w-4" />
               </button>
-            </div>
-          ))}
-        </div>
-      )}
 
-      <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
-        <div className="flex items-center gap-2">
-          {/* 画像選択ボタン */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={handleImageSelect}
-            disabled={selectedImages.length >= maxImages || isSubmitting}
-          />
-          <button 
-            type="button"
-            disabled={selectedImages.length >= maxImages || isSubmitting}
-            onClick={() => fileInputRef.current?.click()}
-            className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
-          >
-            <ImagePlus className="h-4 w-4" />
-          </button>
-          
-          {/* カメラ撮影ボタン */}
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handleCameraCapture}
-            disabled={selectedImages.length >= maxImages || isSubmitting}
-          />
-          <button 
-            type="button"
-            disabled={selectedImages.length >= maxImages || isSubmitting}
-            onClick={() => cameraInputRef.current?.click()}
-            className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
-          >
-            <Camera className="h-4 w-4" />
-          </button>
-          
-          {/* タグドロップダウン */}
-          <TagDropdown 
-            value={tag} 
-            onChange={handleTagChange} 
-            customTags={customTags}
-            onCreateTag={createCustomTag}
-          />
-          
-          {selectedImages.length > 0 && (
-            <p className="text-sm text-muted-foreground">
-              画像{selectedImages.length}/{maxImages}
-            </p>
-          )}
-        </div>
-        <div className="flex flex-col items-center">
-          <div className="flex items-center gap-2">
-            {isSubmitting && (
-              <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            )}
-            
-            {/* 常に表示: メインボタン */}
-            <Button 
-              size="sm"
-              onClick={() => handleSubmitWithMode('toSelectedDate')}
-              disabled={!canSubmit}
-              className={`${currentConfig.buttonColor} disabled:opacity-50`}
-            >
-              <Send className="h-4 w-4 mr-1" />
-              {isToday ? '保存' : 'この日に追加'}
-            </Button>
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleCameraCapture}
+                disabled={selectedImages.length >= maxImages || isSubmitting}
+              />
+              <button
+                type="button"
+                disabled={selectedImages.length >= maxImages || isSubmitting}
+                onClick={() => cameraInputRef.current?.click()}
+                className={`rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
+              >
+                <Camera className="h-4 w-4" />
+              </button>
+
+              {selectedImages.length > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  画像{selectedImages.length}/{maxImages}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {isSubmitting && (
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              )}
+              <Button
+                size="sm"
+                onClick={handleOpenReview}
+                disabled={!canContinue}
+                className="bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50"
+              >
+                <ArrowRight className="mr-1 h-4 w-4" />
+                次へ
+              </Button>
+            </div>
           </div>
         </div>
       </div>
-      </div>
-    </div>
+
+      <Sheet open={isReviewOpen} onOpenChange={setIsReviewOpen}>
+        <SheetContent side="bottom" className="max-h-[92vh] overflow-y-auto rounded-t-3xl px-5 pb-8 pt-8 sm:px-6">
+          <div className="animate-review-enter space-y-5">
+            <section className="animate-fade-up space-y-3">
+              <div className="hidden text-xs text-muted-foreground md:block">矢印キーで移動 / Cmd+Enterで保存</div>
+              <div className="grid grid-cols-5 gap-2">
+                {CATEGORIES.map((cat) => {
+                  const config = CATEGORY_CONFIG[cat];
+                  const Icon = config.icon;
+                  const isSelected = category === cat;
+
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => handleCategoryChange(cat)}
+                      onAnimationEnd={() => {
+                        if (animatingCategory === cat) {
+                          setAnimatingCategory(null);
+                        }
+                      }}
+                      className={`flex aspect-square min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border p-2 text-center transition-all active:scale-[0.97] ${
+                        isSelected
+                          ? `${config.bgColor} ${config.color} ${config.borderColor} shadow-sm`
+                          : 'border-border bg-card text-foreground hover:border-foreground/20 hover:bg-muted/20'
+                      } ${animatingCategory === cat ? 'animate-selection-pop' : ''}`}
+                    >
+                      <Icon className="h-4.5 w-4.5 shrink-0 sm:h-5 sm:w-5 md:h-5.5 md:w-5.5" />
+                      <span className="break-keep text-[9px] font-semibold leading-tight tracking-tight sm:text-[10px] md:text-[11px]">
+                        {config.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            {allTagIds.length > 0 && (
+              <section className="animate-fade-up space-y-2" style={{ animationDelay: '40ms' }}>
+                <TagChipSelector
+                  value={tag}
+                  onChange={handleTagChange}
+                  customTags={customTags}
+                  visibleTagIds={visibleTopTagIds}
+                  showCreateButton={false}
+                />
+                {showAllTags && (
+                  <div className="space-y-2">
+                    <TagChipSelector
+                      value={tag}
+                      onChange={handleTagChange}
+                      customTags={customTags}
+                      onCreateTag={createCustomTag}
+                      visibleTagIds={remainingTagIds}
+                      showUnselected={false}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAllTags(false);
+                        triggerLightHaptic();
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <ChevronUp className="h-3.5 w-3.5" />
+                      閉じる
+                    </button>
+                  </div>
+                )}
+                {!showAllTags && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAllTags(true);
+                      triggerLightHaptic();
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" />
+                    その他のタグ
+                  </button>
+                )}
+              </section>
+            )}
+
+            {category === 'task' && (
+              <section className="animate-fade-up space-y-3 rounded-2xl border border-orange-200 bg-orange-50/80 p-4 dark:border-orange-900/40 dark:bg-orange-950/20" style={{ animationDelay: '80ms' }}>
+                <h3 className="text-sm font-medium text-foreground">タスク設定</h3>
+                <PrioritySelector
+                  value={priority}
+                  onChange={setPriority}
+                  disabled={disabled || isSubmitting}
+                />
+                <div className="flex items-center gap-2 pt-1">
+                  <Switch
+                    id="batch-mode"
+                    checked={batchMode && selectedImages.length === 0}
+                    onCheckedChange={(checked) => {
+                      setBatchMode(checked);
+                      sessionStorage.setItem('flowlog_batch_mode', String(checked));
+                      triggerLightHaptic();
+                    }}
+                    disabled={disabled || isSubmitting || selectedImages.length > 0}
+                  />
+                  <label
+                    htmlFor="batch-mode"
+                    className={`text-sm ${selectedImages.length > 0 ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}
+                  >
+                    一括登録
+                  </label>
+                  {batchMode && selectedImages.length === 0 && (
+                    <span className="text-xs text-muted-foreground/70">1行ごとにタスク化します</span>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {category === 'schedule' && (
+              <section className="animate-fade-up space-y-3 rounded-2xl border border-cyan-200 bg-cyan-50/80 p-4 dark:border-cyan-900/40 dark:bg-cyan-950/20" style={{ animationDelay: '80ms' }}>
+                <h3 className="text-sm font-medium text-foreground">予定の詳細</h3>
+
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="all-day"
+                    checked={isAllDay}
+                    onCheckedChange={(checked) => setIsAllDay(checked as boolean)}
+                  />
+                  <label htmlFor="all-day" className="cursor-pointer text-sm font-medium">
+                    終日
+                  </label>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="w-12 flex-shrink-0 text-sm text-muted-foreground">開始</span>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-9 px-3 text-sm">
+                          {formatScheduleDateDisplay(startDate)}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={startDate}
+                          onSelect={(date) => {
+                            setStartDate(date);
+                            if (date) {
+                              const [hours] = startTime.split(':').map(Number);
+                              if (hours + 1 >= 24) {
+                                const nextDay = new Date(date);
+                                nextDay.setDate(nextDay.getDate() + 1);
+                                setEndDate(nextDay);
+                              } else {
+                                setEndDate(date);
+                              }
+                            }
+                          }}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {!isAllDay && (
+                      <Input
+                        type="time"
+                        value={startTime}
+                        onChange={(e) => {
+                          const newStartTime = e.target.value;
+                          setStartTime(newStartTime);
+                          const [hours, minutes] = newStartTime.split(':').map(Number);
+                          const endHours = (hours + 1) % 24;
+                          setEndTime(`${String(endHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`);
+                          if (startDate) {
+                            if (hours + 1 >= 24) {
+                              const nextDay = new Date(startDate);
+                              nextDay.setDate(nextDay.getDate() + 1);
+                              setEndDate(nextDay);
+                            } else {
+                              setEndDate(new Date(startDate));
+                            }
+                          }
+                        }}
+                        className="h-9 w-28 text-sm"
+                      />
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="w-12 flex-shrink-0 text-sm text-muted-foreground">終了</span>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-9 px-3 text-sm">
+                          {formatScheduleDateDisplay(endDate)}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={endDate}
+                          onSelect={setEndDate}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {!isAllDay && (
+                      <Input
+                        type="time"
+                        value={endTime}
+                        onChange={(e) => setEndTime(e.target.value)}
+                        className="h-9 w-28 text-sm"
+                      />
+                    )}
+                    {endDate && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 px-2 text-sm text-muted-foreground"
+                        onClick={() => setEndDate(undefined)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            <div className="animate-fade-up sticky bottom-0 flex gap-3 border-t border-border bg-background/95 pb-1 pt-4 backdrop-blur" style={{ animationDelay: '120ms' }}>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                onClick={() => setIsReviewOpen(false)}
+                className="flex-1"
+                disabled={isSubmitting}
+              >
+                <ArrowLeft className="mr-1 h-4 w-4" />
+                戻る
+              </Button>
+              <Button
+                type="button"
+                size="lg"
+                onClick={() => {
+                  triggerLightHaptic();
+                  handleSubmitWithMode('toSelectedDate');
+                }}
+                disabled={!canSave}
+                className={`flex-1 active:scale-[0.98] ${currentConfig.buttonColor} disabled:opacity-50`}
+              >
+                {isSubmitting ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-1 h-4 w-4" />
+                )}
+                {isToday ? `${currentConfig.label}として保存` : `${currentConfig.label}として追加`}
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
