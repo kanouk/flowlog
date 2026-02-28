@@ -69,6 +69,25 @@ function validateRedirectUri(redirectUri: string): string | null {
   return null;
 }
 
+function getRequestLogContext(req: Request, url: URL) {
+  return {
+    method: req.method,
+    path: url.pathname,
+    userAgent: req.headers.get("user-agent") || "unknown",
+    hasAuthorization: req.headers.has("authorization"),
+    hasSessionId: req.headers.has("mcp-session-id"),
+    contentType: req.headers.get("content-type") || "",
+  };
+}
+
+function logRequest(stage: string, req: Request, url: URL, extra: Record<string, unknown> = {}) {
+  console.log(JSON.stringify({
+    stage,
+    ...getRequestLogContext(req, url),
+    ...extra,
+  }));
+}
+
 // ユーザー認証（APIトークンから）
 async function authenticateUser(authHeader: string | undefined): Promise<string | null> {
   if (!authHeader?.startsWith("Bearer ")) {
@@ -1145,9 +1164,12 @@ Deno.serve(async (req) => {
   const normalizedPath = path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
   const hasAuthorizationServerWellKnown = normalizedPath.includes("/.well-known/oauth-authorization-server");
   const hasProtectedResourceWellKnown = normalizedPath.includes("/.well-known/oauth-protected-resource");
+
+  logRequest("incoming_request", req, url);
   
   // CORS preflight
   if (req.method === "OPTIONS") {
+    logRequest("cors_preflight", req, url);
     return new Response(null, { headers: corsHeaders });
   }
   
@@ -1158,6 +1180,7 @@ Deno.serve(async (req) => {
     (normalizedPath.endsWith("/.well-known/oauth-authorization-server") || hasAuthorizationServerWellKnown) &&
     req.method === "GET"
   ) {
+    logRequest("oauth_authorization_server_metadata", req, url);
     return new Response(JSON.stringify(getOAuthMetadata()), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -1168,6 +1191,7 @@ Deno.serve(async (req) => {
     (normalizedPath.endsWith("/.well-known/oauth-protected-resource") || hasProtectedResourceWellKnown) &&
     req.method === "GET"
   ) {
+    logRequest("oauth_protected_resource_metadata", req, url);
     return new Response(JSON.stringify(getProtectedResourceMetadata()), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -1175,21 +1199,28 @@ Deno.serve(async (req) => {
   
   // 動的クライアント登録
   if (normalizedPath.endsWith("/oauth/register") && req.method === "POST") {
+    logRequest("oauth_register", req, url);
     return await handleClientRegistration(req);
   }
   
   // 認可エンドポイント
   if (normalizedPath.endsWith("/oauth/authorize") && req.method === "GET") {
+    logRequest("oauth_authorize", req, url, {
+      hasClientId: url.searchParams.has("client_id"),
+      hasRedirectUri: url.searchParams.has("redirect_uri"),
+    });
     return handleAuthorize(url);
   }
   
   // トークンエンドポイント
   if (normalizedPath.endsWith("/oauth/token") && req.method === "POST") {
+    logRequest("oauth_token", req, url);
     return await handleToken(req);
   }
   
   // 認可コード作成API（フロントエンドから呼ばれる）
   if (normalizedPath.endsWith("/oauth/create-code") && req.method === "POST") {
+    logRequest("oauth_create_code", req, url);
     return await handleCreateAuthorizationCode(req);
   }
   
@@ -1197,6 +1228,7 @@ Deno.serve(async (req) => {
   
   // Health check
   if (normalizedPath.endsWith("/health")) {
+    logRequest("health_check", req, url);
     return new Response(JSON.stringify({ status: "ok", version: "1.0.0" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -1204,10 +1236,12 @@ Deno.serve(async (req) => {
   
   // MCP endpoint
   if (normalizedPath.endsWith("/mcp") || normalizedPath.includes("/mcp/")) {
+    logRequest("mcp_entry", req, url);
     const authHeader = req.headers.get("Authorization");
     const userId = await authenticateUser(authHeader ?? undefined);
     
     if (!userId) {
+      logRequest("mcp_unauthorized", req, url);
       // RFC 9728準拠: resource_metadataパラメータで認証方式を通知
       const resourceMetadataUrl = `${supabaseUrl}/functions/v1/mcp-server/.well-known/oauth-protected-resource`;
       return new Response(JSON.stringify({ 
@@ -1231,6 +1265,8 @@ Deno.serve(async (req) => {
     if (req.method === "POST") {
       try {
         const body = await req.json();
+        const request = body as { method?: string };
+        logRequest("mcp_post", req, url, { rpcMethod: request.method || "unknown" });
         const ctx: McpRequestContext = {
           userId,
           sessionId: incomingSessionId,
@@ -1253,7 +1289,12 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify(result.response), {
           headers: responseHeaders,
         });
-      } catch {
+      } catch (error) {
+        console.error(JSON.stringify({
+          stage: "mcp_parse_error",
+          ...getRequestLogContext(req, url),
+          error: error instanceof Error ? error.message : "unknown",
+        }));
         return new Response(JSON.stringify({
           jsonrpc: "2.0",
           error: { code: -32700, message: "Parse error" },
@@ -1266,17 +1307,20 @@ Deno.serve(async (req) => {
     
     // DELETE: セッション終了 (MCP 2025-03-26)
     if (req.method === "DELETE") {
+      logRequest("mcp_delete", req, url);
       return new Response(null, { status: 200, headers: corsHeaders });
     }
 
     // GET / その他: 405 Method Not Allowed
     // POST ベースの JSON-RPC のみサポート。GET SSE は不要。
+    logRequest("mcp_method_not_allowed", req, url);
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
       headers: { ...corsHeaders, "Content-Type": "application/json", "Allow": "POST, DELETE" },
     });
   }
   
+  logRequest("not_found", req, url);
   return new Response(JSON.stringify({ error: "Not Found", path }), {
     status: 404,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
