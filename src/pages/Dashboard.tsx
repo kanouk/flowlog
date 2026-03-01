@@ -11,7 +11,7 @@ import { ReadLaterView } from '@/components/stock/ReadLaterView';
 import { SearchBar } from '@/components/search/SearchBar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, Settings, PenLine, BookOpen, ListTodo, CalendarClock, Brain, Bookmark, BarChart3 } from 'lucide-react';
+import { LogOut, Settings, PenLine, BookOpen, ListTodo, CalendarClock, FileText, Bookmark, BarChart3 } from 'lucide-react';
 import { AppSplash } from '@/components/common/AppSplash';
 import { getTodayKey } from '@/lib/dateUtils';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -27,7 +27,7 @@ const TAB_CONFIG: Record<DashboardTab, { label: string; icon: typeof PenLine; ac
   journal: { label: '日記', icon: BookOpen, activeColor: 'text-blue-500', hoverColor: 'hover:text-blue-500' },
   tasks: { label: 'タスク', icon: ListTodo, activeColor: 'text-orange-500', hoverColor: 'hover:text-orange-500' },
   schedule: { label: '予定', icon: CalendarClock, activeColor: 'text-cyan-500', hoverColor: 'hover:text-cyan-500' },
-  memos: { label: 'メモ', icon: Brain, activeColor: 'text-purple-500', hoverColor: 'hover:text-purple-500' },
+  memos: { label: 'メモ', icon: FileText, activeColor: 'text-purple-500', hoverColor: 'hover:text-purple-500' },
   readLater: { label: 'あとで読む', icon: Bookmark, activeColor: 'text-green-500', hoverColor: 'hover:text-green-500' },
 };
 
@@ -289,7 +289,7 @@ export default function Dashboard() {
                     isActive 
                       ? config.activeColor
                       : 'text-muted-foreground active:scale-95'
-                  }`}
+                  } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset`}
                 >
                   {isFlow ? (
                     <span className={`rounded-xl p-1.5 transition-transform duration-200 ${

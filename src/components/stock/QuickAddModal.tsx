@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, KeyboardEvent } from 'react';
-import { ListTodo, CalendarClock, Brain, Bookmark, Loader2, ImagePlus, Camera, X } from 'lucide-react';
+import { ListTodo, CalendarClock, FileText, Bookmark, Loader2, ImagePlus, Camera, X } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,8 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { TagDropdown } from '@/components/flow/TagDropdown';
-import { PrioritySelector, TaskPriority } from '@/components/flow/PrioritySelector';
+import { PrioritySelector } from '@/components/flow/PrioritySelector';
+import type { TaskPriority as TaskPriorityValue } from '@/lib/taskPriority';
 import { useCustomTags } from '@/hooks/useCustomTags';
 import { useEntries, Block } from '@/hooks/useEntries';
 import { useImageUpload } from '@/hooks/useImageUpload';
@@ -56,7 +57,7 @@ const MODAL_CONFIG: Record<QuickAddCategory, { title: string; placeholder: strin
   thought: {
     title: 'メモを追加',
     placeholder: 'メモの内容を入力...',
-    icon: Brain,
+    icon: FileText,
   },
   read_later: {
     title: 'あとで読むを追加',
@@ -72,7 +73,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
   
   const [content, setContent] = useState('');
   const [tag, setTag] = useState<string | null>(null);
-  const [priority, setPriority] = useState<TaskPriority>(0);
+  const [priority, setPriority] = useState<TaskPriorityValue>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
   const [batchMode, setBatchMode] = useState<boolean>(() => {
@@ -410,7 +411,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
                   <button
                     type="button"
                     onClick={() => removeImage(i)}
-                    className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -434,7 +435,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
               type="button"
               disabled={selectedImages.length >= maxImages || isSubmitting}
               onClick={() => fileInputRef.current?.click()}
-              className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
+              className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
             >
               <ImagePlus className="h-4 w-4" />
             </button>
@@ -452,7 +453,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
               type="button"
               disabled={selectedImages.length >= maxImages || isSubmitting}
               onClick={() => cameraInputRef.current?.click()}
-              className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
+              className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
             >
               <Camera className="h-4 w-4" />
             </button>

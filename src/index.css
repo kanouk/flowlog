@@ -37,7 +37,7 @@
 
     --border: 240 20% 90%;
     --input: 240 20% 90%;
-    --ring: 245 58% 58%;
+    --ring: 220 45% 64%;
 
     --radius: 1rem;
 
@@ -60,7 +60,7 @@
     --sidebar-accent: 240 30% 94%;
     --sidebar-accent-foreground: 240 10% 30%;
     --sidebar-border: 240 20% 90%;
-    --sidebar-ring: 245 58% 58%;
+    --sidebar-ring: 220 45% 64%;
   }
 
   .dark {
@@ -90,7 +90,7 @@
 
     --border: 240 15% 20%;
     --input: 240 15% 20%;
-    --ring: 245 60% 68%;
+    --ring: 220 55% 72%;
 
     --flow-gradient-start: 240 15% 10%;
     --flow-gradient-mid: 245 18% 12%;
@@ -109,7 +109,7 @@
     --sidebar-accent: 240 15% 18%;
     --sidebar-accent-foreground: 240 10% 85%;
     --sidebar-border: 240 15% 20%;
-    --sidebar-ring: 245 60% 68%;
+    --sidebar-ring: 220 55% 72%;
   }
 }
 

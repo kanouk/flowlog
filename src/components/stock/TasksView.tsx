@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Loader2, CheckSquare, Plus } from 'lucide-react';
+import { Loader2, CheckSquare, Plus, SlidersHorizontal, X } from 'lucide-react';
 import { icons } from 'lucide-react';
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
@@ -8,13 +8,17 @@ import { formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
 import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { TagFilterDropdown } from './TagFilterDropdown';
+import { PriorityFilterDropdown } from './PriorityFilterDropdown';
 import { BlockEditModal } from '@/components/flow/BlockEditModal';
 import { QuickAddModal } from './QuickAddModal';
 import { PriorityIndicator } from '@/components/flow/PrioritySelector';
+import { PRIORITY_CONFIG, TaskPriority } from '@/lib/taskPriority';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 type TaskFilter = 'all' | 'incomplete';
 type TagFilter = 'all' | BlockTag | string;
+type PriorityFilter = 'all' | TaskPriority;
 
 function kebabToPascal(str: string): string {
   return str
@@ -36,6 +40,7 @@ export function TasksView() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<TaskFilter>('all');
   const [tagFilter, setTagFilter] = useState<TagFilter>('all');
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -61,8 +66,11 @@ export function TasksView() {
     if (tagFilter !== 'all') {
       result = result.filter(b => b.tag === tagFilter);
     }
+    if (priorityFilter !== 'all') {
+      result = result.filter(b => (b.priority || 0) === priorityFilter);
+    }
     return result;
-  }, [blocks, filter, tagFilter]);
+  }, [blocks, filter, priorityFilter, tagFilter]);
 
   const handleTaskToggle = async (block: Block) => {
     const newIsDone = !block.is_done;
@@ -104,6 +112,16 @@ export function TasksView() {
   const handleTagChange = (value: string | null) => {
     setTagFilter(value || 'all');
   };
+
+  const activeTagLabel = useMemo(() => {
+    if (tagFilter === 'all') return null;
+    if (TAGS.includes(tagFilter as BlockTag)) {
+      return TAG_CONFIG[tagFilter as BlockTag].label;
+    }
+    return customTags.find((tag) => tag.id === tagFilter)?.name ?? null;
+  }, [customTags, tagFilter]);
+
+  const hasActiveFilters = filter !== 'all' || tagFilter !== 'all' || priorityFilter !== 'all';
 
   // 編集保存ハンドラー
   const handleEditSave = async (updates: BlockUpdatePayload & { images?: string[] }) => {
@@ -211,33 +229,103 @@ export function TasksView() {
         </div>
         
         {/* Filters */}
-        <div className="mt-4 space-y-3">
-          {/* Status Filter */}
-          <div className="flex gap-2">
-            <Button
-              variant={filter === 'all' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFilter('all')}
-              className={`flex-1 sm:flex-none ${filter === 'all' ? 'bg-orange-500 hover:bg-orange-600' : ''}`}
-            >
-              すべて
-            </Button>
-            <Button
-              variant={filter === 'incomplete' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFilter('incomplete')}
-              className={`flex-1 sm:flex-none ${filter === 'incomplete' ? 'bg-orange-500 hover:bg-orange-600' : ''}`}
-            >
-              未完了のみ
-            </Button>
+        <div className="mt-4 rounded-2xl border border-border/70 bg-muted/20 p-3 sm:p-4">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            フィルタ
           </div>
-          
-          {/* Tag Filter Dropdown */}
-          <TagFilterDropdown
-            value={tagFilter === 'all' ? null : tagFilter}
-            onChange={handleTagChange}
-            customTags={customTags}
-          />
+
+          <div className="mt-3 flex flex-col gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <span className="w-10 text-xs font-medium text-muted-foreground">状態</span>
+                <div className="inline-flex rounded-full border border-border bg-background p-1">
+                  <button
+                    type="button"
+                    onClick={() => setFilter('all')}
+                    className={cn(
+                      'rounded-full px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                      filter === 'all'
+                        ? 'bg-orange-500 text-white shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    すべて
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilter('incomplete')}
+                    className={cn(
+                      'rounded-full px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                      filter === 'incomplete'
+                        ? 'bg-orange-500 text-white shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    未完了
+                  </button>
+                </div>
+              </div>
+
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilter('all');
+                    setTagFilter('all');
+                    setPriorityFilter('all');
+                  }}
+                  className="inline-flex items-center gap-1 self-start text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  フィルタをクリア
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="w-10 text-xs font-medium text-muted-foreground">タグ</span>
+                <TagFilterDropdown
+                  value={tagFilter === 'all' ? null : tagFilter}
+                  onChange={handleTagChange}
+                  customTags={customTags}
+                  className="h-9 rounded-full px-3"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-10 text-xs font-medium text-muted-foreground">優先</span>
+                <PriorityFilterDropdown
+                  value={priorityFilter}
+                  onChange={setPriorityFilter}
+                />
+              </div>
+            </div>
+
+            {hasActiveFilters && (
+              <div className="flex flex-wrap gap-2">
+                {filter === 'incomplete' && (
+                  <span className="inline-flex items-center rounded-full bg-orange-500/10 px-3 py-1 text-xs font-medium text-orange-600">
+                    状態: 未完了
+                  </span>
+                )}
+                {activeTagLabel && (
+                  <span className="inline-flex items-center rounded-full bg-secondary px-3 py-1 text-xs font-medium text-foreground">
+                    タグ: {activeTagLabel}
+                  </span>
+                )}
+                {priorityFilter !== 'all' && (
+                  <span className={cn(
+                    'inline-flex items-center rounded-full px-3 py-1 text-xs font-medium',
+                    PRIORITY_CONFIG[priorityFilter].bgColor,
+                    PRIORITY_CONFIG[priorityFilter].color
+                  )}>
+                    優先: {PRIORITY_CONFIG[priorityFilter].label}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -248,7 +336,9 @@ export function TasksView() {
             <CheckSquare className="w-8 h-8 text-orange-500" />
           </div>
           <p className="text-muted-foreground">
-            {filter === 'incomplete' ? '未完了のタスクはありません' : 'タスクがありません'}
+            {filter === 'incomplete' || tagFilter !== 'all' || priorityFilter !== 'all'
+              ? '該当するタスクはありません'
+              : 'タスクがありません'}
           </p>
           <p className="text-sm text-muted-foreground/70 mt-1">
             Flowでタスクを追加すると、ここに表示されます

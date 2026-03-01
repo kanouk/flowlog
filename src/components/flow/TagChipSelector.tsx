@@ -5,6 +5,7 @@ import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { CustomTag, TAG_COLORS, CreateCustomTagInput } from '@/hooks/useCustomTags';
 import { TagEditModal } from '@/components/settings/TagEditModal';
 import { cn } from '@/lib/utils';
+import { SelectableControl } from '@/components/ui/selectable-control';
 
 interface TagChipSelectorProps {
   value: string | null;
@@ -76,18 +77,21 @@ export function TagChipSelector({
     <>
       <div className="flex flex-wrap gap-2">
         {showUnselected && (
-          <button
+          <SelectableControl
             type="button"
             onClick={() => onChange(null)}
+            appearance="pill"
+            size="pill"
+            selected={value === null}
             className={cn(
-              'inline-flex min-h-9 items-center rounded-full border px-3 text-[10px] font-medium transition-colors sm:text-[11px]',
+              'min-h-9 text-[10px] font-medium sm:text-[11px]',
               value === null
                 ? 'border-foreground bg-foreground text-background'
                 : 'border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground'
             )}
           >
             未選択
-          </button>
+          </SelectableControl>
         )}
 
         {filteredBaseTags.map((tagId) => {
@@ -96,12 +100,14 @@ export function TagChipSelector({
           const isSelected = isBaseTag(value) && value === tagId;
 
           return (
-            <button
+            <SelectableControl
               key={tagId}
-              type="button"
               onClick={() => handleTagToggle(tagId)}
+              appearance="pill"
+              size="pill"
+              selected={isSelected}
               className={cn(
-                'inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-[10px] font-medium transition-all sm:text-[11px]',
+                'min-h-9 text-[10px] font-medium sm:text-[11px]',
                 isSelected
                   ? `${config.bgColor} ${config.color} border-current`
                   : 'border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground'
@@ -109,7 +115,7 @@ export function TagChipSelector({
             >
               <Icon className="h-4 w-4" />
               {config.label}
-            </button>
+            </SelectableControl>
           );
         })}
 
@@ -119,12 +125,14 @@ export function TagChipSelector({
           const isSelected = value === tag.id;
 
           return (
-            <button
+            <SelectableControl
               key={tag.id}
-              type="button"
               onClick={() => handleTagToggle(tag.id)}
+              appearance="pill"
+              size="pill"
+              selected={isSelected}
               className={cn(
-                'inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-[10px] font-medium transition-all sm:text-[11px]',
+                'min-h-9 text-[10px] font-medium sm:text-[11px]',
                 isSelected
                   ? `${colorConfig.bg} ${colorConfig.text} border-current`
                   : 'border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground'
@@ -132,19 +140,21 @@ export function TagChipSelector({
             >
               {IconComponent && <IconComponent className={cn('h-4 w-4', isSelected ? colorConfig.text : '')} />}
               {tag.name}
-            </button>
+            </SelectableControl>
           );
         })}
 
         {onCreateTag && showCreateButton && (
-          <button
+          <SelectableControl
             type="button"
             onClick={() => setCreateModalOpen(true)}
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-dashed border-border px-3 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary sm:text-[11px]"
+            appearance="pill"
+            size="pill"
+            className="min-h-9 border-dashed text-[10px] font-medium text-muted-foreground hover:border-primary hover:text-primary sm:text-[11px]"
           >
             <Plus className="h-4 w-4" />
             新しいタグ
-          </button>
+          </SelectableControl>
         )}
       </div>
 

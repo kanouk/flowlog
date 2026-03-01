@@ -10,14 +10,16 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
+import { SelectableControl } from '@/components/ui/selectable-control';
 import { AddBlockMode } from '@/hooks/useEntries';
 import { useAuth } from '@/hooks/useAuth';
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { useImageAttachments } from '@/hooks/useImageAttachments';
 import { useCustomTags } from '@/hooks/useCustomTags';
 import { toast } from 'sonner';
-import { PrioritySelector, TaskPriority } from './PrioritySelector';
+import { PrioritySelector } from './PrioritySelector';
 import { TagChipSelector } from './TagChipSelector';
+import type { TaskPriority as TaskPriorityValue } from '@/lib/taskPriority';
 import {
   BlockCategory,
   CATEGORIES,
@@ -71,7 +73,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [category, setCategory] = useState<BlockCategory>('event');
   const [tag, setTag] = useState<string | null>(null);
-  const [priority, setPriority] = useState<TaskPriority>(0);
+  const [priority, setPriority] = useState<TaskPriorityValue>(0);
   const [showAllTags, setShowAllTags] = useState(false);
   const [topTagIds, setTopTagIds] = useState<string[]>([]);
   const [animatingCategory, setAnimatingCategory] = useState<BlockCategory | null>(null);
@@ -462,7 +464,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                   <button
                     type="button"
                     onClick={() => removeImage(i)}
-                    className="absolute -right-2 -top-2 rounded-full bg-destructive p-0.5 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                    className="absolute -right-2 -top-2 rounded-full bg-destructive p-0.5 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -486,7 +488,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                 type="button"
                 disabled={selectedImages.length >= maxImages || isSubmitting}
                 onClick={() => fileInputRef.current?.click()}
-                className={`rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
+                className={`rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
               >
                 <ImagePlus className="h-4 w-4" />
               </button>
@@ -504,7 +506,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                 type="button"
                 disabled={selectedImages.length >= maxImages || isSubmitting}
                 onClick={() => cameraInputRef.current?.click()}
-                className={`rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
+                className={`rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${selectedImages.length >= maxImages ? 'opacity-50' : ''}`}
               >
                 <Camera className="h-4 w-4" />
               </button>
@@ -553,16 +555,18 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                   const isSelected = category === cat;
 
                   return (
-                    <button
+                    <SelectableControl
                       key={cat}
-                      type="button"
                       onClick={() => handleCategoryChange(cat)}
                       onAnimationEnd={() => {
                         if (animatingCategory === cat) {
                           setAnimatingCategory(null);
                         }
                       }}
-                      className={`flex aspect-square min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border p-2 text-center transition-all active:scale-[0.97] ${
+                      appearance="card"
+                      size="card"
+                      selected={isSelected}
+                      className={`aspect-square min-w-0 flex-col focus-visible:ring-0 focus-visible:ring-offset-0 ${
                         isSelected
                           ? `${config.bgColor} ${config.color} ${config.borderColor} shadow-sm`
                           : 'border-border bg-card text-foreground hover:border-foreground/20 hover:bg-muted/20'
@@ -572,7 +576,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                       <span className="break-keep text-[9px] font-semibold leading-tight tracking-tight sm:text-[10px] md:text-xs">
                         {config.label}
                       </span>
-                    </button>
+                    </SelectableControl>
                   );
                 })}
               </div>

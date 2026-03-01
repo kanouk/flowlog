@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { useCustomTags } from '@/hooks/useCustomTags';
 import { Button } from '@/components/ui/button';
+import { SelectableControl } from '@/components/ui/selectable-control';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -24,10 +25,12 @@ import { TagDropdown } from './TagDropdown';
 import { toast } from 'sonner';
 import { 
   BlockCategory, 
+  BlockTag,
   CATEGORIES, 
   CATEGORY_CONFIG, 
 } from '@/lib/categoryUtils';
-import { PrioritySelector, TaskPriority } from './PrioritySelector';
+import { PrioritySelector } from './PrioritySelector';
+import type { TaskPriority as TaskPriorityValue } from '@/lib/taskPriority';
 import { 
   formatTimeJST, 
   getOccurredAtDayKey, 
@@ -93,7 +96,7 @@ export function BlockEditModal({
   // Category & Tag & Priority
   const [category, setCategory] = useState<BlockCategory>(block.category);
   const [tag, setTag] = useState<string | null>(block.tag);
-  const [priority, setPriority] = useState<TaskPriority>((block.priority || 0) as TaskPriority);
+  const [priority, setPriority] = useState<TaskPriorityValue>((block.priority || 0) as TaskPriorityValue);
   
   // Images
   const [existingImages, setExistingImages] = useState<string[]>(block.images || []);
@@ -138,7 +141,7 @@ export function BlockEditModal({
       setContent(block.content || '');
       setCategory(block.category);
       setTag(block.tag);
-      setPriority((block.priority || 0) as TaskPriority);
+      setPriority((block.priority || 0) as TaskPriorityValue);
       setExistingImages(block.images || []);
       setNewImages([]);
       setNewImagePreviews([]);
@@ -349,7 +352,7 @@ export function BlockEditModal({
         updates.category = category;
       }
       if (tag !== block.tag) {
-        updates.tag = tag as any;
+        updates.tag = tag as BlockTag | null;
       }
       if (newOccurredAt !== block.occurred_at) {
         updates.occurred_at = newOccurredAt;
@@ -425,11 +428,13 @@ export function BlockEditModal({
               const isSelected = category === cat;
               
               return (
-                <button
+                <SelectableControl
                   key={cat}
-                  type="button"
                   onClick={() => setCategory(cat)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  appearance="pill"
+                  size="pill"
+                  selected={isSelected}
+                  className={`text-sm font-medium ${
                     isSelected 
                       ? `${config.bgColor} ${config.color} ring-2 ring-offset-1 ring-current`
                       : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -437,7 +442,7 @@ export function BlockEditModal({
                 >
                   <Icon className="h-3.5 w-3.5" />
                   {config.label}
-                </button>
+                </SelectableControl>
               );
             })}
           </div>
@@ -506,7 +511,7 @@ export function BlockEditModal({
                   type="button"
                   disabled={totalImages >= maxImages}
                   onClick={() => fileInputRef.current?.click()}
-                  className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ${totalImages >= maxImages ? 'opacity-50' : ''}`}
+                  className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${totalImages >= maxImages ? 'opacity-50' : ''}`}
                 >
                   <ImagePlus className="h-4 w-4" />
                 </button>
@@ -523,7 +528,7 @@ export function BlockEditModal({
                   type="button"
                   disabled={totalImages >= maxImages}
                   onClick={() => cameraInputRef.current?.click()}
-                  className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ${totalImages >= maxImages ? 'opacity-50' : ''}`}
+                  className={`p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${totalImages >= maxImages ? 'opacity-50' : ''}`}
                 >
                   <Camera className="h-4 w-4" />
                 </button>
@@ -543,7 +548,7 @@ export function BlockEditModal({
                     <button
                       type="button"
                       onClick={() => removeExistingImage(i)}
-                      className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -560,7 +565,7 @@ export function BlockEditModal({
                     <button
                       type="button"
                       onClick={() => removeNewImage(i)}
-                      className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       <X className="h-3 w-3" />
                     </button>

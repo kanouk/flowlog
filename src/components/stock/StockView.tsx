@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { BookOpen, ListTodo, Bookmark, Brain, CalendarClock } from 'lucide-react';
+import { BookOpen, ListTodo, Bookmark, FileText, CalendarClock } from 'lucide-react';
 import { Entry } from '@/hooks/useEntries';
 import { JournalView } from './JournalView';
 import { TasksView } from './TasksView';
@@ -89,7 +89,7 @@ export function StockView({ entries, selectedDate, onDateSelect }: StockViewProp
 
   const tabClass = (tab: StockSubTab) => {
     const colors = TAB_COLORS[tab];
-    return `flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+    return `flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
       subTab === tab 
         ? colors.active
         : `text-muted-foreground ${colors.hover}`
@@ -119,7 +119,7 @@ export function StockView({ entries, selectedDate, onDateSelect }: StockViewProp
           <span className="hidden sm:inline">予定</span>
         </button>
         <button onClick={() => switchTab('memos')} className={tabClass('memos')}>
-          <Brain className="h-4 w-4 flex-shrink-0" />
+          <FileText className="h-4 w-4 flex-shrink-0" />
           <span className="hidden sm:inline">メモ</span>
         </button>
         <button onClick={() => switchTab('readLater')} className={tabClass('readLater')}>

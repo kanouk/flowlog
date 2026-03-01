@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, PenLine, Sparkles, Layers, History, CalendarDays, Brain, CheckSquare, Bookmark } from 'lucide-react';
+import { ArrowRight, PenLine, Sparkles, Layers, History, CalendarDays, FileText, CheckSquare, Bookmark } from 'lucide-react';
 import { AppSplash } from '@/components/common/AppSplash';
 import logoImage from '@/assets/logo.png';
 
@@ -29,7 +29,7 @@ const Index = () => {
       bgColor: 'bg-blue-100 dark:bg-blue-900/30',
     },
     {
-      icon: Brain,
+      icon: FileText,
       label: 'メモ',
       description: 'ふと思いついたこと',
       color: 'text-purple-600 dark:text-purple-400',

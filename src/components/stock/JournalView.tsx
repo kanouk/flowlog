@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { Loader2, BookOpen, CalendarDays, ArrowLeft, Trophy, Sunrise, Sun, Sunset, Moon, Sparkles, Copy, Check, Camera, Brain } from 'lucide-react';
+import { Loader2, BookOpen, CalendarDays, ArrowLeft, Trophy, Sunrise, Sun, Sunset, Moon, Sparkles, Copy, Check, Camera, FileText } from 'lucide-react';
 import { useEntries, Entry, Block } from '@/hooks/useEntries';
 import { getTodayKey } from '@/lib/dateUtils';
 import { DateSelector } from '@/components/flow/DateSelector';
@@ -213,7 +213,7 @@ export function JournalView({ entries, selectedDate, onDateSelect, blocks: exter
       case '昼': return <Sun className="h-5 w-5 text-yellow-500" />;
       case '夕方': return <Sunset className="h-5 w-5 text-orange-500" />;
       case '夜': return <Moon className="h-5 w-5 text-indigo-400" />;
-      case '思ったこと': return <Brain className="h-5 w-5 text-purple-500" />;
+      case '思ったこと': return <FileText className="h-5 w-5 text-purple-500" />;
       case '今日の3行まとめ': return <Sparkles className="h-5 w-5 text-blue-500" />;
       default: return null;
     }

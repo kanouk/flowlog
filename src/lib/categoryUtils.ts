@@ -1,4 +1,4 @@
-import { CalendarDays, Brain, CheckSquare, Bookmark, Briefcase, Users, User, CalendarClock, LucideIcon } from 'lucide-react';
+import { CalendarDays, FileText, CheckSquare, Bookmark, Briefcase, Users, User, CalendarClock, LucideIcon } from 'lucide-react';
 
 export type BlockCategory = 'event' | 'thought' | 'task' | 'read_later' | 'schedule';
 export type BlockTag = 'work' | 'family' | 'private';
@@ -37,7 +37,7 @@ export const CATEGORY_CONFIG: Record<BlockCategory, CategoryConfig> = {
     borderColor: 'border-purple-300 dark:border-purple-700',
     accentColor: 'bg-purple-500',
     buttonColor: 'bg-purple-500 hover:bg-purple-600 text-white',
-    icon: Brain,
+    icon: FileText,
   },
   task: { 
     label: 'タスク', 

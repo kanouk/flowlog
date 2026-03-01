@@ -95,7 +95,7 @@ export function TagFilterDropdown({
       <DropdownMenuTrigger asChild>
         <button
           className={cn(
-            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border transition-colors",
+            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             isFiltering 
               ? `${display.bgClass} ${display.colorClass} border-current/20` 
               : "border-border bg-background hover:bg-muted",

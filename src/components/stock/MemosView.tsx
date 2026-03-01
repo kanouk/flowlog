@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Loader2, Brain, Plus } from 'lucide-react';
+import { Loader2, FileText, Plus } from 'lucide-react';
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
 import { formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
@@ -132,7 +132,7 @@ export function MemosView() {
         {/* Title Row */}
         <div className="flex items-center gap-3 sm:gap-4">
           <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-500/10 text-purple-500">
-            <Brain className="h-5 w-5 sm:h-6 sm:w-6" />
+            <FileText className="h-5 w-5 sm:h-6 sm:w-6" />
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-xl sm:text-2xl font-semibold text-foreground">メモ</h2>
@@ -164,7 +164,7 @@ export function MemosView() {
       {filteredMemos.length === 0 ? (
         <div className="text-center py-12">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
-            <Brain className="w-8 h-8 text-purple-500" />
+            <FileText className="w-8 h-8 text-purple-500" />
           </div>
           <p className="text-muted-foreground">
             {tagFilter !== 'all' ? '該当するメモがありません' : 'メモがありません'}
@@ -187,7 +187,7 @@ export function MemosView() {
               >
                 <div className="flex items-start gap-3">
                   <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex-shrink-0">
-                    <Brain className="h-4 w-4" />
+                    <FileText className="h-4 w-4" />
                   </div>
                   
                   <div className="flex-1 min-w-0">
