@@ -47,7 +47,7 @@ interface FlowInputProps {
     },
     priority?: number,
     batchMode?: boolean
-  ) => void;
+  ) => void | Promise<void>;
   disabled?: boolean;
   selectedDate: string;
   isToday: boolean;
@@ -101,11 +101,23 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const { user } = useAuth();
   const { customTags, createCustomTag } = useCustomTags();
 
-  useEffect(() => {
-    setTimeout(() => {
-      textareaRef.current?.focus();
-    }, 100);
+  const focusTextarea = useCallback(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    });
   }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      focusTextarea();
+    }, 100);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [focusTextarea]);
 
   useEffect(() => {
     const draft = sessionStorage.getItem(`${DRAFT_KEY_PREFIX}${selectedDate}`);
@@ -133,7 +145,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setEndTime('10:00');
     setLastCategory('event');
     setLastTag(null);
-  }, [resetImages, selectedDate]);
+
+    focusTextarea();
+  }, [focusTextarea, resetImages, selectedDate]);
 
   useEffect(() => {
     if (content) {
@@ -242,9 +256,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
 
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.focus();
     }
-  }, [resetImages, selectedDate]);
+    focusTextarea();
+  }, [focusTextarea, resetImages, selectedDate]);
 
   const handleOpenReview = () => {
     if (!canContinue) return;
@@ -294,7 +308,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
       }
 
       const isBatch = category === 'task' && batchMode && selectedImages.length === 0;
-      onSubmit(
+      await onSubmit(
         content.trim(),
         mode,
         uploadedUrls,
@@ -339,6 +353,12 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
           event.preventDefault();
           return;
         }
+        event.preventDefault();
+        handleSubmitWithMode('toSelectedDate');
+        return;
+      }
+
+      if (event.key === 'Enter' && !isFormField) {
         event.preventDefault();
         handleSubmitWithMode('toSelectedDate');
         return;
@@ -515,10 +535,17 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
       </div>
 
       <Sheet open={isReviewOpen} onOpenChange={setIsReviewOpen}>
-        <SheetContent side="bottom" className="max-h-[92vh] overflow-y-auto rounded-t-3xl px-5 pb-8 pt-8 sm:px-6">
+        <SheetContent
+          side="bottom"
+          className="max-h-[92vh] overflow-y-auto rounded-t-3xl px-5 pb-8 pt-8 sm:px-6"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            focusTextarea();
+          }}
+        >
           <div className="animate-review-enter space-y-5">
             <section className="animate-fade-up space-y-3">
-              <div className="hidden text-xs text-muted-foreground md:block">矢印キーで移動 / Cmd+Enterで保存</div>
+              <div className="hidden text-xs text-muted-foreground md:block">矢印キーで移動 / Enterで保存</div>
               <div className="grid grid-cols-5 gap-2">
                 {CATEGORIES.map((cat) => {
                   const config = CATEGORY_CONFIG[cat];
@@ -541,8 +568,8 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                           : 'border-border bg-card text-foreground hover:border-foreground/20 hover:bg-muted/20'
                       } ${animatingCategory === cat ? 'animate-selection-pop' : ''}`}
                     >
-                      <Icon className="h-4.5 w-4.5 shrink-0 sm:h-5 sm:w-5 md:h-5.5 md:w-5.5" />
-                      <span className="break-keep text-[9px] font-semibold leading-tight tracking-tight sm:text-[10px] md:text-[11px]">
+                      <Icon className="h-5 w-5 shrink-0 sm:h-5.5 sm:w-5.5 md:h-7 md:w-7" />
+                      <span className="break-keep text-[9px] font-semibold leading-tight tracking-tight sm:text-[10px] md:text-xs">
                         {config.label}
                       </span>
                     </button>
@@ -752,7 +779,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                 className="flex-1"
                 disabled={isSubmitting}
               >
-                <ArrowLeft className="mr-1 h-4 w-4" />
+                <ArrowLeft className="mr-1 h-4 w-4 md:h-5 md:w-5" />
                 戻る
               </Button>
               <Button
@@ -766,9 +793,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                 className={`flex-1 active:scale-[0.98] ${currentConfig.buttonColor} disabled:opacity-50`}
               >
                 {isSubmitting ? (
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin md:h-5 md:w-5" />
                 ) : (
-                  <Send className="mr-1 h-4 w-4" />
+                  <Send className="mr-1 h-4 w-4 md:h-5 md:w-5" />
                 )}
                 {isToday ? `${currentConfig.label}として保存` : `${currentConfig.label}として追加`}
               </Button>
