@@ -10,8 +10,15 @@ import { BlockEditModal } from '@/components/flow/BlockEditModal';
 import { QuickAddModal } from './QuickAddModal';
 import { icons } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTargetBlockHighlight } from '@/hooks/useTargetBlockHighlight';
 
 type TagFilter = 'all' | BlockTag | string;
+
+interface MemosViewProps {
+  targetBlockId?: string | null;
+  onBlockScrolled?: () => void;
+  onSearchCleared?: () => void;
+}
 
 function kebabToPascal(str: string): string {
   return str
@@ -25,7 +32,7 @@ function getIconComponent(iconName: string) {
   return (icons as Record<string, React.ComponentType<{ className?: string }>>)[pascalName];
 }
 
-export function MemosView() {
+export function MemosView({ targetBlockId, onBlockScrolled, onSearchCleared }: MemosViewProps) {
   const { getBlocksByCategory, updateBlock, deleteBlock } = useEntries();
   const { customTags } = useCustomTags();
   const [memos, setMemos] = useState<Block[]>([]);
@@ -47,6 +54,13 @@ export function MemosView() {
   useEffect(() => {
     loadMemos();
   }, [loadMemos]);
+
+  useTargetBlockHighlight({
+    targetBlockId,
+    enabled: !loading && memos.length > 0,
+    onTargetHandled: onBlockScrolled,
+    onHighlightCleared: onSearchCleared,
+  });
 
   const filteredMemos = useMemo(() => {
     if (tagFilter === 'all') return memos;
@@ -182,6 +196,7 @@ export function MemosView() {
             return (
               <div 
                 key={memo.id} 
+                id={`block-${memo.id}`}
                 className="p-4 rounded-xl bg-card border border-border cursor-pointer hover:shadow-md transition-all"
                 onClick={() => setEditingBlock(memo)}
               >

@@ -15,10 +15,17 @@ import { PriorityIndicator } from '@/components/flow/PrioritySelector';
 import { PRIORITY_CONFIG, TaskPriority } from '@/lib/taskPriority';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useTargetBlockHighlight } from '@/hooks/useTargetBlockHighlight';
 
 type TaskFilter = 'all' | 'incomplete';
 type TagFilter = 'all' | BlockTag | string;
 type PriorityFilter = 'all' | TaskPriority;
+
+interface TasksViewProps {
+  targetBlockId?: string | null;
+  onBlockScrolled?: () => void;
+  onSearchCleared?: () => void;
+}
 
 function kebabToPascal(str: string): string {
   return str
@@ -32,7 +39,7 @@ function getIconComponent(iconName: string) {
   return (icons as Record<string, React.ComponentType<{ className?: string }>>)[pascalName];
 }
 
-export function TasksView() {
+export function TasksView({ targetBlockId, onBlockScrolled, onSearchCleared }: TasksViewProps) {
   const { getBlocksByCategory, updateBlock, deleteBlock } = useEntries();
   const { customTags } = useCustomTags();
   
@@ -57,6 +64,13 @@ export function TasksView() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useTargetBlockHighlight({
+    targetBlockId,
+    enabled: !loading && blocks.length > 0,
+    onTargetHandled: onBlockScrolled,
+    onHighlightCleared: onSearchCleared,
+  });
 
   const filteredBlocks = useMemo(() => {
     let result = blocks;
@@ -353,6 +367,7 @@ export function TasksView() {
             return (
               <div 
                 key={block.id} 
+                id={`block-${block.id}`}
                 className={`p-4 rounded-xl border transition-all cursor-pointer hover:shadow-md ${
                   block.is_done 
                     ? 'bg-muted/30 border-border opacity-60' 

@@ -44,7 +44,8 @@ const TAB_DOT_COLORS: Record<DashboardTab, string> = {
 const categoryToTab = (category: string): DashboardTab => {
   switch (category) {
     case 'task': return 'tasks';
-    case 'memo': return 'memos';
+    case 'memo':
+    case 'thought': return 'memos';
     case 'schedule': return 'schedule';
     case 'read_later': return 'readLater';
     default: return 'flow';
@@ -253,19 +254,35 @@ export default function Dashboard() {
           </TabsContent>
 
           <TabsContent value="tasks" className="mt-0">
-            <TasksView />
+            <TasksView
+              targetBlockId={targetBlockId}
+              onBlockScrolled={handleBlockScrolled}
+              onSearchCleared={() => setSearchQuery(null)}
+            />
           </TabsContent>
 
           <TabsContent value="schedule" className="mt-0">
-            <ScheduleView />
+            <ScheduleView
+              targetBlockId={targetBlockId}
+              onBlockScrolled={handleBlockScrolled}
+              onSearchCleared={() => setSearchQuery(null)}
+            />
           </TabsContent>
 
           <TabsContent value="memos" className="mt-0">
-            <MemosView />
+            <MemosView
+              targetBlockId={targetBlockId}
+              onBlockScrolled={handleBlockScrolled}
+              onSearchCleared={() => setSearchQuery(null)}
+            />
           </TabsContent>
 
           <TabsContent value="readLater" className="mt-0">
-            <ReadLaterView />
+            <ReadLaterView
+              targetBlockId={targetBlockId}
+              onBlockScrolled={handleBlockScrolled}
+              onSearchCleared={() => setSearchQuery(null)}
+            />
           </TabsContent>
         </Tabs>
       </div>

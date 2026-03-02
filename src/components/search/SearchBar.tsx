@@ -12,6 +12,21 @@ interface SearchBarProps {
   onNavigateToDate: (date: string, tab?: string, blockId?: string, query?: string) => void;
 }
 
+const categoryToTab = (category: string) => {
+  switch (category) {
+    case 'task':
+      return 'tasks';
+    case 'thought':
+      return 'memos';
+    case 'schedule':
+      return 'schedule';
+    case 'read_later':
+      return 'readLater';
+    default:
+      return 'flow';
+  }
+};
+
 export function SearchBar({ onNavigateToDate }: SearchBarProps) {
   const isMobile = useIsMobile();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -34,8 +49,8 @@ export function SearchBar({ onNavigateToDate }: SearchBarProps) {
     setSelectedIndex(-1);
   }, [results]);
 
-  const handleSelectBlock = (date: string, blockId: string) => {
-    onNavigateToDate(date, 'flow', blockId, query);
+  const handleSelectBlock = (date: string, blockId: string, category: string) => {
+    onNavigateToDate(date, categoryToTab(category), blockId, query);
     clearSearch();
     setSelectedIndex(-1);
   };
@@ -52,7 +67,7 @@ export function SearchBar({ onNavigateToDate }: SearchBarProps) {
     if (index < results.blocks.length) {
       const block = results.blocks[index];
       const dateKey = block.occurred_at.split('T')[0];
-      onNavigateToDate(dateKey, 'flow', block.id, query);
+      onNavigateToDate(dateKey, categoryToTab(block.category), block.id, query);
     } else {
       const entryIndex = index - results.blocks.length;
       if (entryIndex < results.entries.length) {
@@ -204,7 +219,7 @@ export function SearchBar({ onNavigateToDate }: SearchBarProps) {
         </div>
       </PopoverTrigger>
       <PopoverContent 
-        className="w-80 p-0" 
+        className="h-[min(32rem,calc(100vh-6rem))] w-[min(32rem,calc(100vw-2rem))] overflow-hidden p-0" 
         align="end"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >

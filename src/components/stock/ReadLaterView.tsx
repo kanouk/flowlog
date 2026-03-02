@@ -9,9 +9,16 @@ import { TagFilterDropdown } from './TagFilterDropdown';
 import { QuickAddModal } from './QuickAddModal';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useTargetBlockHighlight } from '@/hooks/useTargetBlockHighlight';
 
 type TagFilter = 'all' | BlockTag | string;
 type ReadFilter = 'all' | 'unread' | 'read';
+
+interface ReadLaterViewProps {
+  targetBlockId?: string | null;
+  onBlockScrolled?: () => void;
+  onSearchCleared?: () => void;
+}
 
 function kebabToPascal(str: string): string {
   return str
@@ -62,7 +69,7 @@ function linkifyContent(text: string): ReactNode {
   });
 }
 
-export function ReadLaterView() {
+export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared }: ReadLaterViewProps) {
   const { getBlocksByCategory, summarizeUrl, updateBlock } = useEntries();
   const { customTags } = useCustomTags();
   
@@ -87,6 +94,13 @@ export function ReadLaterView() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useTargetBlockHighlight({
+    targetBlockId,
+    enabled: !loading && blocks.length > 0,
+    onTargetHandled: onBlockScrolled,
+    onHighlightCleared: onSearchCleared,
+  });
 
   const filteredBlocks = useMemo(() => {
     let result = blocks;
@@ -305,6 +319,7 @@ export function ReadLaterView() {
             return (
               <div 
                 key={block.id} 
+                id={`block-${block.id}`}
                 className={cn(
                   "p-4 rounded-xl bg-card border border-border transition-opacity",
                   block.is_done && "opacity-60"

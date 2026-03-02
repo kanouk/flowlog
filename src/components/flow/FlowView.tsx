@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDateJST, calculateMiddleOccurredAt, createOccurredAt } from '@/lib/dateUtils';
 import { BlockCategory, BlockTag } from '@/lib/categoryUtils';
 import { arrayMove } from '@dnd-kit/sortable';
+import { useTargetBlockHighlight } from '@/hooks/useTargetBlockHighlight';
 
 interface FlowViewProps {
   selectedDate: string;
@@ -71,32 +72,12 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     setPendingQuestions([]);
   }, [loadData, selectedDate]);
 
-  // ターゲットブロックへのスクロール
-  useEffect(() => {
-    if (targetBlockId && blocks.length > 0 && !loading) {
-      const element = document.getElementById(`block-${targetBlockId}`);
-      if (element) {
-        // 少し遅延を入れてDOMが安定してからスクロール
-        setTimeout(() => {
-          element.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'center' 
-          });
-          // ハイライトアニメーション
-          element.classList.add('block-highlight');
-          setTimeout(() => {
-            element.classList.remove('block-highlight');
-          }, 2000);
-          // URLからblockパラメータをクリア
-          onBlockScrolled?.();
-          // 5秒後にハイライトをクリア
-          setTimeout(() => {
-            onSearchCleared?.();
-          }, 5000);
-        }, 100);
-      }
-    }
-  }, [targetBlockId, blocks.length, loading, onBlockScrolled, onSearchCleared]);
+  useTargetBlockHighlight({
+    targetBlockId,
+    enabled: !loading && blocks.length > 0,
+    onTargetHandled: onBlockScrolled,
+    onHighlightCleared: onSearchCleared,
+  });
 
   /**
    * URLを抽出するヘルパー

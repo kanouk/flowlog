@@ -6,6 +6,13 @@ import { Button } from '@/components/ui/button';
 import { CATEGORY_CONFIG } from '@/lib/categoryUtils';
 import { TagFilterDropdown } from './TagFilterDropdown';
 import { QuickAddModal } from './QuickAddModal';
+import { useTargetBlockHighlight } from '@/hooks/useTargetBlockHighlight';
+
+interface ScheduleViewProps {
+  targetBlockId?: string | null;
+  onBlockScrolled?: () => void;
+  onSearchCleared?: () => void;
+}
 
 // コンテンツから1行目（タイトル）と残り（詳細）を分離
 const parseContent = (content: string | null): { title: string; details: string | null } => {
@@ -112,7 +119,7 @@ const formatScheduleRangeWithWeekday = (
   return `${formatDateWithWeekday(start)} ${formatTime(start)} ~ ${formatDateWithWeekday(end)} ${formatTime(end)}`;
 };
 
-export function ScheduleView() {
+export function ScheduleView({ targetBlockId, onBlockScrolled, onSearchCleared }: ScheduleViewProps) {
   const { getBlocksByCategory, updateBlock, deleteBlock } = useEntries();
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
@@ -188,6 +195,22 @@ export function ScheduleView() {
 
   const config = CATEGORY_CONFIG['schedule'];
 
+  useEffect(() => {
+    if (!targetBlockId || loading || blocks.length === 0 || showPast) return;
+
+    const targetBlock = blocks.find((block) => block.id === targetBlockId);
+    if (targetBlock && isPastSchedule(targetBlock, new Date())) {
+      setShowPast(true);
+    }
+  }, [targetBlockId, loading, blocks, showPast]);
+
+  useTargetBlockHighlight({
+    targetBlockId,
+    enabled: !loading && blocks.length > 0 && (showPast || futureBlocks.some((block) => block.id === targetBlockId)),
+    onTargetHandled: onBlockScrolled,
+    onHighlightCleared: onSearchCleared,
+  });
+
   // 展開トグル
   const toggleExpand = (blockId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -213,6 +236,7 @@ export function ScheduleView() {
     return (
       <div
         key={block.id}
+        id={`block-${block.id}`}
         className={`block-card p-4 cursor-pointer hover:shadow-md transition-all border ${
           isTodaySchedule
             ? 'border-cyan-300 bg-cyan-50/60 dark:border-cyan-700 dark:bg-cyan-900/20 shadow-sm'

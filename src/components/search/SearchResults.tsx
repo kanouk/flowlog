@@ -10,7 +10,7 @@ interface SearchResultsProps {
   results: SearchResultsType | null;
   loading: boolean;
   query: string;
-  onSelectBlock: (date: string, blockId: string) => void;
+  onSelectBlock: (date: string, blockId: string, category: string) => void;
   onSelectEntry: (date: string) => void;
   selectedIndex?: number;
 }
@@ -20,6 +20,7 @@ const getCategoryIcon = (category: string) => {
     case 'task':
       return <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />;
     case 'memo':
+    case 'thought':
       return <StickyNote className="h-3.5 w-3.5 text-yellow-500 flex-shrink-0" />;
     case 'schedule':
       return <Calendar className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />;
@@ -43,6 +44,33 @@ const truncateText = (text: string | null, maxLength: number = 50) => {
   if (!text) return '';
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength) + '...';
+};
+
+const normalizeText = (text: string | null) => {
+  if (!text) return '';
+  return text.replace(/\s+/g, ' ').trim();
+};
+
+const getSearchExcerpt = (text: string | null, query: string, contextLength: number = 48) => {
+  const normalizedText = normalizeText(text);
+  if (!normalizedText) return '';
+
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return truncateText(normalizedText, contextLength * 2);
+  }
+
+  const matchIndex = normalizedText.toLowerCase().indexOf(normalizedQuery);
+  if (matchIndex === -1) {
+    return truncateText(normalizedText, contextLength * 2);
+  }
+
+  const start = Math.max(0, matchIndex - contextLength);
+  const end = Math.min(normalizedText.length, matchIndex + normalizedQuery.length + contextLength);
+  const prefix = start > 0 ? '...' : '';
+  const suffix = end < normalizedText.length ? '...' : '';
+
+  return `${prefix}${normalizedText.slice(start, end)}${suffix}`;
 };
 
 const highlightMatch = (text: string, query: string) => {
@@ -112,8 +140,9 @@ export function SearchResults({
   const totalCount = results.blocks.length + results.entries.length;
 
   return (
-    <ScrollArea className="max-h-[400px]">
-      <div className="p-3">
+    <div className="flex h-full min-h-0 flex-col">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="p-3">
         <p className="text-xs text-muted-foreground mb-3 px-1">
           「{query}」の検索結果（{totalCount}件）
         </p>
@@ -134,12 +163,13 @@ export function SearchResults({
                 const displayText = isUrlOnly && urlMeta?.summary
                   ? urlMeta.summary
                   : block.content;
+                const excerpt = getSearchExcerpt(displayText, query);
                 return (
                   <button
                     key={block.id}
                     ref={isSelected ? selectedRef : null}
-                    onClick={() => onSelectBlock(dateKey, block.id)}
-                    className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg transition-colors text-left ${
+                    onClick={() => onSelectBlock(dateKey, block.id, block.category)}
+                    className={`w-full flex items-start gap-2 px-2 py-2 rounded-lg transition-colors text-left ${
                       isSelected ? 'bg-accent' : 'hover:bg-accent'
                     }`}
                   >
@@ -147,9 +177,11 @@ export function SearchResults({
                     <span className="text-xs text-muted-foreground min-w-[32px]">
                       {formatDate(block.occurred_at)}
                     </span>
-                    <span className="text-sm truncate flex-1">
-                      {highlightMatch(truncateText(displayText, 40), query)}
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm leading-5 break-words [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden">
+                        {highlightMatch(excerpt, query)}
+                      </p>
+                    </div>
                   </button>
                 );
               })}
@@ -172,7 +204,7 @@ export function SearchResults({
                     key={entry.id}
                     ref={isSelected ? selectedRef : null}
                     onClick={() => onSelectEntry(entry.date)}
-                    className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg transition-colors text-left ${
+                    className={`w-full flex items-start gap-2 px-2 py-2 rounded-lg transition-colors text-left ${
                       isSelected ? 'bg-accent' : 'hover:bg-accent'
                     }`}
                   >
@@ -180,16 +212,19 @@ export function SearchResults({
                     <span className="text-xs text-muted-foreground min-w-[32px]">
                       {formatDate(entry.date)}
                     </span>
-                    <span className="text-sm truncate flex-1">
-                      {highlightMatch(truncateText(entry.summary || entry.formatted_content, 40), query)}
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm leading-5 break-words [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden">
+                        {highlightMatch(getSearchExcerpt(entry.summary || entry.formatted_content, query), query)}
+                      </p>
+                    </div>
                   </button>
                 );
               })}
             </div>
           </div>
         )}
-      </div>
-    </ScrollArea>
+        </div>
+      </ScrollArea>
+    </div>
   );
 }
