@@ -88,6 +88,16 @@ export function useImageAttachments({ maxImages }: UseImageAttachmentsOptions) {
     setPreviewUrls([]);
   }, []);
 
+  const restoreImages = useCallback((files: File[]) => {
+    previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+
+    const restoredFiles = files.slice(0, maxImages);
+    const restoredPreviews = restoredFiles.map((file) => URL.createObjectURL(file));
+
+    setSelectedImages(restoredFiles);
+    setPreviewUrls(restoredPreviews);
+  }, [maxImages]);
+
   return {
     selectedImages,
     previewUrls,
@@ -95,5 +105,6 @@ export function useImageAttachments({ maxImages }: UseImageAttachmentsOptions) {
     handlePaste,
     removeImage,
     resetImages,
+    restoreImages,
   };
 }

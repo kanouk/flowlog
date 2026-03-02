@@ -204,11 +204,13 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     },
     priority: number = 0,
     batchMode: boolean = false
-  ) => {
+  ): Promise<boolean> => {
     // 一括登録モード：各行を個別タスクとして登録
     if (batchMode && category === 'task') {
       const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-      if (lines.length === 0) return;
+      if (lines.length === 0) return false;
+
+      let successCount = 0;
 
       for (const line of lines) {
         const tempId = `temp-${Date.now()}-${Math.random()}`;
@@ -245,13 +247,16 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
 
         if (savedBlock) {
           setBlocks(prev => sortBlocksDesc(prev.map(b => b.id === tempId ? savedBlock : b)));
+          successCount += 1;
         } else {
           setBlocks(prev => prev.filter(b => b.id !== tempId));
         }
       }
 
-      toast.success(`${lines.length}件のタスクを登録しました`);
-      return;
+      if (successCount > 0) {
+        toast.success(`${successCount}件のタスクを登録しました`);
+      }
+      return successCount === lines.length;
     }
     const tempId = `temp-${Date.now()}`;
     const optimisticBlock: Block = {
@@ -319,8 +324,10 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
         const targetDate = navigateToDate || selectedDate;
         triggerAutoFormat(targetDate);
       }
+      return true;
     } else {
       setBlocks(prev => prev.filter(b => b.id !== tempId));
+      return false;
     }
   };
 

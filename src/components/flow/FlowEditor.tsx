@@ -86,7 +86,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       ends_at: string | null;
       is_all_day: boolean;
     }
-  ) => {
+  ): Promise<boolean> => {
     // 楽観的更新: 仮のブロックを即座にUIに追加
     const tempId = `temp-${Date.now()}`;
     const optimisticBlock: Block = {
@@ -154,9 +154,11 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
           }
         });
       }
+      return true;
     } else {
       // 失敗: 仮ブロックを削除してロールバック
       setBlocks(prev => prev.filter(b => b.id !== tempId));
+      return false;
     }
   };
 

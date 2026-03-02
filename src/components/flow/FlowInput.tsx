@@ -49,10 +49,24 @@ interface FlowInputProps {
     },
     priority?: number,
     batchMode?: boolean
-  ) => void | Promise<void>;
+  ) => boolean | Promise<boolean>;
   disabled?: boolean;
   selectedDate: string;
   isToday: boolean;
+}
+
+interface SubmissionSnapshot {
+  content: string;
+  images: File[];
+  category: BlockCategory;
+  tag: string | null;
+  priority: TaskPriorityValue;
+  batchMode: boolean;
+  isAllDay: boolean;
+  startDate?: Date;
+  startTime: string;
+  endDate?: Date;
+  endTime: string;
 }
 
 const DRAFT_KEY_PREFIX = 'flowlog_draft_';
@@ -91,6 +105,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const reviewOpenedAtRef = useRef<number>(0);
+  const submitLockedRef = useRef(false);
   const { uploadImages, maxImages } = useImageUpload();
   const {
     selectedImages,
@@ -99,6 +114,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     handlePaste,
     removeImage,
     resetImages,
+    restoreImages,
   } = useImageAttachments({ maxImages });
   const { user } = useAuth();
   const { customTags, createCustomTag } = useCustomTags();
@@ -262,6 +278,33 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     focusTextarea();
   }, [focusTextarea, resetImages, selectedDate]);
 
+  const restoreForm = useCallback((snapshot: SubmissionSnapshot) => {
+    setContent(snapshot.content);
+    restoreImages(snapshot.images);
+    setCategory(snapshot.category);
+    setTag(snapshot.tag);
+    setPriority(snapshot.priority);
+    setBatchMode(snapshot.batchMode);
+    setShowAllTags(false);
+    setIsAllDay(snapshot.isAllDay);
+    setStartDate(snapshot.startDate);
+    setStartTime(snapshot.startTime);
+    setEndDate(snapshot.endDate);
+    setEndTime(snapshot.endTime);
+    setLastCategory(snapshot.category);
+    setLastTag(snapshot.tag);
+    setIsReviewOpen(false);
+
+    requestAnimationFrame(() => {
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      }
+    });
+
+    focusTextarea();
+  }, [focusTextarea, restoreImages]);
+
   const handleOpenReview = () => {
     if (!canContinue) return;
     reviewOpenedAtRef.current = Date.now();
@@ -270,8 +313,12 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   };
 
   const handleSubmitWithMode = useCallback(async (mode: AddBlockMode) => {
-    const hasContent = content.trim().length > 0;
-    const hasImages = selectedImages.length > 0;
+    if (submitLockedRef.current) return;
+
+    const trimmedContent = content.trim();
+    const imagesToUpload = [...selectedImages];
+    const hasContent = trimmedContent.length > 0;
+    const hasImages = imagesToUpload.length > 0;
 
     if (category === 'schedule' && !startDate) {
       toast.error('開始日を選択してください');
@@ -281,50 +328,75 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     if (!hasContent && !hasImages && category !== 'schedule') return;
     if (disabled) return;
 
-    setIsSubmitting(true);
-    try {
-      let uploadedUrls: string[] = [];
-      if (hasImages) {
-        uploadedUrls = await uploadImages(selectedImages);
-        if (uploadedUrls.length !== selectedImages.length) {
-          toast.warning('一部の画像のアップロードに失敗しました');
-        }
+    let scheduleData = undefined;
+    if (category === 'schedule') {
+      const startsAt = buildScheduleDateTime(startDate, startTime, isAllDay);
+      const endsAt = buildScheduleDateTime(endDate, endTime, isAllDay);
+
+      if (endsAt && startsAt && new Date(endsAt) < new Date(startsAt)) {
+        toast.error('終了日時は開始日時より後にしてください');
+        return;
       }
 
-      let scheduleData = undefined;
-      if (category === 'schedule') {
-        const startsAt = buildScheduleDateTime(startDate, startTime, isAllDay);
-        const endsAt = buildScheduleDateTime(endDate, endTime, isAllDay);
-
-        if (endsAt && startsAt && new Date(endsAt) < new Date(startsAt)) {
-          toast.error('終了日時は開始日時より後にしてください');
-          setIsSubmitting(false);
-          return;
-        }
-
-        scheduleData = {
-          starts_at: startsAt,
-          ends_at: endsAt,
-          is_all_day: isAllDay,
-        };
-      }
-
-      const isBatch = category === 'task' && batchMode && selectedImages.length === 0;
-      await onSubmit(
-        content.trim(),
-        mode,
-        uploadedUrls,
-        category,
-        tag,
-        scheduleData,
-        category === 'task' ? priority : 0,
-        isBatch
-      );
-
-      resetForm();
-    } finally {
-      setIsSubmitting(false);
+      scheduleData = {
+        starts_at: startsAt,
+        ends_at: endsAt,
+        is_all_day: isAllDay,
+      };
     }
+
+    const submitCategory = category;
+    const submitTag = tag;
+    const submitPriority = category === 'task' ? priority : 0;
+    const isBatch = submitCategory === 'task' && batchMode && imagesToUpload.length === 0;
+    const submissionSnapshot: SubmissionSnapshot = {
+      content: trimmedContent,
+      images: imagesToUpload,
+      category: submitCategory,
+      tag: submitTag,
+      priority,
+      batchMode,
+      isAllDay,
+      startDate,
+      startTime,
+      endDate,
+      endTime,
+    };
+
+    submitLockedRef.current = true;
+    setIsSubmitting(true);
+    resetForm();
+    setIsSubmitting(false);
+
+    void (async () => {
+      try {
+        let uploadedUrls: string[] = [];
+        if (hasImages) {
+          uploadedUrls = await uploadImages(imagesToUpload);
+          if (uploadedUrls.length !== imagesToUpload.length) {
+            toast.warning('一部の画像のアップロードに失敗しました');
+          }
+        }
+
+        const submitted = await onSubmit(
+          trimmedContent,
+          mode,
+          uploadedUrls,
+          submitCategory,
+          submitTag,
+          scheduleData,
+          submitPriority,
+          isBatch
+        );
+        if (!submitted) {
+          restoreForm(submissionSnapshot);
+        }
+      } catch (error) {
+        console.error('Background submit failed:', error);
+        restoreForm(submissionSnapshot);
+      }
+    })();
+    submitLockedRef.current = false;
   }, [
     category,
     content,
@@ -335,6 +407,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     onSubmit,
     priority,
     resetForm,
+    restoreForm,
     selectedImages,
     startDate,
     startTime,
