@@ -9,6 +9,7 @@ export interface BlockSearchResult {
   tag: string | null;
   occurred_at: string;
   entry_id: string;
+  url_metadata: unknown;
 }
 
 export interface EntrySearchResult {
@@ -43,8 +44,8 @@ export function useSearch() {
       const [blocksResponse, entriesResponse] = await Promise.all([
         supabase
           .from('blocks')
-          .select('id, content, category, tag, occurred_at, entry_id')
-          .ilike('content', `%${searchQuery}%`)
+          .select('id, content, category, tag, occurred_at, entry_id, url_metadata')
+          .or(`content.ilike.%${searchQuery}%,url_metadata->>summary.ilike.%${searchQuery}%`)
           .order('occurred_at', { ascending: false })
           .limit(10),
         supabase

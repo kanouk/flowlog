@@ -129,6 +129,11 @@ export function SearchResults({
               {results.blocks.map((block, index) => {
                 const dateKey = block.occurred_at.split('T')[0];
                 const isSelected = index === selectedIndex;
+                const urlMeta = block.url_metadata as { summary?: string; title?: string; url?: string } | null;
+                const isUrlOnly = block.category === 'read_later' && (!block.content || /^https?:\/\/\S+$/.test(block.content.trim()));
+                const displayText = isUrlOnly && urlMeta?.summary
+                  ? urlMeta.summary
+                  : block.content;
                 return (
                   <button
                     key={block.id}
@@ -143,7 +148,7 @@ export function SearchResults({
                       {formatDate(block.occurred_at)}
                     </span>
                     <span className="text-sm truncate flex-1">
-                      {highlightMatch(truncateText(block.content, 40), query)}
+                      {highlightMatch(truncateText(displayText, 40), query)}
                     </span>
                   </button>
                 );
