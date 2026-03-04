@@ -6,7 +6,7 @@ import { FlowInput } from '@/components/flow/FlowInput';
 import { BlockList } from '@/components/flow/BlockList';
 import { FormattedView } from '@/components/flow/FormattedView';
 import { useEntries, Block, Entry, AddBlockMode, BlockUpdatePayload } from '@/hooks/useEntries';
-import { useAISettings } from '@/hooks/useAISettings';
+import { useAIFeatureSettings } from '@/hooks/useAIFeatureSettings';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
@@ -46,7 +46,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     formatEntry,
   } = useEntries();
 
-  const { settings: aiSettings } = useAISettings();
+  const { getSettingForFeature } = useAIFeatureSettings();
 
   const [entry, setEntry] = useState<Entry | null>(null);
   const [blocks, setBlocks] = useState<Block[]>([]);
@@ -56,11 +56,8 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // entry は format 用に取得（なければ作らない）
       const entryData = await getEntry(date);
       setEntry(entryData);
-      
-      // blocks は occurred_at 範囲で取得（降順で返ってくる）
       const blocksData = await getBlocksByDate(date);
       setBlocks(blocksData);
     } finally {
@@ -87,7 +84,6 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       is_all_day: boolean;
     }
   ): Promise<boolean> => {
-    // 楽観的更新: 仮のブロックを即座にUIに追加
     const tempId = `temp-${Date.now()}`;
     const optimisticBlock: Block = {
       id: tempId,
@@ -109,12 +105,10 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       extracted_text: null,
     };
     
-    // toNowモードでなければローカルに追加（降順ソート）
     if (mode !== 'toNow' || isToday) {
       setBlocks(prev => [optimisticBlock, ...prev]);
     }
     
-    // バックエンドに非同期で保存
     const { block: savedBlock, navigateToDate } = await addBlockWithDate({
       content,
       selectedDate: date,
@@ -129,16 +123,17 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     
     if (savedBlock) {
       if (navigateToDate) {
-        // 今日へ遷移 + トースト
         onNavigateToDate?.(navigateToDate);
         toast.success(`今日（${formatDateJST(new Date().toISOString())}）に追加しました`);
       } else {
-        // 成功: 仮IDを本物のIDに置換して再ソート
         setBlocks(prev => sortBlocksDesc(prev.map(b => b.id === tempId ? savedBlock : b)));
       }
 
-      // Auto OCR: バックグラウンドで実行
-      if (aiSettings.auto_ocr && images.length > 0) {
+      // Auto OCR: check ocr feature enabled
+      const ocrSetting = getSettingForFeature('ocr');
+      const autoOcr = ocrSetting?.enabled ?? false;
+      
+      if (autoOcr && images.length > 0) {
         supabase.functions.invoke('ocr-image', {
           body: { block_id: savedBlock.id, image_urls: savedBlock.images || images },
         }).then(({ data, error }) => {
@@ -156,7 +151,6 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       }
       return true;
     } else {
-      // 失敗: 仮ブロックを削除してロールバック
       setBlocks(prev => prev.filter(b => b.id !== tempId));
       return false;
     }
@@ -176,26 +170,21 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
    * ブロック更新（汎用：content, occurred_at, category, is_done, done_at）
    */
   const handleUpdateBlock = async (blockId: string, updates: BlockUpdatePayload) => {
-    // 楽観的更新: 即座にUIを更新
     const originalBlocks = [...blocks];
     setBlocks(prev => prev.map(b => 
       b.id === blockId ? { ...b, ...updates } : b
     ));
     
-    // バックエンドに更新
     const updated = await updateBlock(blockId, updates);
     
     if (!updated) {
-      // 失敗時はロールバック
       setBlocks(originalBlocks);
     } else if (updates.occurred_at) {
-      // occurred_at が変わった場合、dayKey が変わっていたらブロックを除去
       const newDayKey = getOccurredAtDayKey(updates.occurred_at);
       if (newDayKey !== date) {
         setBlocks(prev => prev.filter(b => b.id !== blockId));
         toast.success(`${formatDateJST(updates.occurred_at)}に移動しました`);
       } else {
-        // 同じ日内なら再ソート
         setBlocks(prev => sortBlocksDesc(prev));
       }
     }
@@ -210,16 +199,13 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     
     if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
 
-    // 楽観的並び替え
     const originalBlocks = [...blocks];
     const newBlocks = arrayMove(blocks, oldIndex, newIndex);
     setBlocks(newBlocks);
 
-    // 前後ブロック取得（降順なので prev が新しい、next が古い）
     const prevBlock = newIndex > 0 ? newBlocks[newIndex - 1] : null;
     const nextBlock = newIndex < newBlocks.length - 1 ? newBlocks[newIndex + 1] : null;
 
-    // 中間時刻計算（日付クランプ付き）
     const result = calculateMiddleOccurredAt(
       prevBlock?.occurred_at || null,
       nextBlock?.occurred_at || null,
@@ -234,13 +220,11 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
 
     const newOccurredAt = result.occurredAt;
 
-    // 永続化
     const updated = await updateBlock(activeId, { occurred_at: newOccurredAt });
     
     if (!updated) {
       setBlocks(originalBlocks);
     } else {
-      // 成功: occurred_at を更新して再ソート
       setBlocks(prev => sortBlocksDesc(
         prev.map(b => b.id === activeId ? { ...b, occurred_at: newOccurredAt } : b)
       ));
@@ -253,10 +237,8 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
   const handleFormat = async () => {
     if (blocks.length === 0) return;
     
-    // entryがなければ作成
     let currentEntry = entry;
     if (!currentEntry) {
-      // blocksがあるならentryも存在するはずだが、念のため
       const entryData = await getEntry(date);
       currentEntry = entryData;
       setEntry(entryData);
@@ -332,14 +314,12 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
         </TabsList>
 
         <TabsContent value="flow" className="space-y-6 mt-0">
-          {/* 全日付で入力フォーム表示 */}
           <FlowInput 
             onSubmit={handleAddBlock}
             selectedDate={date}
             isToday={isToday}
           />
           
-          {/* セクションヘッダー + 整形ボタン */}
           <div className="flex items-center justify-between pb-3 border-b border-border">
             <div className="flex items-center gap-2">
               <div className="w-1 h-5 rounded-full bg-primary/60" />

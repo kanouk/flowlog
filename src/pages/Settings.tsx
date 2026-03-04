@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, User, LogOut, Tag, Sparkles, Target, ChevronRight, Plug, Bot, Settings2 } from 'lucide-react';
-import { AISettingsSection } from '@/components/settings/AISettingsSection';
+import { ChevronLeft, User, LogOut, Tag, Target, ChevronRight, Plug, Bot, Settings2 } from 'lucide-react';
 import { ScoreSettingsSection } from '@/components/settings/ScoreSettingsSection';
 import { TagManagementSection } from '@/components/settings/TagManagementSection';
 import { McpSettingsSection } from '@/components/settings/McpSettingsSection';
@@ -13,13 +12,12 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { AppSplash } from '@/components/common/AppSplash';
 
-type SettingsSection = 'tags' | 'score' | 'ai' | 'models' | 'features' | 'mcp' | 'account';
+type SettingsSection = 'tags' | 'models' | 'features' | 'score' | 'mcp' | 'account';
 
 const SECTIONS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
   { id: 'tags', label: 'タグ管理', icon: Tag },
   { id: 'models', label: '生成AIモデル管理', icon: Bot },
   { id: 'features', label: '処理別AI設定', icon: Settings2 },
-  { id: 'ai', label: '生成AI設定 (レガシー)', icon: Sparkles },
   { id: 'score', label: '今日の得点', icon: Target },
   { id: 'mcp', label: 'MCP連携', icon: Plug },
   { id: 'account', label: 'アカウント', icon: User },
@@ -107,8 +105,6 @@ export default function Settings() {
         return <AIFeatureSettingsSection />;
       case 'score':
         return <ScoreSettingsSection />;
-      case 'ai':
-        return <AISettingsSection />;
       case 'mcp':
         return <McpSettingsSection />;
       case 'account':
