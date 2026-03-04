@@ -58,7 +58,7 @@ export function useAIApiKeys() {
     if (!user) return false;
     setSaving(true);
     try {
-      const { error } = await supabase.from('user_ai_api_keys').insert({
+      const { error } = await (supabase.from as any)('user_ai_api_keys').insert({
         user_id: user.id,
         provider: input.provider,
         name: input.name,
