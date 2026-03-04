@@ -1,28 +1,15 @@
 
 
-# 検索対象に「あとで読む」の要約文を追加
+# ダイアログを開く時にテスト結果をクリアする
 
-## 概要
-現在ブロック検索は `content` カラムのみを対象としているが、Read Later ブロックの URL 要約（`url_metadata` JSONB 内の `summary` フィールド）も検索対象に含める。
+## 問題
+APIキー登録ダイアログを新規で開いた際、前回の接続テスト結果（`testResults['key-dialog']`）がクリアされず残る。
 
-## 変更内容
+## 修正
+`openCreate` と `openEdit` の中で `setTestResults(prev => { const next = {...prev}; delete next['key-dialog']; return next; })` を追加し、ダイアログを開くたびにダイアログ用のテスト結果をリセットする。
 
-### `src/hooks/useSearch.ts`
-- ブロック検索クエリの `select` に `url_metadata` を追加
-- フィルタ条件を `.ilike('content', ...)` 単体から `.or()` に変更し、`url_metadata->summary` の ILIKE 検索を追加：
-  ```
-  .or(`content.ilike.%${q}%,url_metadata->>summary.ilike.%${q}%`)
-  ```
-- `BlockSearchResult` インターフェースに `url_metadata` フィールドを追加
-
-### `src/components/search/SearchResults.tsx`
-- Read Later ブロックの表示テキストに、`content` が空または URL のみの場合は `url_metadata.summary` をフォールバック表示
-- 要約文中のキーワードもハイライト対象にする
-
-### ファイル一覧
-
-| File | Change |
+## 変更対象
+| ファイル | 変更 |
 |---|---|
-| `src/hooks/useSearch.ts` | 検索条件に `url_metadata->>summary` を追加、select に `url_metadata` 追加 |
-| `src/components/search/SearchResults.tsx` | Read Later ブロックで要約テキストを表示 |
+| `src/components/settings/AIModelManagementSection.tsx` | `openCreate` と `openEdit` に `testResults['key-dialog']` のクリア処理を追加（2行追加） |
 
