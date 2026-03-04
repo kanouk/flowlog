@@ -1,36 +1,28 @@
 
 
-# APIキーセキュリティ修正プラン
+# 検索対象に「あとで読む」の要約文を追加
 
-## 問題の原因
+## 概要
+現在ブロック検索は `content` カラムのみを対象としているが、Read Later ブロックの URL 要約（`url_metadata` JSONB 内の `summary` フィールド）も検索対象に含める。
 
-3つの重大な脆弱性:
+## 変更内容
 
-1. **`user_ai_api_keys` の SELECT RLS ポリシーが有効** → クライアントから `supabase.from('user_ai_api_keys').select('api_key')` で平文APIキーを取得可能
-2. **`get_feature_ai_config(p_user_id, p_feature_key)` が任意の `p_user_id` を受け入れる** → 他人のuser_idを渡せば他人のAPIキーが返る（SECURITY DEFINER で RLS をバイパスするため）
-3. **`test-ai-connection` の Mode 1 がクライアントから生の `api_key` を受け取る** → 新規登録前のテストで必要だが、この経路自体は意図的設計
+### `src/hooks/useSearch.ts`
+- ブロック検索クエリの `select` に `url_metadata` を追加
+- フィルタ条件を `.ilike('content', ...)` 単体から `.or()` に変更し、`url_metadata->summary` の ILIKE 検索を追加：
+  ```
+  .or(`content.ilike.%${q}%,url_metadata->>summary.ilike.%${q}%`)
+  ```
+- `BlockSearchResult` インターフェースに `url_metadata` フィールドを追加
 
-## 修正方針
+### `src/components/search/SearchResults.tsx`
+- Read Later ブロックの表示テキストに、`content` が空または URL のみの場合は `url_metadata.summary` をフォールバック表示
+- 要約文中のキーワードもハイライト対象にする
 
-### A. `user_ai_api_keys` の SELECT ポリシーを削除
-- クライアントから直接 `api_key` カラムを読めなくする
-- 一覧表示は既存の `get_user_ai_api_keys_safe()` RPC（ヒントのみ返す）経由のみ
-- INSERT / UPDATE / DELETE ポリシーはそのまま維持（データ返却不要のため動作に影響なし）
+### ファイル一覧
 
-### B. `get_feature_ai_config` に `auth.uid()` ガードを追加
-- `auth.uid()` が NULL でない場合（= クライアント呼び出し）、`p_user_id = auth.uid()` を強制
-- `auth.uid()` が NULL の場合（= service role からの呼び出し）、任意の `p_user_id` を許可
-- これにより Edge Function は引き続き動作し、クライアントからの他人データアクセスをブロック
-
-### C. 変更不要な箇所
-- Edge Functions（`format-entries`, `summarize-url`, `ocr-image`, `test-ai-connection`）: すべて service role client で `user_ai_api_keys` にアクセスしており、RLS をバイパスするため変更不要
-- フロントエンド hooks: INSERT/UPDATE/DELETE は SELECT 不要で動作。一覧は safe RPC 経由。変更不要
-
-## 変更対象ファイル
-
-| ファイル | 変更内容 |
+| File | Change |
 |---|---|
-| 新規マイグレーション SQL | (1) `user_ai_api_keys` の SELECT ポリシーを DROP、(2) `get_feature_ai_config` を `auth.uid()` ガード付きに再作成 |
-
-コード変更は不要。マイグレーション1本のみ。
+| `src/hooks/useSearch.ts` | 検索条件に `url_metadata->>summary` を追加、select に `url_metadata` 追加 |
+| `src/components/search/SearchResults.tsx` | Read Later ブロックで要約テキストを表示 |
 
