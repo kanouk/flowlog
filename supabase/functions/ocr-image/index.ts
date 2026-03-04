@@ -7,6 +7,16 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+interface FeatureAIConfig {
+  feature_key: string;
+  enabled: boolean;
+  system_prompt: string | null;
+  user_prompt_template: string | null;
+  provider: string | null;
+  model_name: string | null;
+  api_key: string | null;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -23,11 +33,8 @@ serve(async (req) => {
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
 
     // Verify user
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -65,6 +72,42 @@ serve(async (req) => {
       });
     }
 
+    // Get feature config for OCR
+    const serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+    let featureConfig: FeatureAIConfig | null = null;
+    try {
+      const { data } = await serviceClient.rpc('get_feature_ai_config', {
+        p_user_id: user.id,
+        p_feature_key: 'ocr',
+      });
+      if (data && (data as unknown[]).length > 0) {
+        featureConfig = (data as unknown[])[0] as FeatureAIConfig;
+      }
+    } catch { /* ignore */ }
+
+    // Also get legacy settings for fallback
+    let legacyProvider: string | null = null;
+    let legacyModel: string | null = null;
+    let legacyApiKey: string | null = null;
+    try {
+      const { data: legacySettings } = await serviceClient
+        .from('user_ai_settings')
+        .select('selected_provider, selected_model, openai_api_key, anthropic_api_key, google_api_key')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (legacySettings) {
+        legacyProvider = legacySettings.selected_provider;
+        legacyModel = legacySettings.selected_model;
+        if (legacyProvider === 'openai') legacyApiKey = legacySettings.openai_api_key;
+        else if (legacyProvider === 'anthropic') legacyApiKey = legacySettings.anthropic_api_key;
+        else if (legacyProvider === 'google') legacyApiKey = legacySettings.google_api_key;
+      }
+    } catch { /* ignore */ }
+
+    const DEFAULT_OCR_SYSTEM_PROMPT = "あなたは画像からテキストを抽出するOCRアシスタントです。画像内のテキストを正確に読み取り、原文のまま出力してください。レイアウトや改行もできるだけ再現してください。テキストがない画像の場合は、画像の内容を簡潔に日本語で説明してください。";
+
+    const systemPrompt = featureConfig?.system_prompt || DEFAULT_OCR_SYSTEM_PROMPT;
+
     // Build multimodal content
     const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
     for (const url of image_urls) {
@@ -77,26 +120,78 @@ serve(async (req) => {
         : "この画像内のテキストを正確に読み取り、そのまま出力してください。テキストがない場合は画像の内容を簡潔に説明してください。",
     });
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content: "あなたは画像からテキストを抽出するOCRアシスタントです。画像内のテキストを正確に読み取り、原文のまま出力してください。レイアウトや改行もできるだけ再現してください。テキストがない画像の場合は、画像の内容を簡潔に日本語で説明してください。",
-          },
-          {
-            role: "user",
-            content: userContent,
-          },
-        ],
-      }),
-    });
+    // Determine which provider/model/key to use
+    let useProvider = 'lovable';
+    let useModel = 'google/gemini-2.5-flash';
+    let useApiKey: string | null = null;
+
+    // 1. Feature config
+    if (featureConfig?.provider && featureConfig?.model_name && featureConfig?.api_key) {
+      useProvider = featureConfig.provider;
+      useModel = featureConfig.model_name;
+      useApiKey = featureConfig.api_key;
+    }
+    // 2. Legacy settings
+    else if (legacyProvider && legacyProvider !== 'lovable' && legacyApiKey) {
+      useProvider = legacyProvider;
+      useModel = legacyModel || 'gpt-4o';
+      useApiKey = legacyApiKey;
+    }
+    // 3. Default: Lovable AI
+
+    let aiResponse: Response;
+
+    if (useProvider === 'openai' && useApiKey) {
+      aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${useApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: useModel,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userContent },
+          ],
+        }),
+      });
+    } else if (useProvider === 'google' && useApiKey) {
+      // Google multimodal - convert to Gemini format
+      const parts: Array<{ text?: string; inline_data?: { mime_type: string; data: string } }> = [];
+      for (const url of image_urls) {
+        parts.push({ text: `[画像URL: ${url}]` });
+      }
+      parts.push({ text: userContent[userContent.length - 1].text! });
+      
+      aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${useModel}:generateContent?key=${useApiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ parts }],
+        }),
+      });
+    } else {
+      // Lovable AI (default)
+      if (!LOVABLE_API_KEY) {
+        throw new Error("LOVABLE_API_KEY is not configured");
+      }
+      aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: useModel,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userContent },
+          ],
+        }),
+      });
+    }
 
     if (!aiResponse.ok) {
       if (aiResponse.status === 429) {
@@ -112,19 +207,20 @@ serve(async (req) => {
         });
       }
       const errorText = await aiResponse.text();
-      console.error("AI gateway error:", aiResponse.status, errorText);
-      throw new Error(`AI gateway error: ${aiResponse.status}`);
+      console.error("AI error:", aiResponse.status, errorText);
+      throw new Error(`AI error: ${aiResponse.status}`);
     }
 
     const aiData = await aiResponse.json();
-    const extractedText = aiData.choices?.[0]?.message?.content || "";
+    let extractedText = '';
+    
+    if (useProvider === 'google' && useApiKey) {
+      extractedText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    } else {
+      extractedText = aiData.choices?.[0]?.message?.content || '';
+    }
 
-    // Save to database using service role
-    const serviceClient = createClient(
-      SUPABASE_URL,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
+    // Save to database
     const { error: updateError } = await serviceClient
       .from("blocks")
       .update({ extracted_text: extractedText })

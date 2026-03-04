@@ -124,13 +124,17 @@ export function useAIFeatureSettings() {
           .eq('user_id', user.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from('user_ai_feature_settings')
-          .insert({
+        const insertData = {
             user_id: user.id,
             feature_key: featureKey,
-            ...updates,
-          } as Record<string, unknown>);
+            assigned_model_id: updates.assigned_model_id ?? null,
+            system_prompt: updates.system_prompt ?? null,
+            user_prompt_template: updates.user_prompt_template ?? null,
+            enabled: updates.enabled ?? true,
+          };
+        const { error } = await supabase
+          .from('user_ai_feature_settings')
+          .insert(insertData);
         if (error) throw error;
       }
       await fetchSettings();

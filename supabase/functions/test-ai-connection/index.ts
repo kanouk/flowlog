@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -29,7 +30,6 @@ async function testOpenAI(apiKey: string): Promise<{ success: boolean; message: 
 
 async function testAnthropic(apiKey: string): Promise<{ success: boolean; message: string }> {
   try {
-    // Anthropic doesn't have a simple models endpoint, so we make a minimal request
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -83,37 +83,103 @@ serve(async (req) => {
   }
 
   try {
-    const { provider, api_key } = await req.json() as { provider: string; api_key: string };
+    const body = await req.json() as { provider?: string; api_key?: string; model_id?: string };
     
-    if (!provider || !api_key) {
+    // Mode 1: Direct provider + api_key test (legacy + dialog test)
+    if (body.provider && body.api_key) {
+      let result: { success: boolean; message: string };
+      switch (body.provider) {
+        case 'openai':
+          result = await testOpenAI(body.api_key);
+          break;
+        case 'anthropic':
+          result = await testAnthropic(body.api_key);
+          break;
+        case 'google':
+          result = await testGoogle(body.api_key);
+          break;
+        default:
+          result = { success: false, message: '不明なプロバイダーです。' };
+      }
       return new Response(
-        JSON.stringify({ success: false, message: 'プロバイダーとAPIキーが必要です。' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify(result),
+        { status: result.success ? 200 : 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    let result: { success: boolean; message: string };
+    // Mode 2: Test by registered model_id
+    if (body.model_id) {
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ success: false, message: '認証が必要です。' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
-    switch (provider) {
-      case 'openai':
-        result = await testOpenAI(api_key);
-        break;
-      case 'anthropic':
-        result = await testAnthropic(api_key);
-        break;
-      case 'google':
-        result = await testGoogle(api_key);
-        break;
-      default:
-        result = { success: false, message: '不明なプロバイダーです。' };
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+
+      // Verify user
+      const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } }
+      });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return new Response(
+          JSON.stringify({ success: false, message: '認証に失敗しました。' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Fetch model with service role to get api_key
+      const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+      const { data: model, error: modelError } = await serviceClient
+        .from('user_ai_models')
+        .select('provider, model_name, api_key')
+        .eq('id', body.model_id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (modelError || !model) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'モデルが見つかりません。' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!model.api_key) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'APIキーが設定されていません。' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      let result: { success: boolean; message: string };
+      switch (model.provider) {
+        case 'openai':
+          result = await testOpenAI(model.api_key);
+          break;
+        case 'anthropic':
+          result = await testAnthropic(model.api_key);
+          break;
+        case 'google':
+          result = await testGoogle(model.api_key);
+          break;
+        default:
+          result = { success: false, message: '不明なプロバイダーです。' };
+      }
+
+      return new Response(
+        JSON.stringify(result),
+        { status: result.success ? 200 : 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     return new Response(
-      JSON.stringify(result),
-      { 
-        status: result.success ? 200 : 400, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify({ success: false, message: 'provider+api_key または model_id が必要です。' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
