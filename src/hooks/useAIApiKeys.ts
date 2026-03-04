@@ -89,8 +89,7 @@ export function useAIApiKeys() {
       if (updates.name !== undefined) updateData.name = updates.name;
       if (updates.api_key !== undefined) updateData.api_key = updates.api_key;
 
-      const { error } = await supabase
-        .from('user_ai_api_keys')
+      const { error } = await (supabase.from as any)('user_ai_api_keys')
         .update(updateData)
         .eq('id', id)
         .eq('user_id', user.id);
