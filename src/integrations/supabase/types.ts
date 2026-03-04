@@ -217,6 +217,92 @@ export type Database = {
         }
         Relationships: []
       }
+      user_ai_feature_settings: {
+        Row: {
+          assigned_model_id: string | null
+          created_at: string
+          enabled: boolean
+          feature_key: string
+          id: string
+          system_prompt: string | null
+          updated_at: string
+          user_id: string
+          user_prompt_template: string | null
+        }
+        Insert: {
+          assigned_model_id?: string | null
+          created_at?: string
+          enabled?: boolean
+          feature_key: string
+          id?: string
+          system_prompt?: string | null
+          updated_at?: string
+          user_id: string
+          user_prompt_template?: string | null
+        }
+        Update: {
+          assigned_model_id?: string | null
+          created_at?: string
+          enabled?: boolean
+          feature_key?: string
+          id?: string
+          system_prompt?: string | null
+          updated_at?: string
+          user_id?: string
+          user_prompt_template?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_ai_feature_settings_assigned_model_id_fkey"
+            columns: ["assigned_model_id"]
+            isOneToOne: false
+            referencedRelation: "user_ai_models"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_ai_models: {
+        Row: {
+          api_key: string | null
+          created_at: string
+          display_name: string
+          id: string
+          is_active: boolean
+          model_name: string
+          note: string | null
+          provider: string
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          api_key?: string | null
+          created_at?: string
+          display_name: string
+          id?: string
+          is_active?: boolean
+          model_name: string
+          note?: string | null
+          provider: string
+          sort_order?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          api_key?: string | null
+          created_at?: string
+          display_name?: string
+          id?: string
+          is_active?: boolean
+          model_name?: string
+          note?: string | null
+          provider?: string
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_ai_settings: {
         Row: {
           anthropic_api_key: string | null
@@ -300,6 +386,34 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_feature_ai_config: {
+        Args: { p_feature_key: string; p_user_id: string }
+        Returns: {
+          api_key: string
+          enabled: boolean
+          feature_key: string
+          model_name: string
+          provider: string
+          system_prompt: string
+          user_prompt_template: string
+        }[]
+      }
+      get_user_ai_models_safe: {
+        Args: never
+        Returns: {
+          created_at: string
+          display_name: string
+          has_api_key: boolean
+          id: string
+          is_active: boolean
+          model_name: string
+          note: string
+          provider: string
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }[]
+      }
       get_user_ai_settings_safe: {
         Args: never
         Returns: {

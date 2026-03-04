@@ -42,6 +42,16 @@ interface AISettings {
   behavior_rules: string | null;
 }
 
+interface FeatureAIConfig {
+  feature_key: string;
+  enabled: boolean;
+  system_prompt: string | null;
+  user_prompt_template: string | null;
+  provider: string | null;
+  model_name: string | null;
+  api_key: string | null;
+}
+
 interface TimeInferenceResult {
   block_id: string;
   inferred_time: string | null;
@@ -207,35 +217,62 @@ async function callLovableAI(model: string, systemPrompt: string, userPrompt: st
   return { text: data.choices?.[0]?.message?.content || '', usage };
 }
 
-// AI呼び出しの共通ラッパー
-async function callAI(
-  provider: string,
-  model: string,
+// AI呼び出し - feature config or legacy settings
+async function callAIWithConfig(
+  featureConfig: FeatureAIConfig | null,
+  legacySettings: AISettings | null,
   systemPrompt: string,
   userPrompt: string,
-  aiSettings: AISettings | null
 ): Promise<AIResult> {
-  switch (provider) {
-    case 'openai':
-      if (!aiSettings?.openai_api_key) {
-        throw new Error('OpenAI APIキーが設定されていません');
-      }
-      return callOpenAI(aiSettings.openai_api_key, model, systemPrompt, userPrompt);
-    
-    case 'anthropic':
-      if (!aiSettings?.anthropic_api_key) {
-        throw new Error('Anthropic APIキーが設定されていません');
-      }
-      return callAnthropic(aiSettings.anthropic_api_key, model, systemPrompt, userPrompt);
-    
-    case 'google':
-      if (!aiSettings?.google_api_key) {
-        throw new Error('Google APIキーが設定されていません');
-      }
-      return callGoogle(aiSettings.google_api_key, model, systemPrompt, userPrompt);
-    
-    default:
-      return callLovableAI(model, systemPrompt, userPrompt);
+  // 1. New feature config with assigned model
+  if (featureConfig?.provider && featureConfig?.model_name && featureConfig?.api_key) {
+    switch (featureConfig.provider) {
+      case 'openai':
+        return callOpenAI(featureConfig.api_key, featureConfig.model_name, systemPrompt, userPrompt);
+      case 'anthropic':
+        return callAnthropic(featureConfig.api_key, featureConfig.model_name, systemPrompt, userPrompt);
+      case 'google':
+        return callGoogle(featureConfig.api_key, featureConfig.model_name, systemPrompt, userPrompt);
+    }
+  }
+
+  // 2. Legacy settings fallback
+  if (legacySettings) {
+    const provider = legacySettings.selected_provider;
+    const model = legacySettings.selected_model;
+    switch (provider) {
+      case 'openai':
+        if (legacySettings.openai_api_key) return callOpenAI(legacySettings.openai_api_key, model, systemPrompt, userPrompt);
+        break;
+      case 'anthropic':
+        if (legacySettings.anthropic_api_key) return callAnthropic(legacySettings.anthropic_api_key, model, systemPrompt, userPrompt);
+        break;
+      case 'google':
+        if (legacySettings.google_api_key) return callGoogle(legacySettings.google_api_key, model, systemPrompt, userPrompt);
+        break;
+    }
+  }
+
+  // 3. Lovable AI default
+  const defaultModel = legacySettings?.selected_model || 'google/gemini-2.5-flash';
+  return callLovableAI(defaultModel, systemPrompt, userPrompt);
+}
+
+// Fetch feature AI config via RPC
+async function getFeatureConfig(
+  serviceClient: ReturnType<typeof createClient>,
+  userId: string,
+  featureKey: string,
+): Promise<FeatureAIConfig | null> {
+  try {
+    const { data, error } = await serviceClient.rpc('get_feature_ai_config', {
+      p_user_id: userId,
+      p_feature_key: featureKey,
+    });
+    if (error || !data || (data as unknown[]).length === 0) return null;
+    return (data as unknown[])[0] as FeatureAIConfig;
+  } catch {
+    return null;
   }
 }
 
@@ -327,10 +364,7 @@ JSON形式で回答してください：
 
 // 時刻をJSTのHH:mm形式のISO文字列に変換
 function createOccurredAtFromTime(date: string, timeStr: string): string {
-  // date: "2024-01-15", timeStr: "08:30"
-  const [hours, minutes] = timeStr.split(':').map(Number);
   const jstDate = new Date(`${date}T${timeStr}:00`);
-  // JST時刻をUTCに変換
   const utcDate = fromZonedTime(jstDate, TIMEZONE);
   return utcDate.toISOString();
 }
@@ -350,13 +384,16 @@ serve(async (req) => {
       );
     }
 
-    // Get user's AI settings and supabase client
     const authHeader = req.headers.get('Authorization');
     let aiSettings: AISettings | null = null;
     let supabase: ReturnType<typeof createClient> | null = null;
+    let userId: string | null = null;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
     if (authHeader) {
       supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -366,6 +403,7 @@ serve(async (req) => {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {
+        userId = user.id;
         const { data: settings } = await supabase
           .from('user_ai_settings')
           .select('*')
@@ -378,19 +416,28 @@ serve(async (req) => {
       }
     }
 
-    // Default to Lovable AI
-    const provider = aiSettings?.selected_provider || 'lovable';
-    const model = aiSettings?.selected_model || 'google/gemini-2.5-flash';
+    // Fetch feature configs for all 3 phases
+    let timeConfig: FeatureAIConfig | null = null;
+    let diaryConfig: FeatureAIConfig | null = null;
+    let scoreConfig: FeatureAIConfig | null = null;
+
+    if (userId) {
+      [timeConfig, diaryConfig, scoreConfig] = await Promise.all([
+        getFeatureConfig(serviceClient, userId, 'time_inference'),
+        getFeatureConfig(serviceClient, userId, 'diary_format'),
+        getFeatureConfig(serviceClient, userId, 'score_evaluation'),
+      ]);
+    }
 
     // ========== Phase 1: 時刻推測 ==========
     console.log('Phase 1: Time inference...');
     
-    // 時刻推測用のブロックテキストを生成
     const timeAnalysisInput = blocks.map((block, index) => {
       const currentTime = formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH:mm');
       return `[${index}] 現在時刻: ${currentTime}, 内容: ${block.content || '(画像のみ)'}`;
     }).join('\n');
 
+    const timeSystemPrompt = timeConfig?.system_prompt || TIME_ANALYSIS_PROMPT;
     const timeAnalysisPrompt = `以下は${date}のブロックです。各ブロックの実際の発生時刻を推測してください：
 
 ${timeAnalysisInput}
@@ -402,11 +449,10 @@ JSON形式で回答してください。`;
     const tokenUsages: { phase: string; usage: TokenUsage | null }[] = [];
 
     try {
-      const timeAnalysisResult = await callAI(provider, model, TIME_ANALYSIS_PROMPT, timeAnalysisPrompt, aiSettings);
+      const timeAnalysisResult = await callAIWithConfig(timeConfig, aiSettings, timeSystemPrompt, timeAnalysisPrompt);
       tokenUsages.push({ phase: 'Phase 1 (Time inference)', usage: timeAnalysisResult.usage });
       console.log('Phase 1 token usage:', JSON.stringify(timeAnalysisResult.usage));
       
-      // JSONを抽出
       const jsonMatch = timeAnalysisResult.text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const analysisResult = JSON.parse(jsonMatch[0]);
@@ -419,17 +465,14 @@ JSON形式で回答してください。`;
             if (!block) continue;
             
             if (result.confidence === 'none' && result.question) {
-              // 質問が必要
               questions.push({
                 block_id: block.id,
                 content_preview: (block.content || '').substring(0, 50),
                 question: result.question,
               });
             } else if (result.inferred_time && (result.confidence === 'high' || result.confidence === 'medium')) {
-              // 時刻を更新
               const currentTime = formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH:mm');
               
-              // 30分以上の差がある場合のみ更新
               const [currentH, currentM] = currentTime.split(':').map(Number);
               const [inferredH, inferredM] = result.inferred_time.split(':').map(Number);
               const currentMinutes = currentH * 60 + currentM;
@@ -438,7 +481,6 @@ JSON形式で回答してください。`;
               if (Math.abs(currentMinutes - inferredMinutes) >= 30) {
                 const newOccurredAt = createOccurredAtFromTime(date, result.inferred_time);
                 
-                // DBを更新
                 if (supabase) {
                   // deno-lint-ignore no-explicit-any
                   const { error: updateError } = await (supabase as any)
@@ -453,7 +495,6 @@ JSON形式で回答してください。`;
                       new_time: result.inferred_time,
                       reason: result.reason || '',
                     });
-                    // ローカルのブロックも更新
                     block.occurred_at = newOccurredAt;
                   }
                 }
@@ -464,7 +505,6 @@ JSON形式で回答してください。`;
       }
     } catch (timeError) {
       console.error('Time inference error:', timeError);
-      // 時刻推測に失敗しても日記生成は続行
     }
 
     console.log('Time updates:', timeUpdates.length);
@@ -473,13 +513,10 @@ JSON形式で回答してください。`;
     // ========== Phase 2: 日記整形 ==========
     console.log('Phase 2: Formatting diary...');
 
-    // Sort blocks by occurred_at (parseISO使用)
     const sortedBlocks = [...blocks].sort(
       (a, b) => parseISO(a.occurred_at).getTime() - parseISO(b.occurred_at).getTime()
     );
 
-    // Format blocks for the prompt (formatInTimeZone使用)
-    // Use structured photo markers with block ID for reliable frontend mapping
     const blocksText = sortedBlocks.map((block) => {
       const time = formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH:mm');
       const categoryLabel = block.category ? `[${getCategoryLabel(block.category)}]` : '';
@@ -531,23 +568,20 @@ JSON形式で回答してください。`;
 
 出力はMarkdown形式で返してください。`;
 
-    // Use custom prompt if set, otherwise use default
-    const systemPrompt = aiSettings?.custom_system_prompt || DEFAULT_SYSTEM_PROMPT;
+    // Use custom prompt: feature config > legacy settings > default
+    const diarySystemPrompt = diaryConfig?.system_prompt || aiSettings?.custom_system_prompt || DEFAULT_SYSTEM_PROMPT;
 
     const userPrompt = `以下は${date}のログです。整形してください：
 
 ${blocksText}`;
 
-    console.log('Calling AI for formatting...');
-    console.log('Provider:', provider);
-    console.log('Model:', model);
     console.log('Blocks count:', blocks.length);
     console.log('Date:', date);
 
     let formattedContent: string;
 
     try {
-      const formatResult = await callAI(provider, model, systemPrompt, userPrompt, aiSettings);
+      const formatResult = await callAIWithConfig(diaryConfig, aiSettings, diarySystemPrompt, userPrompt);
       formattedContent = formatResult.text;
       tokenUsages.push({ phase: 'Phase 2 (Formatting)', usage: formatResult.usage });
       console.log('Phase 2 token usage:', JSON.stringify(formatResult.usage));
@@ -573,7 +607,7 @@ ${blocksText}`;
       throw new Error('No content in AI response');
     }
 
-    // Extract summary (last section after "今日の3行まとめ")
+    // Extract summary
     const summaryMatch = formattedContent.match(/##\s*今日の3行まとめ\s*([\s\S]*?)$/);
     const summary = summaryMatch 
       ? summaryMatch[1].trim().split('\n').filter((l: string) => l.trim()).slice(0, 3).join(' ')
@@ -581,11 +615,15 @@ ${blocksText}`;
 
     console.log('Successfully formatted entries');
 
-    // ========== Phase 3: スコアリング（損失回避版） ==========
+    // ========== Phase 3: スコアリング ==========
     let score: number | undefined;
     let scoreDetails: string | undefined;
 
-    if (aiSettings?.score_enabled && aiSettings.behavior_rules) {
+    // Determine if scoring is enabled: new config > legacy
+    const scoreEnabled = scoreConfig ? scoreConfig.enabled : (aiSettings?.score_enabled ?? false);
+    const behaviorRules = scoreConfig?.user_prompt_template || aiSettings?.behavior_rules;
+
+    if (scoreEnabled && behaviorRules) {
       console.log('Phase 3: Scoring diary...');
       
       const SCORE_PROMPT = `あなたは行動規範の達成度を評価するアシスタントです。
@@ -624,8 +662,10 @@ ${blocksText}`;
 
 必ずJSON形式で回答してください。`;
 
+      const scoreSystemPrompt = scoreConfig?.system_prompt || SCORE_PROMPT;
+
       const scoreUserPrompt = `## 行動規範
-${aiSettings.behavior_rules}
+${behaviorRules}
 
 ## 今日の日記
 ${formattedContent}
@@ -633,17 +673,15 @@ ${formattedContent}
 上記の日記を行動規範と照らし合わせて、100点からの減点方式でスコアを算出してください。`;
 
       try {
-        const scoreAIResult = await callAI(provider, model, SCORE_PROMPT, scoreUserPrompt, aiSettings);
+        const scoreAIResult = await callAIWithConfig(scoreConfig, aiSettings, scoreSystemPrompt, scoreUserPrompt);
         tokenUsages.push({ phase: 'Phase 3 (Scoring)', usage: scoreAIResult.usage });
         console.log('Phase 3 token usage:', JSON.stringify(scoreAIResult.usage));
         
-        // JSONを抽出
         const scoreJsonMatch = scoreAIResult.text.match(/\{[\s\S]*\}/);
         if (scoreJsonMatch) {
           const scoreResult = JSON.parse(scoreJsonMatch[0]);
           score = Math.max(0, Math.min(100, scoreResult.score || 100));
           
-          // 詳細を構築
           const deductions = scoreResult.deductions || [];
           if (deductions.length > 0) {
             const deductionLines = deductions.map((d: { rule: string; points: number; reason: string }) => 
@@ -658,11 +696,10 @@ ${formattedContent}
         }
       } catch (scoreError) {
         console.error('Score calculation error:', scoreError);
-        // スコア計算に失敗しても日記は返す
       }
     }
 
-    // トークン使用量の合計をログ出力
+    // トークン使用量の合計
     const totalUsage: TokenUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
     for (const t of tokenUsages) {
       if (t.usage) {
@@ -673,7 +710,6 @@ ${formattedContent}
     }
     console.log('Total token usage:', JSON.stringify(totalUsage));
 
-    // レスポンスを構築
     const responseData: {
       formatted_content: string;
       summary: string;
@@ -687,18 +723,15 @@ ${formattedContent}
       summary,
     };
 
-    // スコアがあれば追加
     if (score !== undefined) {
       responseData.score = score;
       responseData.score_details = scoreDetails;
     }
 
-    // 時刻更新があれば追加
     if (timeUpdates.length > 0) {
       responseData.time_updates = timeUpdates;
     }
 
-    // 質問があれば追加
     if (questions.length > 0) {
       responseData.needs_clarification = true;
       responseData.questions = questions;

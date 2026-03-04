@@ -2,21 +2,25 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, User, LogOut, Tag, Sparkles, Target, ChevronRight, Plug } from 'lucide-react';
+import { ChevronLeft, User, LogOut, Tag, Sparkles, Target, ChevronRight, Plug, Bot, Settings2 } from 'lucide-react';
 import { AISettingsSection } from '@/components/settings/AISettingsSection';
 import { ScoreSettingsSection } from '@/components/settings/ScoreSettingsSection';
 import { TagManagementSection } from '@/components/settings/TagManagementSection';
 import { McpSettingsSection } from '@/components/settings/McpSettingsSection';
+import { AIModelManagementSection } from '@/components/settings/AIModelManagementSection';
+import { AIFeatureSettingsSection } from '@/components/settings/AIFeatureSettingsSection';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { AppSplash } from '@/components/common/AppSplash';
 
-type SettingsSection = 'tags' | 'score' | 'ai' | 'mcp' | 'account';
+type SettingsSection = 'tags' | 'score' | 'ai' | 'models' | 'features' | 'mcp' | 'account';
 
 const SECTIONS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
   { id: 'tags', label: 'タグ管理', icon: Tag },
+  { id: 'models', label: '生成AIモデル管理', icon: Bot },
+  { id: 'features', label: '処理別AI設定', icon: Settings2 },
+  { id: 'ai', label: '生成AI設定 (レガシー)', icon: Sparkles },
   { id: 'score', label: '今日の得点', icon: Target },
-  { id: 'ai', label: '生成AI設定', icon: Sparkles },
   { id: 'mcp', label: 'MCP連携', icon: Plug },
   { id: 'account', label: 'アカウント', icon: User },
 ];
@@ -26,7 +30,6 @@ export default function Settings() {
   const { user, loading, signOut } = useAuth();
   const isMobile = useIsMobile();
   const [activeSection, setActiveSection] = useState<SettingsSection>('tags');
-  // モバイル: サイドバーを表示 or コンテンツを表示
   const [showContent, setShowContent] = useState(false);
 
   useEffect(() => {
@@ -59,7 +62,6 @@ export default function Settings() {
 
   const isAnonymous = user.is_anonymous;
 
-  // サイドバーナビゲーション
   const renderSidebar = () => (
     <nav className="space-y-1">
       {SECTIONS.map((section) => {
@@ -87,7 +89,6 @@ export default function Settings() {
     </nav>
   );
 
-  // コンテンツエリア
   const renderContent = () => {
     switch (activeSection) {
       case 'tags':
@@ -100,6 +101,10 @@ export default function Settings() {
             <TagManagementSection />
           </section>
         );
+      case 'models':
+        return <AIModelManagementSection />;
+      case 'features':
+        return <AIFeatureSettingsSection />;
       case 'score':
         return <ScoreSettingsSection />;
       case 'ai':
@@ -153,7 +158,6 @@ export default function Settings() {
     }
   };
 
-  // モバイル: メニューとコンテンツを切り替え
   if (isMobile) {
     return (
       <div className="min-h-screen flow-gradient">
@@ -189,7 +193,6 @@ export default function Settings() {
     );
   }
 
-  // デスクトップ: サイドバー + コンテンツ
   return (
     <div className="min-h-screen flow-gradient">
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b border-border">
@@ -207,14 +210,12 @@ export default function Settings() {
 
       <main className="container max-w-4xl mx-auto px-4 py-8">
         <div className="flex gap-8">
-          {/* サイドバー */}
           <aside className="w-56 flex-shrink-0">
             <div className="sticky top-24">
               {renderSidebar()}
             </div>
           </aside>
 
-          {/* コンテンツ */}
           <div className="flex-1 min-w-0">
             {renderContent()}
           </div>

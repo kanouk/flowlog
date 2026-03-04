@@ -15,6 +15,16 @@ interface AISettings {
   custom_summarize_prompt: string | null;
 }
 
+interface FeatureAIConfig {
+  feature_key: string;
+  enabled: boolean;
+  system_prompt: string | null;
+  user_prompt_template: string | null;
+  provider: string | null;
+  model_name: string | null;
+  api_key: string | null;
+}
+
 interface UrlMetadata {
   url: string;
   title: string;
@@ -137,21 +147,55 @@ async function callLovableAI(model: string, systemPrompt: string, userPrompt: st
   return data.choices?.[0]?.message?.content || '';
 }
 
-// サポートされていないドメインのリスト
+// AI call with feature config > legacy > Lovable default
+async function callAIWithConfig(
+  featureConfig: FeatureAIConfig | null,
+  legacySettings: AISettings | null,
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<string> {
+  // 1. New feature config
+  if (featureConfig?.provider && featureConfig?.model_name && featureConfig?.api_key) {
+    switch (featureConfig.provider) {
+      case 'openai':
+        return callOpenAI(featureConfig.api_key, featureConfig.model_name, systemPrompt, userPrompt);
+      case 'anthropic':
+        return callAnthropic(featureConfig.api_key, featureConfig.model_name, systemPrompt, userPrompt);
+      case 'google':
+        return callGoogle(featureConfig.api_key, featureConfig.model_name, systemPrompt, userPrompt);
+    }
+  }
+
+  // 2. Legacy
+  if (legacySettings) {
+    const provider = legacySettings.selected_provider;
+    const model = legacySettings.selected_model;
+    switch (provider) {
+      case 'openai':
+        if (legacySettings.openai_api_key) return callOpenAI(legacySettings.openai_api_key, model, systemPrompt, userPrompt);
+        break;
+      case 'anthropic':
+        if (legacySettings.anthropic_api_key) return callAnthropic(legacySettings.anthropic_api_key, model, systemPrompt, userPrompt);
+        break;
+      case 'google':
+        if (legacySettings.google_api_key) return callGoogle(legacySettings.google_api_key, model, systemPrompt, userPrompt);
+        break;
+    }
+  }
+
+  // 3. Lovable default
+  return callLovableAI(legacySettings?.selected_model || 'google/gemini-3-flash-preview', systemPrompt, userPrompt);
+}
+
+// Unsupported domains
 const UNSUPPORTED_DOMAINS = [
-  'x.com',
-  'twitter.com',
-  'instagram.com',
-  'facebook.com',
-  'linkedin.com',
-  'tiktok.com',
+  'x.com', 'twitter.com', 'instagram.com', 'facebook.com', 'linkedin.com', 'tiktok.com',
 ];
 
 function isUnsupportedUrl(url: string): { unsupported: boolean; domain?: string } {
   try {
     const parsedUrl = new URL(url.startsWith('http') ? url : `https://${url}`);
     const hostname = parsedUrl.hostname.replace(/^www\./, '');
-    
     for (const domain of UNSUPPORTED_DOMAINS) {
       if (hostname === domain || hostname.endsWith(`.${domain}`)) {
         return { unsupported: true, domain };
@@ -169,13 +213,11 @@ async function fetchWithFirecrawl(url: string): Promise<{ markdown: string; titl
     throw new Error('Firecrawlコネクタが設定されていません');
   }
 
-  // Format URL
   let formattedUrl = url.trim();
   if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
     formattedUrl = `https://${formattedUrl}`;
   }
 
-  // Check for unsupported domains
   const { unsupported, domain } = isUnsupportedUrl(formattedUrl);
   if (unsupported) {
     throw new Error(`UNSUPPORTED_SITE:${domain}`);
@@ -200,7 +242,6 @@ async function fetchWithFirecrawl(url: string): Promise<{ markdown: string; titl
 
   if (!response.ok) {
     console.error('Firecrawl API error:', data);
-    // Handle Firecrawl's unsupported site error
     if (data.error && data.error.includes('not currently supported')) {
       throw new Error('UNSUPPORTED_SITE:このサイト');
     }
@@ -239,7 +280,6 @@ serve(async (req) => {
       );
     }
 
-    // Get user's AI settings
     const authHeader = req.headers.get('Authorization');
     let aiSettings: AISettings | null = null;
     let userId: string | null = null;
@@ -247,6 +287,8 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+
+    const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
     if (authHeader) {
       const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -276,28 +318,31 @@ serve(async (req) => {
       );
     }
 
-    // Default to Lovable AI
-    const provider = aiSettings?.selected_provider || 'lovable';
-    const model = aiSettings?.selected_model || 'google/gemini-3-flash-preview';
+    // Get feature config for url_summary
+    let featureConfig: FeatureAIConfig | null = null;
+    try {
+      const { data } = await serviceClient.rpc('get_feature_ai_config', {
+        p_user_id: userId,
+        p_feature_key: 'url_summary',
+      });
+      if (data && (data as unknown[]).length > 0) {
+        featureConfig = (data as unknown[])[0] as FeatureAIConfig;
+      }
+    } catch { /* ignore */ }
 
     console.log('Summarizing URL:', url);
-    console.log('Provider:', provider);
-    console.log('Model:', model);
 
-    // Fetch page content with Firecrawl
     const { markdown, title } = await fetchWithFirecrawl(url);
 
     if (!markdown || markdown.trim().length === 0) {
       throw new Error('ページの内容が空です');
     }
 
-    // Truncate content if too long (max ~8000 chars to stay within token limits)
     const maxContentLength = 8000;
     const truncatedContent = markdown.length > maxContentLength 
       ? markdown.substring(0, maxContentLength) + '\n\n... (以下省略)'
       : markdown;
 
-    // Default system prompt for summarization
     const defaultSummarizePrompt = `あなたはウェブページの内容を簡潔にまとめるアシスタントです。
 以下のルールに従ってください：
 1. ページの主要な内容を日本語で3-5行にまとめる
@@ -307,8 +352,8 @@ serve(async (req) => {
 5. 箇条書きは使わず、自然な文章でまとめる
 6. マークダウン記法は使わず、プレーンテキストで出力する`;
 
-    // Use custom prompt if set, otherwise use default
-    const systemPrompt = aiSettings?.custom_summarize_prompt || defaultSummarizePrompt;
+    // System prompt: feature config > legacy > default
+    const systemPrompt = featureConfig?.system_prompt || aiSettings?.custom_summarize_prompt || defaultSummarizePrompt;
 
     const userPrompt = `以下のウェブページの内容を要約してください：
 
@@ -322,32 +367,7 @@ ${truncatedContent}`;
     let summary: string;
 
     try {
-      switch (provider) {
-        case 'openai':
-          if (!aiSettings?.openai_api_key) {
-            throw new Error('OpenAI APIキーが設定されていません');
-          }
-          summary = await callOpenAI(aiSettings.openai_api_key, model, systemPrompt, userPrompt);
-          break;
-        
-        case 'anthropic':
-          if (!aiSettings?.anthropic_api_key) {
-            throw new Error('Anthropic APIキーが設定されていません');
-          }
-          summary = await callAnthropic(aiSettings.anthropic_api_key, model, systemPrompt, userPrompt);
-          break;
-        
-        case 'google':
-          if (!aiSettings?.google_api_key) {
-            throw new Error('Google APIキーが設定されていません');
-          }
-          summary = await callGoogle(aiSettings.google_api_key, model, systemPrompt, userPrompt);
-          break;
-        
-        default:
-          // Lovable AI (default)
-          summary = await callLovableAI(model, systemPrompt, userPrompt);
-      }
+      summary = await callAIWithConfig(featureConfig, aiSettings, systemPrompt, userPrompt);
     } catch (error) {
       if (error instanceof Error) {
         if (error.message === 'RATE_LIMIT') {
@@ -370,7 +390,6 @@ ${truncatedContent}`;
       throw new Error('要約の生成に失敗しました');
     }
 
-    // Update block with url_metadata
     const urlMetadata: UrlMetadata = {
       url,
       title,
@@ -378,9 +397,7 @@ ${truncatedContent}`;
       fetched_at: new Date().toISOString(),
     };
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
-    const { error: updateError } = await supabaseAdmin
+    const { error: updateError } = await serviceClient
       .from('blocks')
       .update({ url_metadata: urlMetadata })
       .eq('id', blockId)
@@ -404,7 +421,6 @@ ${truncatedContent}`;
   } catch (error) {
     console.error('Error in summarize-url function:', error);
     
-    // Handle unsupported site error with user-friendly message
     if (error instanceof Error && error.message.startsWith('UNSUPPORTED_SITE:')) {
       const site = error.message.replace('UNSUPPORTED_SITE:', '');
       const errorMetadata: UrlMetadata = {
