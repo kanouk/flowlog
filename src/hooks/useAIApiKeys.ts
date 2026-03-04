@@ -39,7 +39,7 @@ export function useAIApiKeys() {
       return;
     }
     try {
-      const { data, error } = await supabase.rpc('get_user_ai_api_keys_safe');
+      const { data, error } = await (supabase.rpc as any)('get_user_ai_api_keys_safe');
       if (error) throw error;
       setKeys((data as unknown as AIApiKeySafe[]) || []);
     } catch (error) {
