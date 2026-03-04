@@ -497,7 +497,7 @@ export function AIModelManagementSection() {
                       <SelectValue placeholder="APIキーを選択..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">未設定</SelectItem>
+                      <SelectItem value="__none__">未設定</SelectItem>
                       {keysForProvider(editingModel?.provider || form.provider).map((k) => (
                         <SelectItem key={k.id} value={k.id}>
                           {k.name} ({k.key_hint})
