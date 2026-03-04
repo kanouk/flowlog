@@ -71,6 +71,7 @@ function ApiKeyManagementSection() {
     setEditingKey(null);
     setForm(EMPTY_KEY_FORM);
     setShowApiKey(false);
+    setTestResults(prev => { const next = {...prev}; delete next['key-dialog']; return next; });
     setDialogOpen(true);
   };
 
@@ -78,6 +79,7 @@ function ApiKeyManagementSection() {
     setEditingKey(key);
     setForm({ provider: key.provider, name: key.name, api_key: '' });
     setShowApiKey(false);
+    setTestResults(prev => { const next = {...prev}; delete next['key-dialog']; return next; });
     setDialogOpen(true);
   };
 
