@@ -1,34 +1,28 @@
 
-# APIキーテーブル・カラム欠落の修正
 
-## 問題
-前回のマイグレーションに `user_ai_api_keys` テーブル作成と `user_ai_models` への `api_key_id` カラム追加が含まれていなかった。RPCだけが更新され、参照先が存在しない状態。
+# 検索対象に「あとで読む」の要約文を追加
 
-## 修正内容
+## 概要
+現在ブロック検索は `content` カラムのみを対象としているが、Read Later ブロックの URL 要約（`url_metadata` JSONB 内の `summary` フィールド）も検索対象に含める。
 
-### 新規マイグレーション1本で以下を実行:
+## 変更内容
 
-1. **`user_ai_api_keys` テーブル作成**
-   - `id`, `user_id`, `provider`, `name`, `api_key`, `created_at`, `updated_at`
-   - UNIQUE(`user_id`, `provider`, `name`)
-   - RLS有効化 + auth.uid() = user_id の CRUD ポリシー
+### `src/hooks/useSearch.ts`
+- ブロック検索クエリの `select` に `url_metadata` を追加
+- フィルタ条件を `.ilike('content', ...)` 単体から `.or()` に変更し、`url_metadata->summary` の ILIKE 検索を追加：
+  ```
+  .or(`content.ilike.%${q}%,url_metadata->>summary.ilike.%${q}%`)
+  ```
+- `BlockSearchResult` インターフェースに `url_metadata` フィールドを追加
 
-2. **`user_ai_models` 変更**
-   - `api_key_id uuid REFERENCES user_ai_api_keys(id) ON DELETE SET NULL` を追加
-   - 既存の `api_key` カラムは残す（データ移行のため）
-   - 既存データの TRUNCATE（ユーザー許可済み）
-   - `api_key` カラムを DROP
+### `src/components/search/SearchResults.tsx`
+- Read Later ブロックの表示テキストに、`content` が空または URL のみの場合は `url_metadata.summary` をフォールバック表示
+- 要約文中のキーワードもハイライト対象にする
 
-3. **`get_user_ai_api_keys_safe()` RPC 新規作成**
-   - `api_key` を隠して `key_hint`（末尾4文字）を返す
+### ファイル一覧
 
-4. **`get_feature_ai_config()` RPC 更新**
-   - `user_ai_api_keys` を JOIN して `api_key` を解決するように変更
-
-5. **`updated_at` トリガー追加**
-   - `user_ai_api_keys` に `update_updated_at_column` トリガーを設定
-
-## 変更対象ファイル
-| ファイル | 変更 |
+| File | Change |
 |---|---|
-| 新規マイグレーション SQL | テーブル作成、カラム追加/削除、RPC作成/更新 |
+| `src/hooks/useSearch.ts` | 検索条件に `url_metadata->>summary` を追加、select に `url_metadata` 追加 |
+| `src/components/search/SearchResults.tsx` | Read Later ブロックで要約テキストを表示 |
+

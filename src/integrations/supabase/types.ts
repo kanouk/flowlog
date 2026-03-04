@@ -217,6 +217,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_ai_api_keys: {
+        Row: {
+          api_key: string
+          created_at: string
+          id: string
+          name: string
+          provider: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          api_key: string
+          created_at?: string
+          id?: string
+          name: string
+          provider: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          api_key?: string
+          created_at?: string
+          id?: string
+          name?: string
+          provider?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_ai_feature_settings: {
         Row: {
           assigned_model_id: string | null
@@ -263,7 +293,7 @@ export type Database = {
       }
       user_ai_models: {
         Row: {
-          api_key: string | null
+          api_key_id: string | null
           created_at: string
           display_name: string
           id: string
@@ -276,7 +306,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          api_key?: string | null
+          api_key_id?: string | null
           created_at?: string
           display_name: string
           id?: string
@@ -289,7 +319,7 @@ export type Database = {
           user_id: string
         }
         Update: {
-          api_key?: string | null
+          api_key_id?: string | null
           created_at?: string
           display_name?: string
           id?: string
@@ -301,7 +331,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_ai_models_api_key_id_fkey"
+            columns: ["api_key_id"]
+            isOneToOne: false
+            referencedRelation: "user_ai_api_keys"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_ai_settings: {
         Row: {
@@ -396,6 +434,18 @@ export type Database = {
           provider: string
           system_prompt: string
           user_prompt_template: string
+        }[]
+      }
+      get_user_ai_api_keys_safe: {
+        Args: never
+        Returns: {
+          created_at: string
+          id: string
+          key_hint: string
+          name: string
+          provider: string
+          updated_at: string
+          user_id: string
         }[]
       }
       get_user_ai_models_safe: {
