@@ -30,18 +30,6 @@ interface Block {
   is_done?: boolean;
 }
 
-interface AISettings {
-  openai_api_key: string | null;
-  anthropic_api_key: string | null;
-  google_api_key: string | null;
-  selected_provider: string;
-  selected_model: string;
-  custom_system_prompt: string | null;
-  // Score feature
-  score_enabled: boolean;
-  behavior_rules: string | null;
-}
-
 interface FeatureAIConfig {
   feature_key: string;
   enabled: boolean;
@@ -217,14 +205,13 @@ async function callLovableAI(model: string, systemPrompt: string, userPrompt: st
   return { text: data.choices?.[0]?.message?.content || '', usage };
 }
 
-// AI呼び出し - feature config or legacy settings
+// AI呼び出し - feature config or Lovable AI default
 async function callAIWithConfig(
   featureConfig: FeatureAIConfig | null,
-  legacySettings: AISettings | null,
   systemPrompt: string,
   userPrompt: string,
 ): Promise<AIResult> {
-  // 1. New feature config with assigned model
+  // 1. Feature config with assigned model + API key
   if (featureConfig?.provider && featureConfig?.model_name && featureConfig?.api_key) {
     switch (featureConfig.provider) {
       case 'openai':
@@ -236,26 +223,8 @@ async function callAIWithConfig(
     }
   }
 
-  // 2. Legacy settings fallback
-  if (legacySettings) {
-    const provider = legacySettings.selected_provider;
-    const model = legacySettings.selected_model;
-    switch (provider) {
-      case 'openai':
-        if (legacySettings.openai_api_key) return callOpenAI(legacySettings.openai_api_key, model, systemPrompt, userPrompt);
-        break;
-      case 'anthropic':
-        if (legacySettings.anthropic_api_key) return callAnthropic(legacySettings.anthropic_api_key, model, systemPrompt, userPrompt);
-        break;
-      case 'google':
-        if (legacySettings.google_api_key) return callGoogle(legacySettings.google_api_key, model, systemPrompt, userPrompt);
-        break;
-    }
-  }
-
-  // 3. Lovable AI default
-  const defaultModel = legacySettings?.selected_model || 'google/gemini-2.5-flash';
-  return callLovableAI(defaultModel, systemPrompt, userPrompt);
+  // 2. Lovable AI default
+  return callLovableAI('google/gemini-2.5-flash', systemPrompt, userPrompt);
 }
 
 // Fetch feature AI config via RPC
@@ -385,7 +354,6 @@ serve(async (req) => {
     }
 
     const authHeader = req.headers.get('Authorization');
-    let aiSettings: AISettings | null = null;
     let supabase: ReturnType<typeof createClient> | null = null;
     let userId: string | null = null;
 
@@ -404,15 +372,6 @@ serve(async (req) => {
       
       if (user) {
         userId = user.id;
-        const { data: settings } = await supabase
-          .from('user_ai_settings')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        
-        if (settings) {
-          aiSettings = settings as AISettings;
-        }
       }
     }
 
@@ -449,7 +408,7 @@ JSON形式で回答してください。`;
     const tokenUsages: { phase: string; usage: TokenUsage | null }[] = [];
 
     try {
-      const timeAnalysisResult = await callAIWithConfig(timeConfig, aiSettings, timeSystemPrompt, timeAnalysisPrompt);
+      const timeAnalysisResult = await callAIWithConfig(timeConfig, timeSystemPrompt, timeAnalysisPrompt);
       tokenUsages.push({ phase: 'Phase 1 (Time inference)', usage: timeAnalysisResult.usage });
       console.log('Phase 1 token usage:', JSON.stringify(timeAnalysisResult.usage));
       
@@ -568,8 +527,8 @@ JSON形式で回答してください。`;
 
 出力はMarkdown形式で返してください。`;
 
-    // Use custom prompt: feature config > legacy settings > default
-    const diarySystemPrompt = diaryConfig?.system_prompt || aiSettings?.custom_system_prompt || DEFAULT_SYSTEM_PROMPT;
+    // Use custom prompt: feature config > default
+    const diarySystemPrompt = diaryConfig?.system_prompt || DEFAULT_SYSTEM_PROMPT;
 
     const userPrompt = `以下は${date}のログです。整形してください：
 
@@ -581,7 +540,7 @@ ${blocksText}`;
     let formattedContent: string;
 
     try {
-      const formatResult = await callAIWithConfig(diaryConfig, aiSettings, diarySystemPrompt, userPrompt);
+      const formatResult = await callAIWithConfig(diaryConfig, diarySystemPrompt, userPrompt);
       formattedContent = formatResult.text;
       tokenUsages.push({ phase: 'Phase 2 (Formatting)', usage: formatResult.usage });
       console.log('Phase 2 token usage:', JSON.stringify(formatResult.usage));
@@ -619,9 +578,9 @@ ${blocksText}`;
     let score: number | undefined;
     let scoreDetails: string | undefined;
 
-    // Determine if scoring is enabled: new config > legacy
-    const scoreEnabled = scoreConfig ? scoreConfig.enabled : (aiSettings?.score_enabled ?? false);
-    const behaviorRules = scoreConfig?.user_prompt_template || aiSettings?.behavior_rules;
+    // Determine if scoring is enabled from new config only
+    const scoreEnabled = scoreConfig?.enabled ?? false;
+    const behaviorRules = scoreConfig?.user_prompt_template;
 
     if (scoreEnabled && behaviorRules) {
       console.log('Phase 3: Scoring diary...');
@@ -673,7 +632,7 @@ ${formattedContent}
 上記の日記を行動規範と照らし合わせて、100点からの減点方式でスコアを算出してください。`;
 
       try {
-        const scoreAIResult = await callAIWithConfig(scoreConfig, aiSettings, scoreSystemPrompt, scoreUserPrompt);
+        const scoreAIResult = await callAIWithConfig(scoreConfig, scoreSystemPrompt, scoreUserPrompt);
         tokenUsages.push({ phase: 'Phase 3 (Scoring)', usage: scoreAIResult.usage });
         console.log('Phase 3 token usage:', JSON.stringify(scoreAIResult.usage));
         

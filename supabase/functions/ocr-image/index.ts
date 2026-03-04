@@ -85,25 +85,6 @@ serve(async (req) => {
       }
     } catch { /* ignore */ }
 
-    // Also get legacy settings for fallback
-    let legacyProvider: string | null = null;
-    let legacyModel: string | null = null;
-    let legacyApiKey: string | null = null;
-    try {
-      const { data: legacySettings } = await serviceClient
-        .from('user_ai_settings')
-        .select('selected_provider, selected_model, openai_api_key, anthropic_api_key, google_api_key')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (legacySettings) {
-        legacyProvider = legacySettings.selected_provider;
-        legacyModel = legacySettings.selected_model;
-        if (legacyProvider === 'openai') legacyApiKey = legacySettings.openai_api_key;
-        else if (legacyProvider === 'anthropic') legacyApiKey = legacySettings.anthropic_api_key;
-        else if (legacyProvider === 'google') legacyApiKey = legacySettings.google_api_key;
-      }
-    } catch { /* ignore */ }
-
     const DEFAULT_OCR_SYSTEM_PROMPT = "あなたは画像からテキストを抽出するOCRアシスタントです。画像内のテキストを正確に読み取り、原文のまま出力してください。レイアウトや改行もできるだけ再現してください。テキストがない画像の場合は、画像の内容を簡潔に日本語で説明してください。";
 
     const systemPrompt = featureConfig?.system_prompt || DEFAULT_OCR_SYSTEM_PROMPT;
@@ -125,19 +106,13 @@ serve(async (req) => {
     let useModel = 'google/gemini-2.5-flash';
     let useApiKey: string | null = null;
 
-    // 1. Feature config
+    // Feature config with assigned model + API key
     if (featureConfig?.provider && featureConfig?.model_name && featureConfig?.api_key) {
       useProvider = featureConfig.provider;
       useModel = featureConfig.model_name;
       useApiKey = featureConfig.api_key;
     }
-    // 2. Legacy settings
-    else if (legacyProvider && legacyProvider !== 'lovable' && legacyApiKey) {
-      useProvider = legacyProvider;
-      useModel = legacyModel || 'gpt-4o';
-      useApiKey = legacyApiKey;
-    }
-    // 3. Default: Lovable AI
+    // Default: Lovable AI
 
     let aiResponse: Response;
 

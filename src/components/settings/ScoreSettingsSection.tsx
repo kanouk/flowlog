@@ -8,9 +8,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { useAISettings } from '@/hooks/useAISettings';
+import { useAIFeatureSettings } from '@/hooks/useAIFeatureSettings';
 import { Trophy, ChevronDown, Loader2, Check, Info } from 'lucide-react';
-import { toast } from 'sonner';
 
 const DEFAULT_BEHAVIOR_RULES = `- お酒を飲まない (-20点)
 - 22時までに就寝する (-15点)
@@ -19,37 +18,48 @@ const DEFAULT_BEHAVIOR_RULES = `- お酒を飲まない (-20点)
 - 毎日運動する (-15点)`;
 
 export function ScoreSettingsSection() {
-  const { settings, loading, saving, saveSettings } = useAISettings();
+  const { getSettingForFeature, upsertSetting, loading, saving } = useAIFeatureSettings();
   
   const [scoreEnabled, setScoreEnabled] = useState(false);
   const [behaviorRules, setBehaviorRules] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  
+  // Track original values for change detection
+  const [origEnabled, setOrigEnabled] = useState(false);
+  const [origRules, setOrigRules] = useState('');
 
   useEffect(() => {
     if (!loading) {
-      setScoreEnabled(settings.score_enabled);
-      setBehaviorRules(settings.behavior_rules || '');
-      // Auto-open if enabled
-      if (settings.score_enabled) {
+      const scoreSetting = getSettingForFeature('score_evaluation');
+      const enabled = scoreSetting?.enabled ?? false;
+      const rules = scoreSetting?.user_prompt_template || '';
+      
+      setScoreEnabled(enabled);
+      setBehaviorRules(rules);
+      setOrigEnabled(enabled);
+      setOrigRules(rules);
+      
+      if (enabled) {
         setIsOpen(true);
       }
     }
-  }, [loading, settings]);
+  }, [loading, getSettingForFeature]);
 
   useEffect(() => {
-    const enabledChanged = scoreEnabled !== settings.score_enabled;
-    const rulesChanged = behaviorRules !== (settings.behavior_rules || '');
+    const enabledChanged = scoreEnabled !== origEnabled;
+    const rulesChanged = behaviorRules !== origRules;
     setHasChanges(enabledChanged || rulesChanged);
-  }, [scoreEnabled, behaviorRules, settings]);
+  }, [scoreEnabled, behaviorRules, origEnabled, origRules]);
 
   const handleSave = async () => {
-    const success = await saveSettings({
-      score_enabled: scoreEnabled,
-      behavior_rules: behaviorRules || null,
+    const success = await upsertSetting('score_evaluation', {
+      enabled: scoreEnabled,
+      user_prompt_template: behaviorRules || null,
     });
     if (success) {
-      toast.success('得点設定を保存しました');
+      setOrigEnabled(scoreEnabled);
+      setOrigRules(behaviorRules);
     }
   };
 

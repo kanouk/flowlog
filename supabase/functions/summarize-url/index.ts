@@ -6,15 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface AISettings {
-  openai_api_key: string | null;
-  anthropic_api_key: string | null;
-  google_api_key: string | null;
-  selected_provider: string;
-  selected_model: string;
-  custom_summarize_prompt: string | null;
-}
-
 interface FeatureAIConfig {
   feature_key: string;
   enabled: boolean;
@@ -147,14 +138,13 @@ async function callLovableAI(model: string, systemPrompt: string, userPrompt: st
   return data.choices?.[0]?.message?.content || '';
 }
 
-// AI call with feature config > legacy > Lovable default
+// AI call: feature config > Lovable AI default
 async function callAIWithConfig(
   featureConfig: FeatureAIConfig | null,
-  legacySettings: AISettings | null,
   systemPrompt: string,
   userPrompt: string,
 ): Promise<string> {
-  // 1. New feature config
+  // 1. Feature config with assigned model + API key
   if (featureConfig?.provider && featureConfig?.model_name && featureConfig?.api_key) {
     switch (featureConfig.provider) {
       case 'openai':
@@ -166,25 +156,8 @@ async function callAIWithConfig(
     }
   }
 
-  // 2. Legacy
-  if (legacySettings) {
-    const provider = legacySettings.selected_provider;
-    const model = legacySettings.selected_model;
-    switch (provider) {
-      case 'openai':
-        if (legacySettings.openai_api_key) return callOpenAI(legacySettings.openai_api_key, model, systemPrompt, userPrompt);
-        break;
-      case 'anthropic':
-        if (legacySettings.anthropic_api_key) return callAnthropic(legacySettings.anthropic_api_key, model, systemPrompt, userPrompt);
-        break;
-      case 'google':
-        if (legacySettings.google_api_key) return callGoogle(legacySettings.google_api_key, model, systemPrompt, userPrompt);
-        break;
-    }
-  }
-
-  // 3. Lovable default
-  return callLovableAI(legacySettings?.selected_model || 'google/gemini-3-flash-preview', systemPrompt, userPrompt);
+  // 2. Lovable AI default
+  return callLovableAI('google/gemini-2.5-flash', systemPrompt, userPrompt);
 }
 
 // Unsupported domains
@@ -281,7 +254,6 @@ serve(async (req) => {
     }
 
     const authHeader = req.headers.get('Authorization');
-    let aiSettings: AISettings | null = null;
     let userId: string | null = null;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -299,15 +271,6 @@ serve(async (req) => {
       
       if (user) {
         userId = user.id;
-        const { data: settings } = await supabase
-          .from('user_ai_settings')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        
-        if (settings) {
-          aiSettings = settings as AISettings;
-        }
       }
     }
 
@@ -352,8 +315,8 @@ serve(async (req) => {
 5. 箇条書きは使わず、自然な文章でまとめる
 6. マークダウン記法は使わず、プレーンテキストで出力する`;
 
-    // System prompt: feature config > legacy > default
-    const systemPrompt = featureConfig?.system_prompt || aiSettings?.custom_summarize_prompt || defaultSummarizePrompt;
+    // System prompt: feature config > default
+    const systemPrompt = featureConfig?.system_prompt || defaultSummarizePrompt;
 
     const userPrompt = `以下のウェブページの内容を要約してください：
 
@@ -367,7 +330,7 @@ ${truncatedContent}`;
     let summary: string;
 
     try {
-      summary = await callAIWithConfig(featureConfig, aiSettings, systemPrompt, userPrompt);
+      summary = await callAIWithConfig(featureConfig, systemPrompt, userPrompt);
     } catch (error) {
       if (error instanceof Error) {
         if (error.message === 'RATE_LIMIT') {
