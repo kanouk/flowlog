@@ -401,9 +401,10 @@ export type Database = {
       get_user_ai_models_safe: {
         Args: never
         Returns: {
+          api_key_id: string
+          api_key_name: string
           created_at: string
           display_name: string
-          has_api_key: boolean
           id: string
           is_active: boolean
           model_name: string
