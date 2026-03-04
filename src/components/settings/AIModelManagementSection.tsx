@@ -492,12 +492,12 @@ export function AIModelManagementSection() {
                     このプロバイダーのAPIキーが登録されていません。上の「APIキー管理」から先に登録してください。
                   </p>
                 ) : (
-                  <Select value={form.api_key_id} onValueChange={(v) => setForm(prev => ({ ...prev, api_key_id: v }))}>
+                  <Select value={form.api_key_id || '__none__'} onValueChange={(v) => setForm(prev => ({ ...prev, api_key_id: v === '__none__' ? '' : v }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="APIキーを選択..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">未設定</SelectItem>
+                      <SelectItem value="__none__">未設定</SelectItem>
                       {keysForProvider(editingModel?.provider || form.provider).map((k) => (
                         <SelectItem key={k.id} value={k.id}>
                           {k.name} ({k.key_hint})
