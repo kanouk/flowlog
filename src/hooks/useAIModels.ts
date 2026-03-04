@@ -11,7 +11,8 @@ export interface AIModelSafe {
   provider: AIModelProvider;
   display_name: string;
   model_name: string;
-  has_api_key: boolean;
+  api_key_id: string | null;
+  api_key_name: string | null;
   is_active: boolean;
   sort_order: number;
   note: string | null;
@@ -23,7 +24,7 @@ export interface AIModelInsert {
   provider: AIModelProvider;
   display_name: string;
   model_name: string;
-  api_key?: string;
+  api_key_id?: string | null;
   is_active?: boolean;
   sort_order?: number;
   note?: string;
@@ -32,7 +33,7 @@ export interface AIModelInsert {
 export interface AIModelUpdate {
   display_name?: string;
   model_name?: string;
-  api_key?: string | null;
+  api_key_id?: string | null;
   is_active?: boolean;
   sort_order?: number;
   note?: string | null;
@@ -75,7 +76,7 @@ export function useAIModels() {
         provider: input.provider,
         display_name: input.display_name,
         model_name: input.model_name,
-        api_key: input.api_key || null,
+        api_key_id: input.api_key_id || null,
         is_active: input.is_active ?? true,
         sort_order: input.sort_order ?? models.length,
         note: input.note || null,
@@ -103,8 +104,7 @@ export function useAIModels() {
       if (updates.is_active !== undefined) updateData.is_active = updates.is_active;
       if (updates.sort_order !== undefined) updateData.sort_order = updates.sort_order;
       if (updates.note !== undefined) updateData.note = updates.note;
-      // api_key: only include if explicitly provided (allow null to clear)
-      if (updates.api_key !== undefined) updateData.api_key = updates.api_key;
+      if (updates.api_key_id !== undefined) updateData.api_key_id = updates.api_key_id;
 
       const { error } = await supabase
         .from('user_ai_models')
@@ -146,18 +146,6 @@ export function useAIModels() {
     }
   };
 
-  const testConnection = async (provider: AIModelProvider, apiKey: string): Promise<{ success: boolean; message: string }> => {
-    try {
-      const { data, error } = await supabase.functions.invoke('test-ai-connection', {
-        body: { provider, api_key: apiKey },
-      });
-      if (error) return { success: false, message: error.message };
-      return { success: data.success, message: data.message };
-    } catch (err) {
-      return { success: false, message: err instanceof Error ? err.message : '接続テストに失敗しました' };
-    }
-  };
-
   const testModelById = async (modelId: string): Promise<{ success: boolean; message: string }> => {
     try {
       const { data, error } = await supabase.functions.invoke('test-ai-connection', {
@@ -167,6 +155,30 @@ export function useAIModels() {
       return { success: data.success, message: data.message };
     } catch (err) {
       return { success: false, message: err instanceof Error ? err.message : 'テストに失敗しました' };
+    }
+  };
+
+  const testApiKeyById = async (apiKeyId: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('test-ai-connection', {
+        body: { api_key_id: apiKeyId },
+      });
+      if (error) return { success: false, message: error.message };
+      return { success: data.success, message: data.message };
+    } catch (err) {
+      return { success: false, message: err instanceof Error ? err.message : 'テストに失敗しました' };
+    }
+  };
+
+  const testConnection = async (provider: AIModelProvider, apiKey: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('test-ai-connection', {
+        body: { provider, api_key: apiKey },
+      });
+      if (error) return { success: false, message: error.message };
+      return { success: data.success, message: data.message };
+    } catch (err) {
+      return { success: false, message: err instanceof Error ? err.message : '接続テストに失敗しました' };
     }
   };
 
@@ -182,6 +194,7 @@ export function useAIModels() {
     deleteModel,
     testConnection,
     testModelById,
+    testApiKeyById,
     refetch: fetchModels,
   };
 }
