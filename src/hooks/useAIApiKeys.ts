@@ -110,8 +110,7 @@ export function useAIApiKeys() {
     if (!user) return false;
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('user_ai_api_keys')
+      const { error } = await (supabase.from as any)('user_ai_api_keys')
         .delete()
         .eq('id', id)
         .eq('user_id', user.id);
