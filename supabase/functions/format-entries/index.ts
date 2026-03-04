@@ -227,19 +227,59 @@ async function callAIWithConfig(
   return callLovableAI('google/gemini-2.5-flash', systemPrompt, userPrompt);
 }
 
-// Fetch feature AI config via RPC
+// Fetch feature AI config via direct server-side queries (no RPC, no key exposure)
 async function getFeatureConfig(
   serviceClient: ReturnType<typeof createClient>,
   userId: string,
   featureKey: string,
 ): Promise<FeatureAIConfig | null> {
   try {
-    const { data, error } = await serviceClient.rpc('get_feature_ai_config', {
-      p_user_id: userId,
-      p_feature_key: featureKey,
-    });
-    if (error || !data || (data as unknown[]).length === 0) return null;
-    return (data as unknown[])[0] as FeatureAIConfig;
+    // 1. Get feature settings
+    const { data: fs, error: fsError } = await serviceClient
+      .from('user_ai_feature_settings')
+      .select('feature_key, enabled, system_prompt, user_prompt_template, assigned_model_id')
+      .eq('user_id', userId)
+      .eq('feature_key', featureKey)
+      .single();
+    if (fsError || !fs) return null;
+
+    const config: FeatureAIConfig = {
+      feature_key: fs.feature_key,
+      enabled: fs.enabled,
+      system_prompt: fs.system_prompt,
+      user_prompt_template: fs.user_prompt_template,
+      provider: null,
+      model_name: null,
+      api_key: null,
+    };
+
+    // 2. Get assigned model
+    if (fs.assigned_model_id) {
+      const { data: model } = await serviceClient
+        .from('user_ai_models')
+        .select('provider, model_name, api_key_id')
+        .eq('id', fs.assigned_model_id)
+        .eq('is_active', true)
+        .single();
+      if (model) {
+        config.provider = model.provider;
+        config.model_name = model.model_name;
+
+        // 3. Get API key (server-side only, never returned to client)
+        if (model.api_key_id) {
+          const { data: key } = await serviceClient
+            .from('user_ai_api_keys')
+            .select('api_key')
+            .eq('id', model.api_key_id)
+            .single();
+          if (key) {
+            config.api_key = key.api_key;
+          }
+        }
+      }
+    }
+
+    return config;
   } catch {
     return null;
   }

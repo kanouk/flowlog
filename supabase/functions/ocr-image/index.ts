@@ -72,16 +72,46 @@ serve(async (req) => {
       });
     }
 
-    // Get feature config for OCR
+    // Get feature config via direct server-side queries (no RPC)
     const serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
     let featureConfig: FeatureAIConfig | null = null;
     try {
-      const { data } = await serviceClient.rpc('get_feature_ai_config', {
-        p_user_id: user.id,
-        p_feature_key: 'ocr',
-      });
-      if (data && (data as unknown[]).length > 0) {
-        featureConfig = (data as unknown[])[0] as FeatureAIConfig;
+      const { data: fs } = await serviceClient
+        .from('user_ai_feature_settings')
+        .select('feature_key, enabled, system_prompt, user_prompt_template, assigned_model_id')
+        .eq('user_id', user.id)
+        .eq('feature_key', 'ocr')
+        .single();
+      if (fs) {
+        featureConfig = {
+          feature_key: fs.feature_key,
+          enabled: fs.enabled,
+          system_prompt: fs.system_prompt,
+          user_prompt_template: fs.user_prompt_template,
+          provider: null,
+          model_name: null,
+          api_key: null,
+        };
+        if (fs.assigned_model_id) {
+          const { data: model } = await serviceClient
+            .from('user_ai_models')
+            .select('provider, model_name, api_key_id')
+            .eq('id', fs.assigned_model_id)
+            .eq('is_active', true)
+            .single();
+          if (model) {
+            featureConfig.provider = model.provider;
+            featureConfig.model_name = model.model_name;
+            if (model.api_key_id) {
+              const { data: key } = await serviceClient
+                .from('user_ai_api_keys')
+                .select('api_key')
+                .eq('id', model.api_key_id)
+                .single();
+              if (key) featureConfig.api_key = key.api_key;
+            }
+          }
+        }
       }
     } catch { /* ignore */ }
 
