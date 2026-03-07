@@ -44,7 +44,7 @@ function formatDateAxis(dateStr: string) {
 export default function Analytics() {
   const navigate = useNavigate();
   const [days, setDays] = useState<PeriodDays>(30);
-  const { scoreData, categoryData, dailyActivity, streakInfo, isLoading } = useAnalytics(days);
+  const { scoreData, categoryData, dailyActivity, streakInfo, completionStats, isLoading } = useAnalytics(days);
 
   return (
     <div className="min-h-screen bg-background">
