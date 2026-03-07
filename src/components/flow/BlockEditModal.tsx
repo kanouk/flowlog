@@ -469,11 +469,64 @@ export function BlockEditModal({
           
           {/* タスク優先度セレクター */}
           {category === 'task' && (
-            <div className="mt-3">
+            <div className="mt-3 space-y-3">
               <PrioritySelector
                 value={priority}
                 onChange={setPriority}
               />
+              
+              {/* 期限設定 */}
+              <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-foreground">期限</span>
+                  {dueDate && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-muted-foreground"
+                      onClick={() => setDueDate(undefined)}
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      クリア
+                    </Button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="edit-due-all-day"
+                    checked={dueAllDay}
+                    onCheckedChange={(checked) => setDueAllDay(checked as boolean)}
+                  />
+                  <label htmlFor="edit-due-all-day" className="text-sm cursor-pointer">終日</label>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 px-3 text-sm">
+                        <Calendar className="h-3.5 w-3.5 mr-1.5" />
+                        {dueDate ? formatDateDisplay(dueDate) : '日付を選択'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={dueDate}
+                        onSelect={setDueDate}
+                        initialFocus
+                        className="pointer-events-auto"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {!dueAllDay && (
+                    <Input
+                      type="time"
+                      value={dueTime}
+                      onChange={(e) => setDueTime(e.target.value)}
+                      className="h-8 w-28 text-sm"
+                    />
+                  )}
+                </div>
+              </div>
             </div>
           )}
           
