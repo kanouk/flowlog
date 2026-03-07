@@ -103,6 +103,8 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       is_all_day: scheduleData?.is_all_day || false,
       priority: 0,
       extracted_text: null,
+      due_at: null,
+      due_all_day: false,
     };
     
     if (mode !== 'toNow' || isToday) {
