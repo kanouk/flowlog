@@ -66,7 +66,7 @@ function getCategoryLabel(category: string): string {
     event: '出来事',
     thought: 'メモ',
     task: 'タスク',
-    read_later: 'あとで読む',
+    read_later: 'あとで',
   };
   return labels[category] || category;
 }
