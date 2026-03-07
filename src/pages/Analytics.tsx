@@ -90,6 +90,24 @@ export default function Analytics() {
           </CardContent>
         </Card>
 
+        {/* Completion stats */}
+        {(completionStats.completedTasks > 0 || completionStats.readItems > 0) && (
+          <Card>
+            <CardContent className="py-4 flex items-center gap-6">
+              {completionStats.completedTasks > 0 && (
+                <div className="text-sm">
+                  ✅ 完了タスク: <span className="font-semibold">{completionStats.completedTasks}件</span>
+                </div>
+              )}
+              {completionStats.readItems > 0 && (
+                <div className="text-sm">
+                  📖 既読: <span className="font-semibold">{completionStats.readItems}件</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {isLoading ? (
           <p className="text-muted-foreground text-center py-12">読み込み中...</p>
         ) : (
