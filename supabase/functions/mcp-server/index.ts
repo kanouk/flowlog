@@ -923,7 +923,7 @@ const TOOLS = [
   },
   {
     name: "add_read_later",
-    description: "あとで読むリストにURLを追加します",
+    description: "あとでリストにURLを追加します",
     inputSchema: {
       type: "object",
       properties: {
