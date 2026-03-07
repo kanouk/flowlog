@@ -230,6 +230,8 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
           category: 'task',
           tag,
           priority,
+          due_at: dueData?.due_at,
+          due_all_day: dueData?.due_all_day,
         });
 
         if (savedBlock) {
