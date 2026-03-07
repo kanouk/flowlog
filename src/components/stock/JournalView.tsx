@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { parseDiarySections } from '@/lib/diaryParser';
 
 interface JournalViewProps {
   entries: Entry[];
