@@ -366,6 +366,16 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
       };
     }
 
+    // Task deadline
+    let dueData = undefined;
+    if (category === 'task' && dueDate) {
+      const dueAtStr = buildScheduleDateTime(dueDate, dueTime, dueAllDay);
+      dueData = {
+        due_at: dueAtStr,
+        due_all_day: dueAllDay,
+      };
+    }
+
     const submitCategory = category;
     const submitTag = tag;
     const submitPriority = category === 'task' ? priority : 0;
@@ -382,6 +392,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
       startTime,
       endDate,
       endTime,
+      dueDate,
+      dueTime,
+      dueAllDay,
     };
 
     submitLockedRef.current = true;
@@ -407,7 +420,8 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
           submitTag,
           scheduleData,
           submitPriority,
-          isBatch
+          isBatch,
+          dueData
         );
         if (!submitted) {
           restoreForm(submissionSnapshot);
