@@ -53,7 +53,7 @@ export function useAnalytics(days: PeriodDays) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('blocks')
-        .select('category, occurred_at')
+        .select('category, occurred_at, is_done, done_at')
         .gte('occurred_at', new Date(startDate + 'T00:00:00').toISOString());
 
       if (error) throw error;
