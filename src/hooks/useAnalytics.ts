@@ -140,11 +140,27 @@ export function useAnalytics(days: PeriodDays) {
     return Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
   })();
 
+  // Completion stats
+  const completionStats = (() => {
+    if (!blocksQuery.data) return { completedTasks: 0, readItems: 0 };
+    const startISO = new Date(startDate + 'T00:00:00').toISOString();
+    let completedTasks = 0;
+    let readItems = 0;
+    for (const b of blocksQuery.data) {
+      if (b.is_done && b.done_at && b.done_at >= startISO) {
+        if (b.category === 'task') completedTasks++;
+        if (b.category === 'read_later') readItems++;
+      }
+    }
+    return { completedTasks, readItems };
+  })();
+
   return {
     scoreData: scoreQuery.data ?? [],
     categoryData,
     dailyActivity,
     streakInfo,
+    completionStats,
     isLoading: scoreQuery.isLoading || blocksQuery.isLoading,
   };
 }
