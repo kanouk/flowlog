@@ -284,6 +284,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setEndDate(undefined);
     setStartTime('09:00');
     setEndTime('10:00');
+    setDueDate(undefined);
+    setDueTime('18:00');
+    setDueAllDay(true);
     setLastCategory('event');
     setLastTag(null);
 
