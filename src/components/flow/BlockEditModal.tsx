@@ -386,6 +386,13 @@ export function BlockEditModal({
         updates.priority = priority;
       }
       
+      // Deadline fields (only for tasks)
+      if (category === 'task') {
+        const newDueAt = dueDate ? buildScheduleDateTime(dueDate, dueTime, dueAllDay) : null;
+        if (newDueAt !== (block.due_at || null)) updates.due_at = newDueAt;
+        if (dueAllDay !== (block.due_all_day || false)) updates.due_all_day = dueAllDay;
+      }
+      
       // Extracted text
       if (extractedText !== (block.extracted_text || '')) {
         updates.extracted_text = extractedText || null;
