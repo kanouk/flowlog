@@ -49,7 +49,7 @@ export const CATEGORY_CONFIG: Record<BlockCategory, CategoryConfig> = {
     icon: CheckSquare,
   },
   read_later: { 
-    label: 'あとで読む', 
+    label: 'あとで', 
     color: 'text-green-600 dark:text-green-400', 
     bgColor: 'bg-green-100 dark:bg-green-900/30',
     borderColor: 'border-green-300 dark:border-green-700',
