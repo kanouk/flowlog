@@ -300,10 +300,10 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
             <Bookmark className="w-8 h-8 text-green-500" />
           </div>
           <p className="text-muted-foreground">
-            {tagFilter !== 'all' || readFilter !== 'all' ? '該当するものがありません' : 'あとで読むものがありません'}
+            {tagFilter !== 'all' || readFilter !== 'all' ? '該当するものがありません' : 'まだ何もありません'}
           </p>
           <p className="text-sm text-muted-foreground/70 mt-1">
-            Flowであとで読むを追加すると、ここに表示されます
+            Flowで「あとで」を追加すると、ここに表示されます
           </p>
         </div>
       ) : (
