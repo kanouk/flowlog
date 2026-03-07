@@ -28,7 +28,7 @@ const TAB_CONFIG: Record<DashboardTab, { label: string; icon: typeof PenLine; ac
   tasks: { label: 'タスク', icon: ListTodo, activeColor: 'text-orange-500', hoverColor: 'hover:text-orange-500' },
   schedule: { label: '予定', icon: CalendarClock, activeColor: 'text-cyan-500', hoverColor: 'hover:text-cyan-500' },
   memos: { label: 'メモ', icon: FileText, activeColor: 'text-purple-500', hoverColor: 'hover:text-purple-500' },
-  readLater: { label: 'あとで読む', icon: Bookmark, activeColor: 'text-green-500', hoverColor: 'hover:text-green-500' },
+  readLater: { label: 'あとで', icon: Bookmark, activeColor: 'text-green-500', hoverColor: 'hover:text-green-500' },
 };
 
 const TAB_DOT_COLORS: Record<DashboardTab, string> = {
