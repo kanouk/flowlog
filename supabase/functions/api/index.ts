@@ -235,9 +235,7 @@ async function addBlockHelper(
     entry = newEntry;
   }
   
-  const { data, error } = await supabase
-    .from("blocks")
-    .insert({
+  const insertData: Record<string, any> = {
       user_id: userId,
       entry_id: entry.id,
       category: block.category,
@@ -248,7 +246,13 @@ async function addBlockHelper(
       ends_at: block.ends_at,
       is_all_day: block.is_all_day || false,
       priority: block.priority || 0,
-    })
+    };
+  if (block.due_at !== undefined) insertData.due_at = block.due_at;
+  if (block.due_all_day !== undefined) insertData.due_all_day = block.due_all_day;
+
+  const { data, error } = await supabase
+    .from("blocks")
+    .insert(insertData)
     .select()
     .single();
   
