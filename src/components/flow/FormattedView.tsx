@@ -86,8 +86,8 @@ export function FormattedView({ entry, blocks, onUpdate }: FormattedViewProps) {
       },
       readLater: {
         icon: <Bookmark className="w-8 h-8 text-muted-foreground" />,
-        title: 'あとで読むものがありません',
-        desc: 'あとで読むカテゴリで記録すると、ここに表示されます',
+        title: 'まだ何もありません',
+        desc: '「あとで」カテゴリで記録すると、ここに表示されます',
       },
     };
     const msg = messages[viewMode];
