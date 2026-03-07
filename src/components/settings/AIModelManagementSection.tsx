@@ -56,7 +56,7 @@ const EMPTY_KEY_FORM: ApiKeyFormState = {
   api_key: '',
 };
 
-function ApiKeyManagementSection() {
+export function ApiKeyManagementSection() {
   const { keys, loading, saving, createKey, updateKey, deleteKey } = useAIApiKeys();
   const { testConnection, testApiKeyById } = useAIModels();
   const [dialogOpen, setDialogOpen] = useState(false);

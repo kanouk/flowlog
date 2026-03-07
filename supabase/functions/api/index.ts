@@ -417,6 +417,297 @@ app.get("/docs", (c) => {
   return c.json(docs);
 });
 
+// ===== OpenAPI 3.0.3 Specification =====
+app.get("/openapi.json", (c) => {
+  const baseUrl = `${supabaseUrl}/functions/v1/api`;
+  const spec = {
+    openapi: "3.0.3",
+    info: {
+      title: "FlowLog API",
+      description: "FlowLog REST API – 出来事・タスク・予定・メモ・あとで読むの管理",
+      version: "1.0.0",
+    },
+    servers: [{ url: baseUrl }],
+    security: [{ bearerAuth: [] }],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          description: "FlowLog設定画面で発行したAPIトークン",
+        },
+      },
+      schemas: {
+        Block: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            entry_id: { type: "string", format: "uuid" },
+            user_id: { type: "string", format: "uuid" },
+            category: { type: "string", enum: ["event", "task", "schedule", "thought", "read_later"] },
+            content: { type: "string", nullable: true },
+            tag: { type: "string", nullable: true },
+            priority: { type: "integer", nullable: true, minimum: 0, maximum: 3 },
+            is_done: { type: "boolean" },
+            done_at: { type: "string", format: "date-time", nullable: true },
+            occurred_at: { type: "string", format: "date-time" },
+            starts_at: { type: "string", format: "date-time", nullable: true },
+            ends_at: { type: "string", format: "date-time", nullable: true },
+            is_all_day: { type: "boolean", nullable: true },
+            due_at: { type: "string", format: "date-time", nullable: true },
+            due_all_day: { type: "boolean", nullable: true },
+            images: { type: "array", items: { type: "string" }, nullable: true },
+            url_metadata: { type: "object", nullable: true },
+            extracted_text: { type: "string", nullable: true },
+            created_at: { type: "string", format: "date-time" },
+          },
+        },
+        Entry: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            user_id: { type: "string", format: "uuid" },
+            date: { type: "string", format: "date" },
+            summary: { type: "string", nullable: true },
+            formatted_content: { type: "string", nullable: true },
+            score: { type: "integer", nullable: true },
+            score_details: { type: "string", nullable: true },
+            created_at: { type: "string", format: "date-time" },
+            updated_at: { type: "string", format: "date-time" },
+          },
+        },
+        SuccessListResponse: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", example: true },
+            data: { type: "array", items: { $ref: "#/components/schemas/Block" } },
+          },
+        },
+        SuccessCreateResponse: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", example: true },
+            data: {
+              type: "object",
+              properties: {
+                id: { type: "string", format: "uuid" },
+                message: { type: "string" },
+              },
+            },
+          },
+        },
+        SuccessMessageResponse: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", example: true },
+            message: { type: "string" },
+          },
+        },
+        ErrorResponse: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", example: false },
+            error: { type: "string" },
+            error_description: { type: "string" },
+          },
+        },
+      },
+      parameters: {
+        dateQuery: { name: "date", in: "query", schema: { type: "string", format: "date" }, description: "YYYY-MM-DD" },
+        startDateQuery: { name: "start_date", in: "query", schema: { type: "string", format: "date" } },
+        endDateQuery: { name: "end_date", in: "query", schema: { type: "string", format: "date" } },
+        tagQuery: { name: "tag", in: "query", schema: { type: "string" } },
+        limitQuery: { name: "limit", in: "query", schema: { type: "integer", default: 50 } },
+      },
+    },
+    paths: {
+      "/health": {
+        get: {
+          summary: "ヘルスチェック",
+          security: [],
+          responses: { "200": { description: "OK", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean" }, message: { type: "string" } } } } } } },
+        },
+      },
+      "/docs": {
+        get: {
+          summary: "APIドキュメント（JSON）",
+          security: [],
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/openapi.json": {
+        get: {
+          summary: "OpenAPI仕様",
+          security: [],
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/events": {
+        get: {
+          summary: "出来事一覧を取得",
+          parameters: [
+            { $ref: "#/components/parameters/dateQuery" },
+            { $ref: "#/components/parameters/startDateQuery" },
+            { $ref: "#/components/parameters/endDateQuery" },
+            { $ref: "#/components/parameters/tagQuery" },
+            { $ref: "#/components/parameters/limitQuery" },
+          ],
+          responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessListResponse" } } } }, "401": { description: "Unauthorized", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } } },
+        },
+        post: {
+          summary: "出来事を追加",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["content"], properties: { content: { type: "string" }, occurred_at: { type: "string", format: "date-time" }, tag: { type: "string" } } } } },
+          },
+          responses: { "200": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessCreateResponse" } } } } },
+        },
+      },
+      "/tasks": {
+        get: {
+          summary: "タスク一覧を取得",
+          parameters: [
+            { name: "include_completed", in: "query", schema: { type: "boolean", default: false } },
+            { $ref: "#/components/parameters/tagQuery" },
+            { $ref: "#/components/parameters/limitQuery" },
+          ],
+          responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessListResponse" } } } } },
+        },
+        post: {
+          summary: "タスクを追加",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["content"], properties: { content: { type: "string" }, tag: { type: "string" }, priority: { type: "integer", minimum: 0, maximum: 3 }, due_at: { type: "string", format: "date-time" }, due_all_day: { type: "boolean" } } } } },
+          },
+          responses: { "200": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessCreateResponse" } } } } },
+        },
+      },
+      "/tasks/{id}/complete": {
+        patch: {
+          summary: "タスクの完了/未完了を切り替え",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          requestBody: { content: { "application/json": { schema: { type: "object", properties: { is_done: { type: "boolean", default: true } } } } } },
+          responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessMessageResponse" } } } } },
+        },
+      },
+      "/tasks/{id}/priority": {
+        patch: {
+          summary: "タスクの優先度を変更",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["priority"], properties: { priority: { type: "integer", minimum: 0, maximum: 3 } } } } } },
+          responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessMessageResponse" } } } } },
+        },
+      },
+      "/schedules": {
+        get: {
+          summary: "予定一覧を取得",
+          parameters: [
+            { name: "include_past", in: "query", schema: { type: "boolean", default: false } },
+            { $ref: "#/components/parameters/startDateQuery" },
+            { $ref: "#/components/parameters/endDateQuery" },
+            { $ref: "#/components/parameters/limitQuery" },
+          ],
+          responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessListResponse" } } } } },
+        },
+        post: {
+          summary: "予定を追加",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["title", "starts_at"], properties: { title: { type: "string" }, starts_at: { type: "string", format: "date-time" }, ends_at: { type: "string", format: "date-time" }, is_all_day: { type: "boolean" }, details: { type: "string" }, tag: { type: "string" } } } } },
+          },
+          responses: { "200": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessCreateResponse" } } } } },
+        },
+      },
+      "/memos": {
+        get: {
+          summary: "メモ一覧を取得",
+          parameters: [
+            { $ref: "#/components/parameters/dateQuery" },
+            { $ref: "#/components/parameters/startDateQuery" },
+            { $ref: "#/components/parameters/endDateQuery" },
+            { $ref: "#/components/parameters/tagQuery" },
+            { $ref: "#/components/parameters/limitQuery" },
+          ],
+          responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessListResponse" } } } } },
+        },
+        post: {
+          summary: "メモを追加",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["content"], properties: { content: { type: "string" }, tag: { type: "string" } } } } },
+          },
+          responses: { "200": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessCreateResponse" } } } } },
+        },
+      },
+      "/read-later": {
+        get: {
+          summary: "あとで読む一覧を取得",
+          parameters: [
+            { name: "filter", in: "query", schema: { type: "string", enum: ["all", "read", "unread"], default: "all" } },
+            { $ref: "#/components/parameters/tagQuery" },
+            { $ref: "#/components/parameters/limitQuery" },
+          ],
+          responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessListResponse" } } } } },
+        },
+        post: {
+          summary: "あとで読むに追加",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["url"], properties: { url: { type: "string", format: "uri" }, comment: { type: "string" }, tag: { type: "string" } } } } },
+          },
+          responses: { "200": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessCreateResponse" } } } } },
+        },
+      },
+      "/read-later/{id}/read": {
+        patch: {
+          summary: "既読/未読を切り替え",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          requestBody: { content: { "application/json": { schema: { type: "object", properties: { is_read: { type: "boolean", default: true } } } } } },
+          responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessMessageResponse" } } } } },
+        },
+      },
+      "/search": {
+        get: {
+          summary: "ブロックを横断検索",
+          parameters: [
+            { name: "query", in: "query", required: true, schema: { type: "string" } },
+            { name: "category", in: "query", schema: { type: "string", enum: ["event", "task", "schedule", "thought", "read_later"] } },
+            { $ref: "#/components/parameters/tagQuery" },
+            { $ref: "#/components/parameters/limitQuery" },
+          ],
+          responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessListResponse" } } } } },
+        },
+      },
+      "/entries/{date}": {
+        get: {
+          summary: "指定日のエントリーを取得",
+          parameters: [{ name: "date", in: "path", required: true, schema: { type: "string", format: "date" }, description: "YYYY-MM-DD" }],
+          responses: {
+            "200": { description: "OK", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean" }, data: { $ref: "#/components/schemas/Entry" } } } } } },
+          },
+        },
+      },
+      "/blocks/{id}": {
+        patch: {
+          summary: "ブロックを更新",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", properties: { content: { type: "string" }, tag: { type: "string" }, occurred_at: { type: "string", format: "date-time" }, priority: { type: "integer" }, is_done: { type: "boolean" }, starts_at: { type: "string", format: "date-time" }, ends_at: { type: "string", format: "date-time" }, is_all_day: { type: "boolean" }, due_at: { type: "string", format: "date-time" }, due_all_day: { type: "boolean" } } } } },
+          },
+          responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessMessageResponse" } } } } },
+        },
+        delete: {
+          summary: "ブロックを削除",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessMessageResponse" } } } } },
+        },
+      },
+    },
+  };
+  return c.json(spec);
+});
+
 // Events
 async function listEvents(c: any) {
   try {

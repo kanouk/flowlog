@@ -75,7 +75,7 @@ export function AISettingsHubSection() {
 
       <div className="space-y-6">
         <ApiKeyManagementSection />
-        <AIModelManagementSection showApiKeySection={false} />
+        <AIModelManagementSection />
         <AIFeatureSettingsSection />
       </div>
     </section>
