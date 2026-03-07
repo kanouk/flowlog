@@ -102,7 +102,7 @@ export function TagDropdown({ value, onChange, customTags, onCreateTag, classNam
     const recentIds = getRecentTagIds();
 
     if (recentIds.length === 0) {
-      // 履歴なし → デフォルト順（固定タグが先、カスタムタグがあとで読む）
+      // 履歴なし → デフォルト順（固定タグが先、カスタムタグがあとで）
       return {
         visibleTags: allTags.slice(0, MAX_VISIBLE_TAGS),
         otherTags: allTags.slice(MAX_VISIBLE_TAGS),

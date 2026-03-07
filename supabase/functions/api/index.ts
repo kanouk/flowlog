@@ -177,7 +177,7 @@ async function getBlocksHelper(
     query = query.gte("starts_at", new Date().toISOString());
   }
   
-  // あとで読む用: フィルタ
+  // あとで用: フィルタ
   if (category === "read_later" && options.filter && options.filter !== "all") {
     if (options.filter === "read") {
       query = query.eq("is_done", true);
@@ -380,12 +380,12 @@ app.get("/docs", (c) => {
       },
       {
         method: "GET", path: "/read-later",
-        description: "あとで読むリストを取得",
+        description: "あとで一覧を取得",
         query: { filter: "string? (all|read|unread, default all)", tag: "string?", limit: "number?" },
       },
       {
         method: "POST", path: "/read-later",
-        description: "あとで読むリストに追加",
+        description: "あとでに追加",
         body: { url: "string (required)", comment: "string?", tag: "string?" },
       },
       {

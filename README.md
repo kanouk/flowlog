@@ -40,10 +40,10 @@
   - 日付境界を跨がない（selectedDateのJST範囲内にクランプ）
 
 ### ストック（Stock）
-- **タブ**: 日記 / タスク / あとで読む
+- **タブ**: 日記 / タスク / あとで
   - 日記: event + thought
   - タスク: task（未完了→完了の順、内部はoccurred_at昇順）
-  - あとで読む: read_later
+  - あとで: read_later
 - **ソート順**: occurred_at 昇順（古→新）
 - **AI整形版**: 日記タブでのみ表示
 

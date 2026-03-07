@@ -378,6 +378,129 @@ function createOccurredAtFromTime(date: string, timeStr: string): string {
   return utcDate.toISOString();
 }
 
+function normalizeDiaryMarkdown(raw: string): string {
+  let text = (raw || '').replace(/\r\n/g, '\n').trim();
+  if (!text) return '';
+
+  // Remove surrounding code fences if present.
+  text = text.replace(/^\s*```(?:markdown|md|text)?\s*\n?/i, '').trimStart();
+  text = text.replace(/\n?\s*```\s*$/i, '').trimEnd();
+
+  const lines = text.split('\n').map((line) => line.replace(/\s+$/, ''));
+  const hasHeading = lines.some((line) => /^##\s+/.test(line.trim()));
+
+  // Drop noisy preamble lines before first section heading.
+  if (hasHeading) {
+    const firstHeadingIndex = lines.findIndex((line) => /^##\s+/.test(line.trim()));
+    text = lines.slice(firstHeadingIndex).join('\n');
+  } else {
+    text = lines.join('\n');
+  }
+
+  // Normalize heading level to "## ".
+  text = text
+    .split('\n')
+    .map((line) => {
+      const match = line.match(/^\s*#{1,6}\s*(.+?)\s*$/);
+      if (!match) return line;
+      return `## ${match[1]}`;
+    })
+    .join('\n');
+
+  // Remove extra blank lines.
+  text = text.replace(/\n{3,}/g, '\n\n').trim();
+  return text;
+}
+
+function validateDiarySections(content: string): { ok: boolean; reason?: string } {
+  if (!content.trim()) return { ok: false, reason: 'empty content' };
+  const lines = content.split('\n');
+  const sections: { title: string; body: string }[] = [];
+  let currentTitle = '';
+  let currentBody: string[] = [];
+
+  const pushSection = () => {
+    if (!currentTitle) return;
+    sections.push({
+      title: currentTitle,
+      body: currentBody.join('\n').trim(),
+    });
+  };
+
+  for (const line of lines) {
+    const heading = line.match(/^##\s+(.+)$/);
+    if (heading) {
+      pushSection();
+      currentTitle = heading[1].trim();
+      currentBody = [];
+      continue;
+    }
+    if (currentTitle) currentBody.push(line);
+  }
+  pushSection();
+
+  if (sections.length === 0) return { ok: false, reason: 'no sections found' };
+  const hasSummary = sections.some((s) => s.title === '今日の3行まとめ');
+  if (!hasSummary) return { ok: false, reason: 'missing 3-line summary section' };
+  const hasMainSection = sections.some((s) => s.title !== '今日の3行まとめ' && s.body.length > 0);
+  if (!hasMainSection) return { ok: false, reason: 'missing main sections' };
+  return { ok: true };
+}
+
+function getTimeBucket(occurredAt: string): '朝' | '昼' | '夕方' | '夜' {
+  const hour = Number(formatInTimeZone(parseISO(occurredAt), TIMEZONE, 'H'));
+  if (hour >= 5 && hour <= 10) return '朝';
+  if (hour >= 11 && hour <= 14) return '昼';
+  if (hour >= 15 && hour <= 17) return '夕方';
+  return '夜';
+}
+
+function buildFallbackDiary(sortedBlocks: Block[]): string {
+  const sections: Record<'朝' | '昼' | '夕方' | '夜' | '思ったこと', string[]> = {
+    朝: [],
+    昼: [],
+    夕方: [],
+    夜: [],
+    思ったこと: [],
+  };
+
+  for (const block of sortedBlocks) {
+    const content = (block.content || '').trim();
+    const imageNote = block.images && block.images.length > 0
+      ? ` {{PHOTO:${block.id}:${block.images.length}}}`
+      : '';
+    const line = `${content || '写真を記録した'}${imageNote}`.trim();
+
+    if (block.category === 'thought') {
+      sections['思ったこと'].push(`- ${line}`);
+    } else {
+      sections[getTimeBucket(block.occurred_at)].push(`- ${line}`);
+    }
+  }
+
+  const orderedTitles: Array<'朝' | '昼' | '夕方' | '夜' | '思ったこと'> = ['朝', '昼', '夕方', '夜', '思ったこと'];
+  const bodyParts: string[] = [];
+
+  for (const title of orderedTitles) {
+    const items = sections[title];
+    if (items.length === 0) continue;
+    bodyParts.push(`## ${title}\n${items.join('\n')}`);
+  }
+
+  const summaryCandidates = Object.values(sections)
+    .flat()
+    .map((line) => line.replace(/^-+\s*/, '').trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+  while (summaryCandidates.length < 3) {
+    summaryCandidates.push('一日の記録を整理した。');
+  }
+
+  bodyParts.push(`## 今日の3行まとめ\n${summaryCandidates.slice(0, 3).join('\n')}`);
+  return bodyParts.join('\n\n');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -443,8 +566,8 @@ ${timeAnalysisInput}
 
 JSON形式で回答してください。`;
 
-    let timeUpdates: TimeUpdate[] = [];
-    let questions: TimeQuestion[] = [];
+    const timeUpdates: TimeUpdate[] = [];
+    const questions: TimeQuestion[] = [];
     const tokenUsages: { phase: string; usage: TokenUsage | null }[] = [];
 
     try {
@@ -481,8 +604,7 @@ JSON形式で回答してください。`;
                 const newOccurredAt = createOccurredAtFromTime(date, result.inferred_time);
                 
                 if (supabase) {
-                  // deno-lint-ignore no-explicit-any
-                  const { error: updateError } = await (supabase as any)
+                  const { error: updateError } = await supabase
                     .from('blocks')
                     .update({ occurred_at: newOccurredAt })
                     .eq('id', block.id);
@@ -584,17 +706,15 @@ JSON形式で回答してください。`;
 
 出力はMarkdown形式で返してください。`;
 
-    const PROMPT_GUARD = `
+    const DIARY_OUTPUT_GUARD = `
+追加の必須ルール（他の指示より優先）:
+- 出力にコードフェンス（\`\`\`, \`\`\`markdown, \`\`\`md）を含めない
+- セクション見出しは必ず "## " で始める
+- 前置き・注釈・後書き（例:「以下が日記です」）を出力しない
+- 本文は見出し配下にのみ書く
+`;
 
-【出力の絶対ルール（上書き不可）】
-- コードフェンス（\`\`\`）を絶対に出力しない
-- 「以下が日記です」「以下にまとめました」等の前置き・後書きを出力しない
-- セクション見出しは「## 」形式のみ使用する（「# 」「### 」は使わない）
-- 出力の先頭は必ず「## 」で始めること
-- 写真マーカー {{PHOTO:...}} はそのまま保全すること`;
-
-    // Use custom prompt: feature config > default, always append guard
-    const diarySystemPrompt = (diaryConfig?.system_prompt || DEFAULT_SYSTEM_PROMPT) + PROMPT_GUARD;
+    const diarySystemPrompt = `${diaryConfig?.system_prompt || DEFAULT_SYSTEM_PROMPT}\n${DIARY_OUTPUT_GUARD}`;
 
     const userPrompt = `以下は${date}のログです。整形してください：
 
@@ -603,7 +723,7 @@ ${blocksText}`;
     console.log('Blocks count:', blocks.length);
     console.log('Date:', date);
 
-    let formattedContent: string;
+    let formattedContent = '';
 
     // Normalization: strip code fences, noise, normalize headings
     function normalizeDiaryMarkdown(raw: string): string {
@@ -664,31 +784,33 @@ ${blocksText}`;
 
     try {
       const formatResult = await callAIWithConfig(diaryConfig, diarySystemPrompt, userPrompt);
-      formattedContent = normalizeDiaryMarkdown(formatResult.text);
       tokenUsages.push({ phase: 'Phase 2 (Formatting)', usage: formatResult.usage });
       console.log('Phase 2 token usage:', JSON.stringify(formatResult.usage));
 
-      const validation = validateDiarySections(formattedContent);
+      formattedContent = normalizeDiaryMarkdown(formatResult.text);
+      let validation = validateDiarySections(formattedContent);
+
+      // Retry once with stronger formatting constraints.
       if (!validation.ok) {
-        console.log(`Phase 2 validation failed: ${validation.reason}. Retrying...`);
-        // Retry with reinforced prompt
-        const retryPrompt = `${userPrompt}\n\n【重要】出力は必ず「## 朝」「## 昼」等のセクション見出しで構成し、最後に「## 今日の3行まとめ」を含めてください。コードフェンスや前置き文は禁止です。`;
-        try {
-          const retryResult = await callAIWithConfig(diaryConfig, diarySystemPrompt, retryPrompt);
-          const retryContent = normalizeDiaryMarkdown(retryResult.text);
-          tokenUsages.push({ phase: 'Phase 2 (Retry)', usage: retryResult.usage });
-          const retryValidation = validateDiarySections(retryContent);
-          if (retryValidation.ok) {
-            formattedContent = retryContent;
-            console.log('Phase 2 retry succeeded');
-          } else {
-            console.log(`Phase 2 retry also failed: ${retryValidation.reason}. Using fallback.`);
-            formattedContent = buildFallbackDiary(sortedBlocks, date);
-          }
-        } catch (retryError) {
-          console.error('Phase 2 retry error:', retryError);
-          formattedContent = buildFallbackDiary(sortedBlocks, date);
-        }
+        console.warn(`Phase 2 validation failed: ${validation.reason}. Retrying...`);
+        const retryPrompt = `${userPrompt}
+
+必須:
+1) 先頭から末尾まで純粋なMarkdown本文のみ
+2) コードフェンスを絶対に使わない
+3) 見出しは "## " のみ
+4) 最後に必ず "## 今日の3行まとめ" を含める`;
+
+        const retryResult = await callAIWithConfig(diaryConfig, diarySystemPrompt, retryPrompt);
+        tokenUsages.push({ phase: 'Phase 2 (Formatting Retry)', usage: retryResult.usage });
+        console.log('Phase 2 retry token usage:', JSON.stringify(retryResult.usage));
+        formattedContent = normalizeDiaryMarkdown(retryResult.text);
+        validation = validateDiarySections(formattedContent);
+      }
+
+      if (!validation.ok) {
+        console.warn(`Phase 2 validation failed after retry: ${validation.reason}. Using fallback formatter.`);
+        formattedContent = buildFallbackDiary(sortedBlocks);
       }
     } catch (error) {
       if (error instanceof Error) {
@@ -709,7 +831,7 @@ ${blocksText}`;
     }
 
     if (!formattedContent) {
-      throw new Error('No content in AI response');
+      formattedContent = buildFallbackDiary(sortedBlocks);
     }
 
     // Extract summary

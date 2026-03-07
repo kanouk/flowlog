@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { PrioritySelector } from './PrioritySelector';
 import { TagChipSelector } from './TagChipSelector';
 import type { TaskPriority as TaskPriorityValue } from '@/lib/taskPriority';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   BlockCategory,
   CATEGORIES,
@@ -88,6 +89,7 @@ function triggerLightHaptic(): void {
 }
 
 export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInputProps) {
+  const isMobile = useIsMobile();
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
@@ -649,15 +651,20 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
 
       <Sheet open={isReviewOpen} onOpenChange={setIsReviewOpen}>
         <SheetContent
-          side="bottom"
-          className="max-h-[92vh] overflow-y-auto rounded-t-3xl px-5 pb-8 pt-8 sm:px-6"
+          side={isMobile ? 'bottom' : 'right'}
+          className={
+            isMobile
+              ? 'h-[92vh] max-h-[92vh] rounded-t-3xl px-5 pb-6 pt-8 sm:px-6'
+              : 'h-full w-full px-6 pb-6 pt-8 sm:max-w-xl md:max-w-2xl lg:max-w-[640px]'
+          }
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             focusTextarea();
           }}
         >
-          <div className="animate-review-enter space-y-5">
-            <section className="animate-fade-up space-y-3">
+          <div className="animate-review-enter flex h-full min-h-0 flex-col">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pb-4">
+              <section className="animate-fade-up space-y-3">
               <div className="hidden text-xs text-muted-foreground md:block">矢印キーで移動 / Enterで保存</div>
               <div className="grid grid-cols-5 gap-2">
                 {CATEGORIES.map((cat) => {
@@ -691,10 +698,10 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                   );
                 })}
               </div>
-            </section>
+              </section>
 
-            {allTagIds.length > 0 && (
-              <section className="animate-fade-up space-y-2" style={{ animationDelay: '40ms' }}>
+              {allTagIds.length > 0 && (
+                <section className="animate-fade-up space-y-2" style={{ animationDelay: '40ms' }}>
                 <TagChipSelector
                   value={tag}
                   onChange={handleTagChange}
@@ -738,11 +745,11 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                     その他のタグ
                   </button>
                 )}
-              </section>
-            )}
+                </section>
+              )}
 
-            {category === 'task' && (
-              <section className="animate-fade-up space-y-3 rounded-2xl border border-orange-200 bg-orange-50/80 p-4 dark:border-orange-900/40 dark:bg-orange-950/20" style={{ animationDelay: '80ms' }}>
+              {category === 'task' && (
+                <section className="animate-fade-up space-y-3 rounded-2xl border border-orange-200 bg-orange-50/80 p-4 dark:border-orange-900/40 dark:bg-orange-950/20" style={{ animationDelay: '80ms' }}>
                 <h3 className="text-sm font-medium text-foreground">タスク設定</h3>
                 <PrioritySelector
                   value={priority}
@@ -821,11 +828,11 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                     )}
                   </div>
                 </div>
-              </section>
-            )}
+                </section>
+              )}
 
-            {category === 'schedule' && (
-              <section className="animate-fade-up space-y-3 rounded-2xl border border-cyan-200 bg-cyan-50/80 p-4 dark:border-cyan-900/40 dark:bg-cyan-950/20" style={{ animationDelay: '80ms' }}>
+              {category === 'schedule' && (
+                <section className="animate-fade-up space-y-3 rounded-2xl border border-cyan-200 bg-cyan-50/80 p-4 dark:border-cyan-900/40 dark:bg-cyan-950/20" style={{ animationDelay: '80ms' }}>
                 <h3 className="text-sm font-medium text-foreground">予定の詳細</h3>
 
                 <div className="flex items-center gap-2">
@@ -933,10 +940,12 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                     )}
                   </div>
                 </div>
-              </section>
-            )}
+                </section>
+              )}
+            </div>
 
-            <div className="animate-fade-up sticky bottom-0 flex gap-3 border-t border-border bg-background/95 pb-1 pt-4 backdrop-blur" style={{ animationDelay: '120ms' }}>
+            <div className="animate-fade-up shrink-0 border-t border-border bg-background/95 pb-1 pt-4 backdrop-blur" style={{ animationDelay: '120ms' }}>
+              <div className="flex gap-3">
               <Button
                 type="button"
                 variant="outline"
@@ -963,8 +972,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                 ) : (
                   <Send className="mr-1 h-4 w-4 md:h-5 md:w-5" />
                 )}
-                {isToday ? `${currentConfig.label}として保存` : `${currentConfig.label}として追加`}
+                保存
               </Button>
+              </div>
             </div>
           </div>
         </SheetContent>

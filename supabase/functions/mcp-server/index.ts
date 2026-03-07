@@ -184,7 +184,7 @@ async function getBlocks(
     query = query.gte("starts_at", new Date().toISOString());
   }
   
-  // あとで読む用: フィルタ
+  // あとで用: フィルタ
   if (category === "read_later" && options.filter && options.filter !== "all") {
     if (options.filter === "read") {
       query = query.eq("is_done", true);
@@ -911,7 +911,7 @@ const TOOLS = [
   },
   {
     name: "list_read_later",
-    description: "あとでリストを取得します",
+    description: "あとで一覧を取得します",
     inputSchema: {
       type: "object",
       properties: {
@@ -923,7 +923,7 @@ const TOOLS = [
   },
   {
     name: "add_read_later",
-    description: "あとでリストにURLを追加します",
+    description: "あとでにURLを追加します",
     inputSchema: {
       type: "object",
       properties: {
@@ -1049,7 +1049,7 @@ async function executeTool(userId: string, toolName: string, args: Record<string
         content,
         tag: args.tag as string | undefined,
       });
-      return { id: block.id, message: "あとで読むに追加しました" };
+      return { id: block.id, message: "あとでに追加しました" };
     }
     
     case "mark_as_read": {

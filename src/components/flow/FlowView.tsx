@@ -297,7 +297,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
         setBlocks(prev => sortBlocksDesc(prev.map(b => b.id === tempId ? savedBlock : b)));
       }
 
-      // 「あとで読む」カテゴリでURLが含まれている場合は自動サマライズ
+      // 「あとで」カテゴリでURLが含まれている場合は自動サマライズ
       if (category === 'read_later') {
         const url = extractFirstUrl(content);
         if (url) {
