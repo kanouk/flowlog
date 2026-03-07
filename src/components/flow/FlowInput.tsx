@@ -48,7 +48,11 @@ interface FlowInputProps {
       is_all_day: boolean;
     },
     priority?: number,
-    batchMode?: boolean
+    batchMode?: boolean,
+    dueData?: {
+      due_at: string | null;
+      due_all_day: boolean;
+    }
   ) => boolean | Promise<boolean>;
   disabled?: boolean;
   selectedDate: string;
@@ -67,6 +71,9 @@ interface SubmissionSnapshot {
   startTime: string;
   endDate?: Date;
   endTime: string;
+  dueDate?: Date;
+  dueTime: string;
+  dueAllDay: boolean;
 }
 
 const DRAFT_KEY_PREFIX = 'flowlog_draft_';
@@ -100,6 +107,11 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const [startTime, setStartTime] = useState('09:00');
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [endTime, setEndTime] = useState('10:00');
+
+  // Task deadline state
+  const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
+  const [dueTime, setDueTime] = useState('18:00');
+  const [dueAllDay, setDueAllDay] = useState(true);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -161,6 +173,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setStartTime('09:00');
     setEndDate(undefined);
     setEndTime('10:00');
+    setDueDate(undefined);
+    setDueTime('18:00');
+    setDueAllDay(true);
     setLastCategory('event');
     setLastTag(null);
 
@@ -269,6 +284,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setEndDate(undefined);
     setStartTime('09:00');
     setEndTime('10:00');
+    setDueDate(undefined);
+    setDueTime('18:00');
+    setDueAllDay(true);
     setLastCategory('event');
     setLastTag(null);
 
@@ -291,6 +309,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setStartTime(snapshot.startTime);
     setEndDate(snapshot.endDate);
     setEndTime(snapshot.endTime);
+    setDueDate(snapshot.dueDate);
+    setDueTime(snapshot.dueTime);
+    setDueAllDay(snapshot.dueAllDay);
     setLastCategory(snapshot.category);
     setLastTag(snapshot.tag);
     setIsReviewOpen(false);
@@ -345,6 +366,16 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
       };
     }
 
+    // Task deadline
+    let dueData = undefined;
+    if (category === 'task' && dueDate) {
+      const dueAtStr = buildScheduleDateTime(dueDate, dueTime, dueAllDay);
+      dueData = {
+        due_at: dueAtStr,
+        due_all_day: dueAllDay,
+      };
+    }
+
     const submitCategory = category;
     const submitTag = tag;
     const submitPriority = category === 'task' ? priority : 0;
@@ -361,6 +392,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
       startTime,
       endDate,
       endTime,
+      dueDate,
+      dueTime,
+      dueAllDay,
     };
 
     submitLockedRef.current = true;
@@ -386,7 +420,8 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
           submitTag,
           scheduleData,
           submitPriority,
-          isBatch
+          isBatch,
+          dueData
         );
         if (!submitted) {
           restoreForm(submissionSnapshot);
@@ -414,6 +449,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     tag,
     uploadImages,
     batchMode,
+    dueDate,
+    dueTime,
+    dueAllDay,
   ]);
 
   useEffect(() => {
@@ -731,6 +769,57 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                   {batchMode && selectedImages.length === 0 && (
                     <span className="text-xs text-muted-foreground/70">1行ごとにタスク化します</span>
                   )}
+                </div>
+
+                {/* 期限設定 */}
+                <div className="space-y-2 border-t border-orange-200 pt-3 dark:border-orange-900/40">
+                  <h4 className="text-xs font-medium text-muted-foreground">期限（任意）</h4>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="due-all-day"
+                      checked={dueAllDay}
+                      onCheckedChange={(checked) => setDueAllDay(checked as boolean)}
+                    />
+                    <label htmlFor="due-all-day" className="cursor-pointer text-sm font-medium">
+                      終日
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-9 px-3 text-sm">
+                          {formatScheduleDateDisplay(dueDate)}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={dueDate}
+                          onSelect={setDueDate}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {!dueAllDay && dueDate && (
+                      <Input
+                        type="time"
+                        value={dueTime}
+                        onChange={(e) => setDueTime(e.target.value)}
+                        className="h-9 w-28 text-sm"
+                      />
+                    )}
+                    {dueDate && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 px-2 text-sm text-muted-foreground"
+                        onClick={() => setDueDate(undefined)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </section>
             )}

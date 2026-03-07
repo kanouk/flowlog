@@ -274,6 +274,8 @@ export function useEntries() {
     ends_at = null,
     is_all_day = false,
     priority = 0,
+    due_at = null,
+    due_all_day = false,
   }: { 
     content: string; 
     selectedDate: string; 
@@ -285,6 +287,8 @@ export function useEntries() {
     ends_at?: string | null;
     is_all_day?: boolean;
     priority?: number;
+    due_at?: string | null;
+    due_all_day?: boolean;
   }) => {
     if (!userId) return { block: null, navigateToDate: null };
 
@@ -337,6 +341,12 @@ export function useEntries() {
         insertData.starts_at = starts_at;
         insertData.ends_at = ends_at;
         insertData.is_all_day = is_all_day;
+      }
+
+      // タスクカテゴリの場合のみ期限フィールドを追加
+      if (category === 'task' && due_at) {
+        insertData.due_at = due_at;
+        insertData.due_all_day = due_all_day;
       }
 
       const { data, error } = await supabase
