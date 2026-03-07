@@ -48,7 +48,11 @@ interface FlowInputProps {
       is_all_day: boolean;
     },
     priority?: number,
-    batchMode?: boolean
+    batchMode?: boolean,
+    dueData?: {
+      due_at: string | null;
+      due_all_day: boolean;
+    }
   ) => boolean | Promise<boolean>;
   disabled?: boolean;
   selectedDate: string;
