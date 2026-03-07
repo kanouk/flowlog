@@ -206,6 +206,8 @@ async function addBlockHelper(
     ends_at?: string;
     is_all_day?: boolean;
     priority?: number;
+    due_at?: string;
+    due_all_day?: boolean;
   }
 ) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -235,9 +237,7 @@ async function addBlockHelper(
     entry = newEntry;
   }
   
-  const { data, error } = await supabase
-    .from("blocks")
-    .insert({
+  const insertData: Record<string, any> = {
       user_id: userId,
       entry_id: entry.id,
       category: block.category,
@@ -248,7 +248,13 @@ async function addBlockHelper(
       ends_at: block.ends_at,
       is_all_day: block.is_all_day || false,
       priority: block.priority || 0,
-    })
+    };
+  if (block.due_at !== undefined) insertData.due_at = block.due_at;
+  if (block.due_all_day !== undefined) insertData.due_all_day = block.due_all_day;
+
+  const { data, error } = await supabase
+    .from("blocks")
+    .insert(insertData)
     .select()
     .single();
   
@@ -300,6 +306,115 @@ async function searchBlocksHelper(
 // ヘルスチェック
 app.get("/health", (c) => {
   return c.json({ success: true, message: "FlowLog API is running" });
+});
+
+// ===== API ドキュメント =====
+app.get("/docs", (c) => {
+  const docs = {
+    name: "FlowLog REST API",
+    version: "1.0",
+    base_url: `${supabaseUrl}/functions/v1/api`,
+    authentication: {
+      type: "Bearer Token",
+      header: "Authorization: Bearer YOUR_API_TOKEN",
+      description: "APIトークンはFlowLog設定画面から発行できます。/health と /docs 以外の全エンドポイントに認証が必要です。",
+    },
+    endpoints: [
+      {
+        method: "GET", path: "/health",
+        description: "ヘルスチェック（認証不要）",
+      },
+      {
+        method: "GET", path: "/docs",
+        description: "このAPIドキュメント（認証不要）",
+      },
+      {
+        method: "GET", path: "/events",
+        description: "出来事一覧を取得",
+        query: { date: "string? (YYYY-MM-DD)", start_date: "string?", end_date: "string?", tag: "string?", limit: "number? (default 50)" },
+      },
+      {
+        method: "POST", path: "/events",
+        description: "出来事を追加",
+        body: { content: "string (required)", occurred_at: "string? (ISO8601)", tag: "string?" },
+      },
+      {
+        method: "GET", path: "/tasks",
+        description: "タスク一覧を取得",
+        query: { include_completed: "boolean? (default false)", tag: "string?", limit: "number?" },
+      },
+      {
+        method: "POST", path: "/tasks",
+        description: "タスクを追加",
+        body: { content: "string (required)", tag: "string?", priority: "number? (0-3)", due_at: "string? (ISO8601)", due_all_day: "boolean?" },
+      },
+      {
+        method: "PATCH", path: "/tasks/:id/complete",
+        description: "タスクの完了/未完了を切り替え",
+        body: { is_done: "boolean? (default true)" },
+      },
+      {
+        method: "PATCH", path: "/tasks/:id/priority",
+        description: "タスクの優先度を変更",
+        body: { priority: "number (required, 0-3)" },
+      },
+      {
+        method: "GET", path: "/schedules",
+        description: "予定一覧を取得",
+        query: { include_past: "boolean? (default false)", start_date: "string?", end_date: "string?", limit: "number?" },
+      },
+      {
+        method: "POST", path: "/schedules",
+        description: "予定を追加",
+        body: { title: "string (required)", starts_at: "string (required, ISO8601)", ends_at: "string?", is_all_day: "boolean?", details: "string?", tag: "string?" },
+      },
+      {
+        method: "GET", path: "/memos",
+        description: "メモ一覧を取得",
+        query: { date: "string?", start_date: "string?", end_date: "string?", tag: "string?", limit: "number?" },
+      },
+      {
+        method: "POST", path: "/memos",
+        description: "メモを追加",
+        body: { content: "string (required)", tag: "string?" },
+      },
+      {
+        method: "GET", path: "/read-later",
+        description: "あとで読むリストを取得",
+        query: { filter: "string? (all|read|unread, default all)", tag: "string?", limit: "number?" },
+      },
+      {
+        method: "POST", path: "/read-later",
+        description: "あとで読むリストに追加",
+        body: { url: "string (required)", comment: "string?", tag: "string?" },
+      },
+      {
+        method: "PATCH", path: "/read-later/:id/read",
+        description: "既読/未読を切り替え",
+        body: { is_read: "boolean? (default true)" },
+      },
+      {
+        method: "GET", path: "/search",
+        description: "ブロックを横断検索",
+        query: { query: "string (required)", category: "string?", tag: "string?", limit: "number?" },
+      },
+      {
+        method: "GET", path: "/entries/:date",
+        description: "指定日のエントリーを取得",
+        params: { date: "string (YYYY-MM-DD)" },
+      },
+      {
+        method: "PATCH", path: "/blocks/:id",
+        description: "ブロックを更新",
+        body: { content: "string?", tag: "string?", occurred_at: "string?", priority: "number?", is_done: "boolean?", starts_at: "string?", ends_at: "string?", is_all_day: "boolean?", due_at: "string?", due_all_day: "boolean?" },
+      },
+      {
+        method: "DELETE", path: "/blocks/:id",
+        description: "ブロックを削除",
+      },
+    ],
+  };
+  return c.json(docs);
 });
 
 // Events
@@ -379,6 +494,8 @@ async function addTask(c: any) {
       content: body.content,
       tag: body.tag,
       priority: body.priority,
+      due_at: body.due_at,
+      due_all_day: body.due_all_day,
     });
     
     return c.json({ 
@@ -698,6 +815,8 @@ async function updateBlock(c: any) {
     if (body.starts_at !== undefined) updates.starts_at = body.starts_at;
     if (body.ends_at !== undefined) updates.ends_at = body.ends_at;
     if (body.is_all_day !== undefined) updates.is_all_day = body.is_all_day;
+    if (body.due_at !== undefined) updates.due_at = body.due_at;
+    if (body.due_all_day !== undefined) updates.due_all_day = body.due_all_day;
     
     if (Object.keys(updates).length === 0) {
       return c.json({ success: false, error: "No valid fields to update" }, 400);
