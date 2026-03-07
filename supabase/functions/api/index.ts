@@ -383,6 +383,8 @@ async function addTask(c: any) {
       content: body.content,
       tag: body.tag,
       priority: body.priority,
+      due_at: body.due_at,
+      due_all_day: body.due_all_day,
     });
     
     return c.json({ 
