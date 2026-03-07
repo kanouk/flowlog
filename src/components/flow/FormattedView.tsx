@@ -4,6 +4,7 @@ import { parseTimestamp, formatTimeJST } from '@/lib/dateUtils';
 import { CATEGORY_CONFIG, BlockCategory } from '@/lib/categoryUtils';
 import { BookOpen, ListTodo, Bookmark } from 'lucide-react';
 import { TaskCheckbox } from '@/components/ui/task-checkbox';
+import { parseDiarySections } from '@/lib/diaryParser';
 
 interface FormattedViewProps {
   entry: Entry | null;
