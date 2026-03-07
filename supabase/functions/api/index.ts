@@ -704,6 +704,8 @@ async function updateBlock(c: any) {
     if (body.starts_at !== undefined) updates.starts_at = body.starts_at;
     if (body.ends_at !== undefined) updates.ends_at = body.ends_at;
     if (body.is_all_day !== undefined) updates.is_all_day = body.is_all_day;
+    if (body.due_at !== undefined) updates.due_at = body.due_at;
+    if (body.due_all_day !== undefined) updates.due_all_day = body.due_all_day;
     
     if (Object.keys(updates).length === 0) {
       return c.json({ success: false, error: "No valid fields to update" }, 400);
