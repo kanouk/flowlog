@@ -567,8 +567,17 @@ JSON形式で回答してください。`;
 
 出力はMarkdown形式で返してください。`;
 
-    // Use custom prompt: feature config > default
-    const diarySystemPrompt = diaryConfig?.system_prompt || DEFAULT_SYSTEM_PROMPT;
+    const PROMPT_GUARD = `
+
+【出力の絶対ルール（上書き不可）】
+- コードフェンス（\`\`\`）を絶対に出力しない
+- 「以下が日記です」「以下にまとめました」等の前置き・後書きを出力しない
+- セクション見出しは「## 」形式のみ使用する（「# 」「### 」は使わない）
+- 出力の先頭は必ず「## 」で始めること
+- 写真マーカー {{PHOTO:...}} はそのまま保全すること`;
+
+    // Use custom prompt: feature config > default, always append guard
+    const diarySystemPrompt = (diaryConfig?.system_prompt || DEFAULT_SYSTEM_PROMPT) + PROMPT_GUARD;
 
     const userPrompt = `以下は${date}のログです。整形してください：
 
@@ -579,11 +588,91 @@ ${blocksText}`;
 
     let formattedContent: string;
 
+    // Normalization: strip code fences, noise, normalize headings
+    function normalizeDiaryMarkdown(raw: string): string {
+      let text = raw;
+      // Remove code fences
+      text = text.replace(/^```(?:markdown|md)?\s*$/gm, '').replace(/^```\s*$/gm, '');
+      // Normalize heading levels: # or ### etc → ##
+      text = text.replace(/^(#{1,6})\s+/gm, (_match, hashes: string) => {
+        if (hashes === '##') return '## ';
+        return '## ';
+      });
+      // Remove leading noise lines (before first ## heading)
+      const firstH2 = text.search(/^## /m);
+      if (firstH2 > 0) {
+        text = text.substring(firstH2);
+      }
+      // Remove empty sections (## heading followed immediately by another ## or end)
+      text = text.replace(/^## .+\n(?=## |\s*$)/gm, '');
+      // Normalize consecutive blank lines
+      text = text.replace(/\n{3,}/g, '\n\n');
+      return text.trim();
+    }
+
+    // Validation: check structure
+    function validateDiarySections(content: string): { ok: boolean; reason?: string } {
+      const sectionMatches = content.match(/^## .+/gm);
+      if (!sectionMatches || sectionMatches.length === 0) {
+        return { ok: false, reason: 'セクション見出しが見つかりません' };
+      }
+      if (!content.includes('## 今日の3行まとめ')) {
+        return { ok: false, reason: '「## 今日の3行まとめ」が含まれていません' };
+      }
+      return { ok: true };
+    }
+
+    // Fallback: generate from blocks using fixed template
+    function buildFallbackDiary(sortedBlks: Block[], dateStr: string): string {
+      const timeSlots: Record<string, string[]> = { '朝': [], '昼': [], '夕方': [], '夜': [] };
+      for (const block of sortedBlks) {
+        const hour = parseInt(formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH'));
+        const content = block.content || '(画像のみ)';
+        const imageNote = block.images?.length ? ` {{PHOTO:${block.id}:${block.images.length}}}` : '';
+        const line = `${content}${imageNote}`;
+        if (hour >= 5 && hour < 11) timeSlots['朝'].push(line);
+        else if (hour >= 11 && hour < 15) timeSlots['昼'].push(line);
+        else if (hour >= 15 && hour < 18) timeSlots['夕方'].push(line);
+        else timeSlots['夜'].push(line);
+      }
+      let result = '';
+      for (const [slot, lines] of Object.entries(timeSlots)) {
+        if (lines.length > 0) {
+          result += `## ${slot}\n${lines.join('\n')}\n\n`;
+        }
+      }
+      result += `## 今日の3行まとめ\n${dateStr}の記録です。\n出来事を振り返りました。\nお疲れさまでした。`;
+      return result;
+    }
+
     try {
       const formatResult = await callAIWithConfig(diaryConfig, diarySystemPrompt, userPrompt);
-      formattedContent = formatResult.text;
+      formattedContent = normalizeDiaryMarkdown(formatResult.text);
       tokenUsages.push({ phase: 'Phase 2 (Formatting)', usage: formatResult.usage });
       console.log('Phase 2 token usage:', JSON.stringify(formatResult.usage));
+
+      const validation = validateDiarySections(formattedContent);
+      if (!validation.ok) {
+        console.log(`Phase 2 validation failed: ${validation.reason}. Retrying...`);
+        // Retry with reinforced prompt
+        const retryPrompt = `${userPrompt}\n\n【重要】出力は必ず「## 朝」「## 昼」等のセクション見出しで構成し、最後に「## 今日の3行まとめ」を含めてください。コードフェンスや前置き文は禁止です。`;
+        try {
+          const retryResult = await callAIWithConfig(diaryConfig, diarySystemPrompt, retryPrompt);
+          const retryContent = normalizeDiaryMarkdown(retryResult.text);
+          tokenUsages.push({ phase: 'Phase 2 (Retry)', usage: retryResult.usage });
+          const retryValidation = validateDiarySections(retryContent);
+          if (retryValidation.ok) {
+            formattedContent = retryContent;
+            console.log('Phase 2 retry succeeded');
+          } else {
+            console.log(`Phase 2 retry also failed: ${retryValidation.reason}. Using fallback.`);
+            formattedContent = buildFallbackDiary(sortedBlocks, date);
+          }
+        } catch (retryError) {
+          console.error('Phase 2 retry error:', retryError);
+          formattedContent = buildFallbackDiary(sortedBlocks, date);
+        }
+      }
     } catch (error) {
       if (error instanceof Error) {
         if (error.message === 'RATE_LIMIT') {

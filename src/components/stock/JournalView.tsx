@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { parseDiarySections } from '@/lib/diaryParser';
 
 interface JournalViewProps {
   entries: Entry[];
@@ -183,16 +184,7 @@ export function JournalView({ entries, selectedDate, onDateSelect, blocks: exter
 
   // AI formatted content sections
   const sections = useMemo(() => {
-    const content = entry?.formatted_content;
-    if (!content) return [];
-
-    const parts = content.split(/(?=^## )/m);
-    return parts.filter(p => p.trim()).map(section => {
-      const lines = section.trim().split('\n');
-      const title = lines[0]?.replace(/^##\s*/, '').trim() || '';
-      const body = lines.slice(1).join('\n').trim();
-      return { title, body };
-    });
+    return parseDiarySections(entry?.formatted_content || '');
   }, [entry?.formatted_content]);
 
   const formattedDate = format(new Date(selectedDate), 'M月d日（E）', { locale: ja });

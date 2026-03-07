@@ -4,6 +4,7 @@ import { parseTimestamp, formatTimeJST } from '@/lib/dateUtils';
 import { CATEGORY_CONFIG, BlockCategory } from '@/lib/categoryUtils';
 import { BookOpen, ListTodo, Bookmark } from 'lucide-react';
 import { TaskCheckbox } from '@/components/ui/task-checkbox';
+import { parseDiarySections } from '@/lib/diaryParser';
 
 interface FormattedViewProps {
   entry: Entry | null;
@@ -51,17 +52,7 @@ export function FormattedView({ entry, blocks, onUpdate }: FormattedViewProps) {
 
   // AI整形版のセクション分割
   const sections = useMemo(() => {
-    const content = entry?.formatted_content;
-    if (!content) return [];
-
-    // Split by markdown headers
-    const parts = content.split(/(?=^## )/m);
-    return parts.filter(p => p.trim()).map(section => {
-      const lines = section.trim().split('\n');
-      const title = lines[0]?.replace(/^##\s*/, '').trim() || '';
-      const body = lines.slice(1).join('\n').trim();
-      return { title, body };
-    });
+    return parseDiarySections(entry?.formatted_content || '');
   }, [entry?.formatted_content]);
 
   const handleTaskToggle = (block: Block) => {
