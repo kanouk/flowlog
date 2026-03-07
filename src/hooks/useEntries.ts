@@ -302,8 +302,10 @@ export function useEntries() {
       if (isToday || mode === 'toNow') {
         occurredAt = new Date().toISOString();
       } else {
-        // 過去日：その日の最終ブロック + 1分、なければ 12:00 JST
+        // 過去日：その日の最終ブロック + 1分、なければ 23:59 JST
+        // 日付範囲内にクランプして翌日にはみ出さない
         const { start, end } = getDateRangeUTC(selectedDate);
+        const endMs = parseTimestamp(end).getTime() - 1; // 翌日00:00の1ms前
         const { data: lastBlocks } = await supabase
           .from('blocks')
           .select('occurred_at')
@@ -315,9 +317,11 @@ export function useEntries() {
         
         if (lastBlocks && lastBlocks.length > 0) {
           const lastTime = parseTimestamp(lastBlocks[0].occurred_at);
-          occurredAt = new Date(lastTime.getTime() + 60 * 1000).toISOString();
+          const candidateMs = lastTime.getTime() + 60 * 1000;
+          // 日付範囲内にクランプ
+          occurredAt = new Date(Math.min(candidateMs, endMs)).toISOString();
         } else {
-          occurredAt = createOccurredAt(selectedDate, '12:00');
+          occurredAt = createOccurredAt(selectedDate, '23:59');
         }
       }
       
