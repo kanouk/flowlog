@@ -309,6 +309,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setStartTime(snapshot.startTime);
     setEndDate(snapshot.endDate);
     setEndTime(snapshot.endTime);
+    setDueDate(snapshot.dueDate);
+    setDueTime(snapshot.dueTime);
+    setDueAllDay(snapshot.dueAllDay);
     setLastCategory(snapshot.category);
     setLastTag(snapshot.tag);
     setIsReviewOpen(false);
