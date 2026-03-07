@@ -911,7 +911,7 @@ const TOOLS = [
   },
   {
     name: "list_read_later",
-    description: "あとで読むリストを取得します",
+    description: "あとでリストを取得します",
     inputSchema: {
       type: "object",
       properties: {
