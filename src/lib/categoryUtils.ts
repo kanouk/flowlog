@@ -128,7 +128,7 @@ export function getCategoryLabel(category: string): string {
     event: '出来事',
     thought: 'メモ',
     task: 'タスク',
-    read_later: 'あとで読む',
+    read_later: 'あとで',
     schedule: '予定',
   };
   return labels[category] || category;

@@ -519,12 +519,29 @@ JSON形式で回答してください。`;
     const blocksText = sortedBlocks.map((block) => {
       const time = formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH:mm');
       const categoryLabel = block.category ? `[${getCategoryLabel(block.category)}]` : '';
-      const doneNote = block.is_done ? '[✓]' : '';
+      let doneNote = '';
+      if (block.is_done) {
+        if (block.done_at) {
+          const doneTime = formatInTimeZone(parseISO(block.done_at), TIMEZONE, 'M/d HH:mm');
+          doneNote = block.category === 'read_later' ? `[既読 ${doneTime}]` : `[✓ ${doneTime}完了]`;
+        } else {
+          doneNote = '[✓]';
+        }
+      }
+      let deadlineNote = '';
+      if ((block as any).due_at) {
+        const dueDate = parseISO((block as any).due_at);
+        if ((block as any).due_all_day) {
+          deadlineNote = `[期限: ${formatInTimeZone(dueDate, TIMEZONE, 'M/d')} 終日]`;
+        } else {
+          deadlineNote = `[期限: ${formatInTimeZone(dueDate, TIMEZONE, 'M/d HH:mm')}]`;
+        }
+      }
       const imageNote = block.images && block.images.length > 0 
         ? ` {{PHOTO:${block.id}:${block.images.length}}}` 
         : '';
       const content = block.content || '';
-      return `[${time}] ${categoryLabel}${doneNote}${imageNote} ${content}`.trim();
+      return `[${time}] ${categoryLabel}${doneNote}${deadlineNote}${imageNote} ${content}`.trim();
     }).join('\n');
 
     const DEFAULT_SYSTEM_PROMPT = `あなたは日記を整形するアシスタントです。ユーザーが一日の中で記録した「出来事」を、読みやすい日記形式に整形してください。

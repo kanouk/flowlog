@@ -462,6 +462,14 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
                       <span>{formatDateJST(block.occurred_at)}</span>
                       <span>•</span>
                       <span>{formatTimeJST(block.occurred_at)}</span>
+                      {block.is_done && block.done_at && (
+                        <>
+                          <span>•</span>
+                          <span className="text-green-600 dark:text-green-400">
+                            ✓ {formatDateJST(block.done_at)} {formatTimeJST(block.done_at)} に既読
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

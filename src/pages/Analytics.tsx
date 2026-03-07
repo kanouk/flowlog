@@ -24,7 +24,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   task: 'タスク',
   schedule: 'スケジュール',
   thought: 'メモ',
-  read_later: 'あとで読む',
+  read_later: 'あとで',
 };
 
 const PERIOD_OPTIONS: { label: string; value: PeriodDays }[] = [

@@ -117,7 +117,7 @@ export function FormattedView({ entry, blocks, onUpdate }: FormattedViewProps) {
         </button>
         <button onClick={() => setViewMode('readLater')} className={tabClass('readLater')}>
           <Bookmark className="h-4 w-4" />
-          あとで読む
+          あとで
         </button>
       </div>
 

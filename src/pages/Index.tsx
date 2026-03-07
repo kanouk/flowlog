@@ -44,8 +44,8 @@ const Index = () => {
     },
     {
       icon: Bookmark,
-      label: 'あとで読む',
-      description: '気になる記事をストック',
+      label: 'あとで',
+      description: '気になるURLをストック',
       color: 'text-green-600 dark:text-green-400',
       bgColor: 'bg-green-100 dark:bg-green-900/30',
     },

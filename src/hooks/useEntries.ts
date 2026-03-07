@@ -420,6 +420,13 @@ export function useEntries() {
       if (updates.extracted_text !== undefined) {
         updateData.extracted_text = updates.extracted_text;
       }
+      // Deadline fields
+      if (updates.due_at !== undefined) {
+        updateData.due_at = updates.due_at;
+      }
+      if (updates.due_all_day !== undefined) {
+        updateData.due_all_day = updates.due_all_day;
+      }
       if (updates.occurred_at) {
         const newDayKey = getOccurredAtDayKey(updates.occurred_at);
         const entry = await getOrCreateEntryForDate(newDayKey);

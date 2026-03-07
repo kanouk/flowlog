@@ -60,7 +60,7 @@ const MODAL_CONFIG: Record<QuickAddCategory, { title: string; placeholder: strin
     icon: FileText,
   },
   read_later: {
-    title: 'あとで読むを追加',
+    title: 'あとでを追加',
     placeholder: 'URLまたはメモを入力...',
     icon: Bookmark,
   },

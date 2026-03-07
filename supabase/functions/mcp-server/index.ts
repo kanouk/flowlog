@@ -936,7 +936,7 @@ const TOOLS = [
   },
   {
     name: "mark_as_read",
-    description: "あとで読むアイテムを既読/未読にします",
+    description: "あとでアイテムを既読/未読にします",
     inputSchema: {
       type: "object",
       properties: {
