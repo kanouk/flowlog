@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Loader2, CheckSquare, Plus, SlidersHorizontal, X } from 'lucide-react';
+import { Loader2, CheckSquare, Plus, SlidersHorizontal, X, Clock, AlertTriangle } from 'lucide-react';
 import { icons } from 'lucide-react';
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
