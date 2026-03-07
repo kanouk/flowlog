@@ -71,6 +71,9 @@ interface SubmissionSnapshot {
   startTime: string;
   endDate?: Date;
   endTime: string;
+  dueDate?: Date;
+  dueTime: string;
+  dueAllDay: boolean;
 }
 
 const DRAFT_KEY_PREFIX = 'flowlog_draft_';
