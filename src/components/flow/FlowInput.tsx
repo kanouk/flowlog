@@ -654,7 +654,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
           side={isMobile ? 'bottom' : 'right'}
           className={
             isMobile
-              ? 'h-[92vh] max-h-[92vh] rounded-t-3xl px-5 pb-6 pt-8 sm:px-6'
+              ? 'h-[78dvh] max-h-[78dvh] overflow-hidden rounded-t-3xl px-5 pb-6 pt-8 sm:px-6'
               : 'h-full w-full px-6 pb-6 pt-8 sm:max-w-xl md:max-w-2xl lg:max-w-[640px]'
           }
           onCloseAutoFocus={(event) => {
