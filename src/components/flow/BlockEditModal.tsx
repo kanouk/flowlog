@@ -162,6 +162,10 @@ export function BlockEditModal({
       setScheduleStartTime(formatTimeFromISO(block.starts_at));
       setScheduleEndDate(block.ends_at ? new Date(block.ends_at) : undefined);
       setScheduleEndTime(formatTimeFromISO(block.ends_at));
+      // Deadline states
+      setDueAllDay(block.due_all_day || false);
+      setDueDate(block.due_at ? new Date(block.due_at) : undefined);
+      setDueTime(block.due_at ? formatTimeFromISO(block.due_at) : '18:00');
       setIsSaving(false);
       setIsDeleting(false);
       setIsExtracting(false);
