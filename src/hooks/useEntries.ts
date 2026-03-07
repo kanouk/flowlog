@@ -382,7 +382,7 @@ export function useEntries() {
       
       const oldEntryId = currentBlock?.entry_id;
       
-      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at' | 'images' | 'starts_at' | 'ends_at' | 'is_all_day' | 'priority' | 'extracted_text'>> = {};
+      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at' | 'images' | 'starts_at' | 'ends_at' | 'is_all_day' | 'priority' | 'extracted_text' | 'due_at' | 'due_all_day'>> = {};
       
       if (updates.content !== undefined) {
         updateData.content = updates.content;
