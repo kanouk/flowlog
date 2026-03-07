@@ -237,7 +237,7 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
             <Bookmark className="h-5 w-5 sm:h-6 sm:w-6" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl sm:text-2xl font-semibold text-foreground">あとで読む</h2>
+            <h2 className="text-xl sm:text-2xl font-semibold text-foreground">あとで</h2>
             <p className="text-xs sm:text-sm text-muted-foreground">
               {filteredBlocks.length}件表示 / 未読 {unreadCount}件 ・ 既読 {readCount}件
             </p>
