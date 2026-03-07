@@ -449,6 +449,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     tag,
     uploadImages,
     batchMode,
+    dueDate,
+    dueTime,
+    dueAllDay,
   ]);
 
   useEffect(() => {
