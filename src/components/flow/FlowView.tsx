@@ -184,7 +184,11 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       is_all_day: boolean;
     },
     priority: number = 0,
-    batchMode: boolean = false
+    batchMode: boolean = false,
+    dueData?: {
+      due_at: string | null;
+      due_all_day: boolean;
+    }
   ): Promise<boolean> => {
     // 一括登録モード：各行を個別タスクとして登録
     if (batchMode && category === 'task') {
