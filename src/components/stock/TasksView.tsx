@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Loader2, CheckSquare, Plus, SlidersHorizontal, X } from 'lucide-react';
+import { Loader2, CheckSquare, Plus, SlidersHorizontal, X, Clock, AlertTriangle } from 'lucide-react';
 import { icons } from 'lucide-react';
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
@@ -417,11 +417,37 @@ export function TasksView({ targetBlockId, onBlockScrolled, onSearchCleared }: T
                       <span>{formatDateJST(block.occurred_at)}</span>
                       <span>•</span>
                       <span>{formatTimeJST(block.occurred_at)}</span>
+                      {/* Deadline display */}
+                      {block.due_at && (
+                        <>
+                          <span>•</span>
+                          {(() => {
+                            const isOverdue = !block.is_done && new Date(block.due_at) < new Date();
+                            const dueDate = new Date(block.due_at);
+                            const dueMonth = dueDate.getMonth() + 1;
+                            const dueDay = dueDate.getDate();
+                            const dueLabel = block.due_all_day 
+                              ? `${dueMonth}/${dueDay} 終日`
+                              : `${dueMonth}/${dueDay} ${String(dueDate.getHours()).padStart(2,'0')}:${String(dueDate.getMinutes()).padStart(2,'0')}`;
+                            return (
+                              <span className={cn(
+                                "inline-flex items-center gap-0.5",
+                                isOverdue ? "text-destructive font-medium" : "text-muted-foreground"
+                              )}>
+                                {isOverdue && <AlertTriangle className="h-3 w-3" />}
+                                <Clock className="h-3 w-3" />
+                                期限: {dueLabel}
+                                {isOverdue && ' (期限切れ)'}
+                              </span>
+                            );
+                          })()}
+                        </>
+                      )}
                       {block.is_done && block.done_at && (
                         <>
                           <span>•</span>
                           <span className="text-green-600 dark:text-green-400">
-                            ✓ {formatDateJST(block.done_at)} 完了
+                            ✓ {formatDateJST(block.done_at)} {formatTimeJST(block.done_at)} 完了
                           </span>
                         </>
                       )}

@@ -124,7 +124,7 @@ export function StockView({ entries, selectedDate, onDateSelect }: StockViewProp
         </button>
         <button onClick={() => switchTab('readLater')} className={tabClass('readLater')}>
           <Bookmark className="h-4 w-4 flex-shrink-0" />
-          <span className="hidden sm:inline">あとで読む</span>
+          <span className="hidden sm:inline">あとで</span>
         </button>
       </div>
 

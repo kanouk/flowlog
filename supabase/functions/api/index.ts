@@ -585,7 +585,7 @@ async function addReadLater(c: any) {
     
     return c.json({ 
       success: true, 
-      data: { id: block.id, message: "あとで読むリストに追加しました" } 
+      data: { id: block.id, message: "あとでリストに追加しました" } 
     });
   } catch (error: any) {
     return c.json({ success: false, error: error.message }, 500);

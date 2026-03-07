@@ -98,6 +98,15 @@ export function BlockEditModal({
   const [tag, setTag] = useState<string | null>(block.tag);
   const [priority, setPriority] = useState<TaskPriorityValue>((block.priority || 0) as TaskPriorityValue);
   
+  // Deadline states
+  const [dueAllDay, setDueAllDay] = useState(block.due_all_day || false);
+  const [dueDate, setDueDate] = useState<Date | undefined>(
+    block.due_at ? new Date(block.due_at) : undefined
+  );
+  const [dueTime, setDueTime] = useState(
+    block.due_at ? formatTimeFromISO(block.due_at) : '18:00'
+  );
+  
   // Images
   const [existingImages, setExistingImages] = useState<string[]>(block.images || []);
   const [newImages, setNewImages] = useState<File[]>([]);
@@ -153,6 +162,10 @@ export function BlockEditModal({
       setScheduleStartTime(formatTimeFromISO(block.starts_at));
       setScheduleEndDate(block.ends_at ? new Date(block.ends_at) : undefined);
       setScheduleEndTime(formatTimeFromISO(block.ends_at));
+      // Deadline states
+      setDueAllDay(block.due_all_day || false);
+      setDueDate(block.due_at ? new Date(block.due_at) : undefined);
+      setDueTime(block.due_at ? formatTimeFromISO(block.due_at) : '18:00');
       setIsSaving(false);
       setIsDeleting(false);
       setIsExtracting(false);
@@ -373,6 +386,13 @@ export function BlockEditModal({
         updates.priority = priority;
       }
       
+      // Deadline fields (only for tasks)
+      if (category === 'task') {
+        const newDueAt = dueDate ? buildScheduleDateTime(dueDate, dueTime, dueAllDay) : null;
+        if (newDueAt !== (block.due_at || null)) updates.due_at = newDueAt;
+        if (dueAllDay !== (block.due_all_day || false)) updates.due_all_day = dueAllDay;
+      }
+      
       // Extracted text
       if (extractedText !== (block.extracted_text || '')) {
         updates.extracted_text = extractedText || null;
@@ -449,11 +469,64 @@ export function BlockEditModal({
           
           {/* タスク優先度セレクター */}
           {category === 'task' && (
-            <div className="mt-3">
+            <div className="mt-3 space-y-3">
               <PrioritySelector
                 value={priority}
                 onChange={setPriority}
               />
+              
+              {/* 期限設定 */}
+              <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-foreground">期限</span>
+                  {dueDate && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-muted-foreground"
+                      onClick={() => setDueDate(undefined)}
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      クリア
+                    </Button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="edit-due-all-day"
+                    checked={dueAllDay}
+                    onCheckedChange={(checked) => setDueAllDay(checked as boolean)}
+                  />
+                  <label htmlFor="edit-due-all-day" className="text-sm cursor-pointer">終日</label>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 px-3 text-sm">
+                        <Calendar className="h-3.5 w-3.5 mr-1.5" />
+                        {dueDate ? formatDateDisplay(dueDate) : '日付を選択'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={dueDate}
+                        onSelect={setDueDate}
+                        initialFocus
+                        className="pointer-events-auto"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {!dueAllDay && (
+                    <Input
+                      type="time"
+                      value={dueTime}
+                      onChange={(e) => setDueTime(e.target.value)}
+                      className="h-8 w-28 text-sm"
+                    />
+                  )}
+                </div>
+              </div>
             </div>
           )}
           

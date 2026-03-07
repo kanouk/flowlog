@@ -24,7 +24,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   task: 'タスク',
   schedule: 'スケジュール',
   thought: 'メモ',
-  read_later: 'あとで読む',
+  read_later: 'あとで',
 };
 
 const PERIOD_OPTIONS: { label: string; value: PeriodDays }[] = [
@@ -44,7 +44,7 @@ function formatDateAxis(dateStr: string) {
 export default function Analytics() {
   const navigate = useNavigate();
   const [days, setDays] = useState<PeriodDays>(30);
-  const { scoreData, categoryData, dailyActivity, streakInfo, isLoading } = useAnalytics(days);
+  const { scoreData, categoryData, dailyActivity, streakInfo, completionStats, isLoading } = useAnalytics(days);
 
   return (
     <div className="min-h-screen bg-background">
@@ -89,6 +89,24 @@ export default function Analytics() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Completion stats */}
+        {(completionStats.completedTasks > 0 || completionStats.readItems > 0) && (
+          <Card>
+            <CardContent className="py-4 flex items-center gap-6">
+              {completionStats.completedTasks > 0 && (
+                <div className="text-sm">
+                  ✅ 完了タスク: <span className="font-semibold">{completionStats.completedTasks}件</span>
+                </div>
+              )}
+              {completionStats.readItems > 0 && (
+                <div className="text-sm">
+                  📖 既読: <span className="font-semibold">{completionStats.readItems}件</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {isLoading ? (
           <p className="text-muted-foreground text-center py-12">読み込み中...</p>

@@ -20,6 +20,8 @@ export type Database = {
           content: string | null
           created_at: string
           done_at: string | null
+          due_all_day: boolean | null
+          due_at: string | null
           ends_at: string | null
           entry_id: string
           extracted_text: string | null
@@ -39,6 +41,8 @@ export type Database = {
           content?: string | null
           created_at?: string
           done_at?: string | null
+          due_all_day?: boolean | null
+          due_at?: string | null
           ends_at?: string | null
           entry_id: string
           extracted_text?: string | null
@@ -58,6 +62,8 @@ export type Database = {
           content?: string | null
           created_at?: string
           done_at?: string | null
+          due_all_day?: boolean | null
+          due_at?: string | null
           ends_at?: string | null
           entry_id?: string
           extracted_text?: string | null

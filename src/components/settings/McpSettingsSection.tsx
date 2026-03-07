@@ -253,7 +253,7 @@ export function McpSettingsSection() {
               <div><code>list_tasks</code>, <code>add_task</code>, <code>complete_task</code> - タスク</div>
               <div><code>list_schedules</code>, <code>add_schedule</code> - 予定</div>
               <div><code>list_memos</code>, <code>add_memo</code> - メモ</div>
-              <div><code>list_read_later</code>, <code>add_read_later</code>, <code>mark_as_read</code> - あとで読む</div>
+              <div><code>list_read_later</code>, <code>add_read_later</code>, <code>mark_as_read</code> - あとで</div>
               <div><code>search_blocks</code> - 横断検索</div>
               <div><code>get_entry</code> - 日記取得</div>
             </div>

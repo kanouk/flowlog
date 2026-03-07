@@ -42,6 +42,9 @@ export interface Block {
   priority: number;
   // OCR extracted text
   extracted_text: string | null;
+  // Task deadline
+  due_at: string | null;
+  due_all_day: boolean;
 }
 
 export interface Entry {
@@ -75,6 +78,9 @@ export interface BlockUpdatePayload {
   priority?: number;
   // OCR extracted text
   extracted_text?: string | null;
+  // Task deadline
+  due_at?: string | null;
+  due_all_day?: boolean;
 }
 
 export interface GetBlocksByCategoryOptions {
@@ -376,7 +382,7 @@ export function useEntries() {
       
       const oldEntryId = currentBlock?.entry_id;
       
-      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at' | 'images' | 'starts_at' | 'ends_at' | 'is_all_day' | 'priority' | 'extracted_text'>> = {};
+      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at' | 'images' | 'starts_at' | 'ends_at' | 'is_all_day' | 'priority' | 'extracted_text' | 'due_at' | 'due_all_day'>> = {};
       
       if (updates.content !== undefined) {
         updateData.content = updates.content;
@@ -413,6 +419,13 @@ export function useEntries() {
       // Extracted text field
       if (updates.extracted_text !== undefined) {
         updateData.extracted_text = updates.extracted_text;
+      }
+      // Deadline fields
+      if (updates.due_at !== undefined) {
+        updateData.due_at = updates.due_at;
+      }
+      if (updates.due_all_day !== undefined) {
+        updateData.due_all_day = updates.due_all_day;
       }
       if (updates.occurred_at) {
         const newDayKey = getOccurredAtDayKey(updates.occurred_at);
@@ -516,6 +529,9 @@ export function useEntries() {
             images: b.images,
             category: b.category,
             is_done: b.is_done,
+            done_at: b.done_at,
+            due_at: b.due_at,
+            due_all_day: b.due_all_day,
           })),
           date,
         },

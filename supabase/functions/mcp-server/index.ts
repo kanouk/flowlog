@@ -911,7 +911,7 @@ const TOOLS = [
   },
   {
     name: "list_read_later",
-    description: "あとで読むリストを取得します",
+    description: "あとでリストを取得します",
     inputSchema: {
       type: "object",
       properties: {
@@ -923,7 +923,7 @@ const TOOLS = [
   },
   {
     name: "add_read_later",
-    description: "あとで読むリストにURLを追加します",
+    description: "あとでリストにURLを追加します",
     inputSchema: {
       type: "object",
       properties: {
@@ -936,7 +936,7 @@ const TOOLS = [
   },
   {
     name: "mark_as_read",
-    description: "あとで読むアイテムを既読/未読にします",
+    description: "あとでアイテムを既読/未読にします",
     inputSchema: {
       type: "object",
       properties: {

@@ -237,7 +237,7 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
             <Bookmark className="h-5 w-5 sm:h-6 sm:w-6" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl sm:text-2xl font-semibold text-foreground">あとで読む</h2>
+            <h2 className="text-xl sm:text-2xl font-semibold text-foreground">あとで</h2>
             <p className="text-xs sm:text-sm text-muted-foreground">
               {filteredBlocks.length}件表示 / 未読 {unreadCount}件 ・ 既読 {readCount}件
             </p>
@@ -300,10 +300,10 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
             <Bookmark className="w-8 h-8 text-green-500" />
           </div>
           <p className="text-muted-foreground">
-            {tagFilter !== 'all' || readFilter !== 'all' ? '該当するものがありません' : 'あとで読むものがありません'}
+            {tagFilter !== 'all' || readFilter !== 'all' ? '該当するものがありません' : 'まだ何もありません'}
           </p>
           <p className="text-sm text-muted-foreground/70 mt-1">
-            Flowであとで読むを追加すると、ここに表示されます
+            Flowで「あとで」を追加すると、ここに表示されます
           </p>
         </div>
       ) : (
@@ -331,19 +331,20 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
                     onClick={() => handleToggleRead(block.id, !block.is_done)}
                     disabled={isToggling}
                     className={cn(
-                      "flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors",
+                      "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-colors",
                       block.is_done 
-                        ? "bg-gray-500/10 text-gray-500 hover:bg-gray-500/20" 
-                        : "bg-green-500/10 text-green-500 hover:bg-green-500/20"
+                        ? "bg-muted text-muted-foreground hover:bg-muted/80" 
+                        : "bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20"
                     )}
                   >
                     {isToggling ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : block.is_done ? (
-                      <CheckCircle2 className="h-4 w-4" />
+                      <CheckCircle2 className="h-3.5 w-3.5" />
                     ) : (
-                      <Circle className="h-4 w-4" />
+                      <Circle className="h-3.5 w-3.5" />
                     )}
+                    {block.is_done ? '既読' : '未読'}
                   </button>
                   
                   <div className="flex-1">
@@ -461,6 +462,14 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
                       <span>{formatDateJST(block.occurred_at)}</span>
                       <span>•</span>
                       <span>{formatTimeJST(block.occurred_at)}</span>
+                      {block.is_done && block.done_at && (
+                        <>
+                          <span>•</span>
+                          <span className="text-green-600 dark:text-green-400">
+                            ✓ {formatDateJST(block.done_at)} {formatTimeJST(block.done_at)} に既読
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

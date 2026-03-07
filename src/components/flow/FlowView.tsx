@@ -213,6 +213,8 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
           is_all_day: false,
           priority,
           extracted_text: null,
+          due_at: null,
+          due_all_day: false,
         };
         setBlocks(prev => [optimisticBlock, ...prev]);
 
@@ -258,6 +260,8 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       is_all_day: scheduleData?.is_all_day || false,
       priority: 0,
       extracted_text: null,
+      due_at: null,
+      due_all_day: false,
     };
     
     if (mode !== 'toNow' || isToday) {
