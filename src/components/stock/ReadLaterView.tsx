@@ -331,19 +331,20 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
                     onClick={() => handleToggleRead(block.id, !block.is_done)}
                     disabled={isToggling}
                     className={cn(
-                      "flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors",
+                      "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-colors",
                       block.is_done 
-                        ? "bg-gray-500/10 text-gray-500 hover:bg-gray-500/20" 
-                        : "bg-green-500/10 text-green-500 hover:bg-green-500/20"
+                        ? "bg-muted text-muted-foreground hover:bg-muted/80" 
+                        : "bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20"
                     )}
                   >
                     {isToggling ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : block.is_done ? (
-                      <CheckCircle2 className="h-4 w-4" />
+                      <CheckCircle2 className="h-3.5 w-3.5" />
                     ) : (
-                      <Circle className="h-4 w-4" />
+                      <Circle className="h-3.5 w-3.5" />
                     )}
+                    {block.is_done ? '既読' : '未読'}
                   </button>
                   
                   <div className="flex-1">
