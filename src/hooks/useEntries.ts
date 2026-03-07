@@ -274,6 +274,8 @@ export function useEntries() {
     ends_at = null,
     is_all_day = false,
     priority = 0,
+    due_at = null,
+    due_all_day = false,
   }: { 
     content: string; 
     selectedDate: string; 
@@ -285,6 +287,8 @@ export function useEntries() {
     ends_at?: string | null;
     is_all_day?: boolean;
     priority?: number;
+    due_at?: string | null;
+    due_all_day?: boolean;
   }) => {
     if (!userId) return { block: null, navigateToDate: null };
 
