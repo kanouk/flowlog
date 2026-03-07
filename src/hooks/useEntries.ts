@@ -78,6 +78,9 @@ export interface BlockUpdatePayload {
   priority?: number;
   // OCR extracted text
   extracted_text?: string | null;
+  // Task deadline
+  due_at?: string | null;
+  due_all_day?: boolean;
 }
 
 export interface GetBlocksByCategoryOptions {
