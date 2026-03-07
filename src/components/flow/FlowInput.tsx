@@ -108,6 +108,11 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [endTime, setEndTime] = useState('10:00');
 
+  // Task deadline state
+  const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
+  const [dueTime, setDueTime] = useState('18:00');
+  const [dueAllDay, setDueAllDay] = useState(true);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
