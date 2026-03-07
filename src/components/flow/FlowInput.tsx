@@ -767,6 +767,57 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                     <span className="text-xs text-muted-foreground/70">1行ごとにタスク化します</span>
                   )}
                 </div>
+
+                {/* 期限設定 */}
+                <div className="space-y-2 border-t border-orange-200 pt-3 dark:border-orange-900/40">
+                  <h4 className="text-xs font-medium text-muted-foreground">期限（任意）</h4>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="due-all-day"
+                      checked={dueAllDay}
+                      onCheckedChange={(checked) => setDueAllDay(checked as boolean)}
+                    />
+                    <label htmlFor="due-all-day" className="cursor-pointer text-sm font-medium">
+                      終日
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-9 px-3 text-sm">
+                          {formatScheduleDateDisplay(dueDate)}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={dueDate}
+                          onSelect={setDueDate}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {!dueAllDay && dueDate && (
+                      <Input
+                        type="time"
+                        value={dueTime}
+                        onChange={(e) => setDueTime(e.target.value)}
+                        className="h-9 w-28 text-sm"
+                      />
+                    )}
+                    {dueDate && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 px-2 text-sm text-muted-foreground"
+                        onClick={() => setDueDate(undefined)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </section>
             )}
 

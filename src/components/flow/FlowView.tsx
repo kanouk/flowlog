@@ -285,6 +285,8 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       ends_at: scheduleData?.ends_at,
       is_all_day: scheduleData?.is_all_day,
       priority: category === 'task' ? priority : 0,
+      due_at: dueData?.due_at,
+      due_all_day: dueData?.due_all_day,
     });
     
     if (savedBlock) {

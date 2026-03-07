@@ -343,6 +343,12 @@ export function useEntries() {
         insertData.is_all_day = is_all_day;
       }
 
+      // タスクカテゴリの場合のみ期限フィールドを追加
+      if (category === 'task' && due_at) {
+        insertData.due_at = due_at;
+        insertData.due_all_day = due_all_day;
+      }
+
       const { data, error } = await supabase
         .from('blocks')
         .insert(insertData as typeof insertData & { entry_id: string; user_id: string })
