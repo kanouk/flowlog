@@ -1,28 +1,50 @@
 
 
-# 検索対象に「あとで読む」の要約文を追加
+# OpenAPI (openapi.json) 生成
 
 ## 概要
-現在ブロック検索は `content` カラムのみを対象としているが、Read Later ブロックの URL 要約（`url_metadata` JSONB 内の `summary` フィールド）も検索対象に含める。
+既存の `/api/docs` エンドポイントの情報をベースに、OpenAPI 3.0.3 仕様の `openapi.json` を静的ファイルとして作成し、`/api/openapi.json` エンドポイントから配信する。
 
 ## 変更内容
 
-### `src/hooks/useSearch.ts`
-- ブロック検索クエリの `select` に `url_metadata` を追加
-- フィルタ条件を `.ilike('content', ...)` 単体から `.or()` に変更し、`url_metadata->summary` の ILIKE 検索を追加：
-  ```
-  .or(`content.ilike.%${q}%,url_metadata->>summary.ilike.%${q}%`)
-  ```
-- `BlockSearchResult` インターフェースに `url_metadata` フィールドを追加
+### 1. `public/openapi.json` を作成
+- OpenAPI 3.0.3 準拠のJSON仕様ファイル
+- 全18エンドポイント（GET/POST/PATCH/DELETE）を定義
+- Bearer Token認証スキーマ（`securitySchemes`）
+- リクエストボディ・クエリパラメータ・パスパラメータのスキーマ定義
+- レスポンススキーマ（Block, Entry, Success/Error）
+- `servers` にAPI Base URLを設定
 
-### `src/components/search/SearchResults.tsx`
-- Read Later ブロックの表示テキストに、`content` が空または URL のみの場合は `url_metadata.summary` をフォールバック表示
-- 要約文中のキーワードもハイライト対象にする
+### 2. `supabase/functions/api/index.ts` に `/openapi.json` エンドポイント追加
+- `GET /openapi.json` を認証不要で追加
+- `public/openapi.json` の内容をインラインで返す（Edge FunctionからはファイルシステムにアクセスできないためJSON直接定義）
 
-### ファイル一覧
+### エンドポイント一覧（openapi.json に含まれるもの）
+| Method | Path | 認証 |
+|---|---|---|
+| GET | /health | 不要 |
+| GET | /docs | 不要 |
+| GET | /openapi.json | 不要 |
+| GET | /events | 必要 |
+| POST | /events | 必要 |
+| GET | /tasks | 必要 |
+| POST | /tasks | 必要 |
+| PATCH | /tasks/{id}/complete | 必要 |
+| PATCH | /tasks/{id}/priority | 必要 |
+| GET | /schedules | 必要 |
+| POST | /schedules | 必要 |
+| GET | /memos | 必要 |
+| POST | /memos | 必要 |
+| GET | /read-later | 必要 |
+| POST | /read-later | 必要 |
+| PATCH | /read-later/{id}/read | 必要 |
+| GET | /search | 必要 |
+| GET | /entries/{date} | 必要 |
+| PATCH | /blocks/{id} | 必要 |
+| DELETE | /blocks/{id} | 必要 |
 
-| File | Change |
+### 変更ファイル
+| ファイル | 内容 |
 |---|---|
-| `src/hooks/useSearch.ts` | 検索条件に `url_metadata->>summary` を追加、select に `url_metadata` 追加 |
-| `src/components/search/SearchResults.tsx` | Read Later ブロックで要約テキストを表示 |
+| `supabase/functions/api/index.ts` | `/openapi.json` エンドポイント追加（OpenAPI仕様JSONをインラインで返す） |
 
