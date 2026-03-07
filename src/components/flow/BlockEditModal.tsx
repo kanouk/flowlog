@@ -98,6 +98,15 @@ export function BlockEditModal({
   const [tag, setTag] = useState<string | null>(block.tag);
   const [priority, setPriority] = useState<TaskPriorityValue>((block.priority || 0) as TaskPriorityValue);
   
+  // Deadline states
+  const [dueAllDay, setDueAllDay] = useState(block.due_all_day || false);
+  const [dueDate, setDueDate] = useState<Date | undefined>(
+    block.due_at ? new Date(block.due_at) : undefined
+  );
+  const [dueTime, setDueTime] = useState(
+    block.due_at ? formatTimeFromISO(block.due_at) : '18:00'
+  );
+  
   // Images
   const [existingImages, setExistingImages] = useState<string[]>(block.images || []);
   const [newImages, setNewImages] = useState<File[]>([]);
