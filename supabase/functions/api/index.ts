@@ -206,6 +206,8 @@ async function addBlockHelper(
     ends_at?: string;
     is_all_day?: boolean;
     priority?: number;
+    due_at?: string;
+    due_all_day?: boolean;
   }
 ) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
