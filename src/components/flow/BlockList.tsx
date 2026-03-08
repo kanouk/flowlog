@@ -15,7 +15,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { TaskCheckbox } from '@/components/ui/task-checkbox';
-import { formatTimeJST } from '@/lib/dateUtils';
+import { formatTimeWithDayBoundary } from '@/lib/dateUtils';
 import { BlockCategory, BlockTag, CATEGORY_CONFIG, TAG_CONFIG, TAGS, formatScheduleRange } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { PriorityIndicator } from './PrioritySelector';
