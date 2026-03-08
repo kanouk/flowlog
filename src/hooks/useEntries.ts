@@ -296,7 +296,7 @@ export function useEntries() {
 
     setLoading(true);
     try {
-      const today = getTodayKey();
+      const today = getTodayKey(dayBoundaryHour);
       const isToday = selectedDate === today;
       
       let occurredAt: string;
@@ -305,9 +305,8 @@ export function useEntries() {
         occurredAt = new Date().toISOString();
       } else {
         // 過去日：その日の最終ブロック + 1分、なければ 23:59 JST
-        // 日付範囲内にクランプして翌日にはみ出さない
-        const { start, end } = getDateRangeUTC(selectedDate);
-        const endMs = parseTimestamp(end).getTime() - 1; // 翌日00:00の1ms前
+        const { start, end } = getDateRangeUTC(selectedDate, dayBoundaryHour);
+        const endMs = parseTimestamp(end).getTime() - 1;
         const { data: lastBlocks } = await supabase
           .from('blocks')
           .select('occurred_at')
@@ -320,14 +319,13 @@ export function useEntries() {
         if (lastBlocks && lastBlocks.length > 0) {
           const lastTime = parseTimestamp(lastBlocks[0].occurred_at);
           const candidateMs = lastTime.getTime() + 60 * 1000;
-          // 日付範囲内にクランプ
           occurredAt = new Date(Math.min(candidateMs, endMs)).toISOString();
         } else {
-          occurredAt = createOccurredAt(selectedDate, '23:59');
+          occurredAt = createOccurredAt(selectedDate, '23:59', dayBoundaryHour);
         }
       }
       
-      const dayKey = getOccurredAtDayKey(occurredAt);
+      const dayKey = getOccurredAtDayKey(occurredAt, dayBoundaryHour);
       const entry = await getOrCreateEntryForDate(dayKey);
       if (!entry) throw new Error('Failed to get/create entry');
 
