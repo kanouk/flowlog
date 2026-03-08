@@ -156,7 +156,7 @@ export function BlockEditModal({
       setExistingImages(block.images || []);
       setNewImages([]);
       setNewImagePreviews([]);
-      setDayKey(getOccurredAtDayKey(block.occurred_at));
+      setDayKey(getOccurredAtDayKey(block.occurred_at, dayBoundaryHour));
       setTime(formatTimeJST(block.occurred_at));
       // Schedule states
       setIsAllDay(block.is_all_day || false);
