@@ -21,6 +21,7 @@ import { useEntries, Block } from '@/hooks/useEntries';
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { useImageAttachments } from '@/hooks/useImageAttachments';
 import { getTodayKey } from '@/lib/dateUtils';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 import { toast } from 'sonner';
 import { BlockCategory, CATEGORY_CONFIG } from '@/lib/categoryUtils';
 import {
