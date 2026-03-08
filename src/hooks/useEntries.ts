@@ -378,7 +378,8 @@ export function useEntries() {
    */
   const updateBlock = useCallback(async (
     blockId: string, 
-    updates: BlockUpdatePayload
+    updates: BlockUpdatePayload,
+    dayBoundaryHour: number = 0
   ) => {
     if (!userId) return null;
 
