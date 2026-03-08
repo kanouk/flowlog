@@ -5,6 +5,8 @@ import { CheckCircle2, FileText, Calendar, StickyNote, BookmarkCheck, BookOpen }
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { SearchResults as SearchResultsType } from '@/hooks/useSearch';
+import { getOccurredAtDayKey } from '@/lib/dateUtils';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 
 interface SearchResultsProps {
   results: SearchResultsType | null;
