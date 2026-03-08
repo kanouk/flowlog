@@ -276,6 +276,7 @@ export function useEntries() {
     priority = 0,
     due_at = null,
     due_all_day = false,
+    dayBoundaryHour = 0,
   }: { 
     content: string; 
     selectedDate: string; 
@@ -289,6 +290,7 @@ export function useEntries() {
     priority?: number;
     due_at?: string | null;
     due_all_day?: boolean;
+    dayBoundaryHour?: number;
   }) => {
     if (!userId) return { block: null, navigateToDate: null };
 
