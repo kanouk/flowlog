@@ -71,6 +71,7 @@ function linkifyContent(text: string): ReactNode {
 }
 
 export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared }: ReadLaterViewProps) {
+  const { dayBoundaryHour } = useDayBoundary();
   const { getBlocksByCategory, summarizeUrl, updateBlock } = useEntries();
   const { customTags } = useCustomTags();
   
