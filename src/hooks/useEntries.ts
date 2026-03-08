@@ -530,7 +530,7 @@ export function useEntries() {
   /**
    * エントリを整形（時刻推測 + 日記生成）
    */
-  const formatEntry = useCallback(async (entryId: string, blocks: Block[], date: string): Promise<FormatEntryResponse | null> => {
+  const formatEntry = useCallback(async (entryId: string, blocks: Block[], date: string, dayBoundaryHour: number = 0): Promise<FormatEntryResponse | null> => {
     if (!session) return null;
 
     setFormatting(true);
