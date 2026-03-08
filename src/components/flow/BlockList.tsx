@@ -34,6 +34,7 @@ interface BlockListProps {
   editable?: boolean;
   selectedDate?: string;
   highlightQuery?: string | null;
+  dayBoundaryHour?: number;
 }
 
 // テキスト内のキーワードをハイライト
