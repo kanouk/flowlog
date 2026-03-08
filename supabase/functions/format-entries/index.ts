@@ -232,7 +232,7 @@ async function callAIWithConfig(
 
 // Fetch feature AI config via direct server-side queries (no RPC, no key exposure)
 async function getFeatureConfig(
-  serviceClient: ReturnType<typeof createClient>,
+  serviceClient: any,
   userId: string,
   featureKey: string,
 ): Promise<FeatureAIConfig | null> {
