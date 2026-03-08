@@ -253,7 +253,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       return;
     }
     
-    const result = await formatEntry(currentEntry.id, blocks, date);
+    const result = await formatEntry(currentEntry.id, blocks, date, dayBoundaryHour);
     if (result) {
       setEntry(prev => prev ? {
         ...prev,
