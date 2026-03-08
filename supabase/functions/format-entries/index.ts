@@ -609,7 +609,7 @@ JSON形式で回答してください。`;
                 if (supabase) {
                   const { error: updateError } = await supabase
                     .from('blocks')
-                    .update({ occurred_at: newOccurredAt })
+                    .update({ occurred_at: newOccurredAt } as any)
                     .eq('id', block.id);
                   
                   if (!updateError) {
