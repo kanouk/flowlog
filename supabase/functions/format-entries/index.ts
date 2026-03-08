@@ -834,7 +834,7 @@ ${blocksText}`;
     }
 
     if (!formattedContent) {
-      formattedContent = buildFallbackDiary(sortedBlocks);
+      formattedContent = buildFallbackDiary(sortedBlocks, date);
     }
 
     // Extract summary
