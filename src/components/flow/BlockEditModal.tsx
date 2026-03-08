@@ -38,6 +38,7 @@ import {
   isFutureDate, 
   parseTimestamp 
 } from '@/lib/dateUtils';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 
 // Helper to format time from ISO string
 const formatTimeFromISO = (isoString: string | null): string => {
