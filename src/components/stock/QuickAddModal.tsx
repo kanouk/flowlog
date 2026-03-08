@@ -190,12 +190,13 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
         for (const line of lines) {
           const { block } = await addBlockWithDate({
             content: line,
-            selectedDate: getTodayKey(),
+            selectedDate: getTodayKey(dayBoundaryHour),
             mode: 'toNow',
             images: [],
             category: 'task',
             tag: tag as import('@/lib/categoryUtils').BlockTag | null,
             priority,
+            dayBoundaryHour,
           });
           if (block) lastBlock = block;
         }
