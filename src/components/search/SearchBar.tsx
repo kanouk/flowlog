@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useSearch } from '@/hooks/useSearch';
 import { SearchResults } from './SearchResults';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { getOccurredAtDayKey } from '@/lib/dateUtils';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 
 interface SearchBarProps {
   onNavigateToDate: (date: string, tab?: string, blockId?: string, query?: string) => void;
@@ -28,6 +30,7 @@ const categoryToTab = (category: string) => {
 };
 
 export function SearchBar({ onNavigateToDate }: SearchBarProps) {
+  const { dayBoundaryHour } = useDayBoundary();
   const isMobile = useIsMobile();
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -66,7 +69,7 @@ export function SearchBar({ onNavigateToDate }: SearchBarProps) {
 
     if (index < results.blocks.length) {
       const block = results.blocks[index];
-      const dateKey = block.occurred_at.split('T')[0];
+      const dateKey = getOccurredAtDayKey(block.occurred_at, dayBoundaryHour);
       onNavigateToDate(dateKey, categoryToTab(block.category), block.id, query);
     } else {
       const entryIndex = index - results.blocks.length;

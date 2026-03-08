@@ -11,9 +11,10 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDateJST, calculateMiddleOccurredAt } from '@/lib/dateUtils';
+import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDateJST, formatDisplayDateJST, calculateMiddleOccurredAt } from '@/lib/dateUtils';
 import { BlockCategory, BlockTag } from '@/lib/categoryUtils';
 import { arrayMove } from '@dnd-kit/sortable';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 
 interface FlowEditorProps {
   date?: string;
@@ -32,7 +33,8 @@ function sortBlocksDesc(blocks: Block[]): Block[] {
 }
 
 export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps) {
-  const today = getTodayKey();
+  const { dayBoundaryHour } = useDayBoundary();
+  const today = getTodayKey(dayBoundaryHour);
   const date = propDate || today;
   const isToday = date === today;
 
@@ -58,7 +60,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     try {
       const entryData = await getEntry(date);
       setEntry(entryData);
-      const blocksData = await getBlocksByDate(date);
+      const blocksData = await getBlocksByDate(date, dayBoundaryHour);
       setBlocks(blocksData);
     } finally {
       setLoading(false);
@@ -121,12 +123,13 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       starts_at: scheduleData?.starts_at,
       ends_at: scheduleData?.ends_at,
       is_all_day: scheduleData?.is_all_day,
+      dayBoundaryHour,
     });
     
     if (savedBlock) {
       if (navigateToDate) {
         onNavigateToDate?.(navigateToDate);
-        toast.success(`今日（${formatDateJST(new Date().toISOString())}）に追加しました`);
+        toast.success(`今日（${formatDisplayDateJST(new Date().toISOString(), dayBoundaryHour)}）に追加しました`);
       } else {
         setBlocks(prev => sortBlocksDesc(prev.map(b => b.id === tempId ? savedBlock : b)));
       }
@@ -177,15 +180,15 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       b.id === blockId ? { ...b, ...updates } : b
     ));
     
-    const updated = await updateBlock(blockId, updates);
+    const updated = await updateBlock(blockId, updates, dayBoundaryHour);
     
     if (!updated) {
       setBlocks(originalBlocks);
     } else if (updates.occurred_at) {
-      const newDayKey = getOccurredAtDayKey(updates.occurred_at);
+      const newDayKey = getOccurredAtDayKey(updates.occurred_at, dayBoundaryHour);
       if (newDayKey !== date) {
         setBlocks(prev => prev.filter(b => b.id !== blockId));
-        toast.success(`${formatDateJST(updates.occurred_at)}に移動しました`);
+        toast.success(`${formatDisplayDateJST(updates.occurred_at, dayBoundaryHour)}に移動しました`);
       } else {
         setBlocks(prev => sortBlocksDesc(prev));
       }
@@ -211,7 +214,8 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     const result = calculateMiddleOccurredAt(
       prevBlock?.occurred_at || null,
       nextBlock?.occurred_at || null,
-      date
+      date,
+      dayBoundaryHour
     );
 
     if (result.success === false) {
@@ -222,7 +226,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
 
     const newOccurredAt = result.occurredAt;
 
-    const updated = await updateBlock(activeId, { occurred_at: newOccurredAt });
+    const updated = await updateBlock(activeId, { occurred_at: newOccurredAt }, dayBoundaryHour);
     
     if (!updated) {
       setBlocks(originalBlocks);
@@ -251,7 +255,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       return;
     }
     
-    const result = await formatEntry(currentEntry.id, blocks, date);
+    const result = await formatEntry(currentEntry.id, blocks, date, dayBoundaryHour);
     if (result) {
       setEntry(prev => prev ? {
         ...prev,

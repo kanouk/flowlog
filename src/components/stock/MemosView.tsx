@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Loader2, FileText, Plus } from 'lucide-react';
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
-import { formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
+import { formatTimeWithDayBoundary, formatDisplayDateJST, parseTimestamp } from '@/lib/dateUtils';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 import { BlockTag, TAG_CONFIG, TAGS } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { TagFilterDropdown } from './TagFilterDropdown';
@@ -33,6 +34,7 @@ function getIconComponent(iconName: string) {
 }
 
 export function MemosView({ targetBlockId, onBlockScrolled, onSearchCleared }: MemosViewProps) {
+  const { dayBoundaryHour } = useDayBoundary();
   const { getBlocksByCategory, updateBlock, deleteBlock } = useEntries();
   const { customTags } = useCustomTags();
   const [memos, setMemos] = useState<Block[]>([]);
@@ -227,9 +229,9 @@ export function MemosView({ targetBlockId, onBlockScrolled, onSearchCleared }: M
                     
                     <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground flex-wrap">
                       {getTagDisplay(memo.tag)}
-                      <span>{formatDateJST(memo.occurred_at)}</span>
+                      <span>{formatDisplayDateJST(memo.occurred_at, dayBoundaryHour)}</span>
                       <span>•</span>
-                      <span>{formatTimeJST(memo.occurred_at)}</span>
+                      <span>{formatTimeWithDayBoundary(memo.occurred_at, dayBoundaryHour)}</span>
                     </div>
                   </div>
                 </div>

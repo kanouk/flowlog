@@ -15,7 +15,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { TaskCheckbox } from '@/components/ui/task-checkbox';
-import { formatTimeJST } from '@/lib/dateUtils';
+import { formatTimeWithDayBoundary } from '@/lib/dateUtils';
 import { BlockCategory, BlockTag, CATEGORY_CONFIG, TAG_CONFIG, TAGS, formatScheduleRange } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { PriorityIndicator } from './PrioritySelector';
@@ -162,6 +162,7 @@ export function BlockList({
   editable = true,
   selectedDate,
   highlightQuery,
+  dayBoundaryHour = 0,
 }: BlockListProps) {
   const [modalImage, setModalImage] = useState<string | null>(null);
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
@@ -442,7 +443,7 @@ export function BlockList({
                           <CategoryBadge category={block.category} />
                           <TagBadge tag={block.tag} customTags={customTags} />
                           <span className="timestamp-badge">
-                            {formatTimeJST(block.occurred_at)}
+                            {formatTimeWithDayBoundary(block.occurred_at, dayBoundaryHour)}
                           </span>
                         </div>
                       </div>

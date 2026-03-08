@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
 import { Loader2, Bookmark, ExternalLink, Sparkles, RefreshCw, FileText, Circle, CheckCircle2, AlertCircle, Plus } from 'lucide-react';
 import { icons } from 'lucide-react';
 import { useEntries, Block, UrlMetadata } from '@/hooks/useEntries';
-import { formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
+import { formatTimeWithDayBoundary, formatDisplayDateJST, formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { TagFilterDropdown } from './TagFilterDropdown';
@@ -70,6 +71,7 @@ function linkifyContent(text: string): ReactNode {
 }
 
 export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared }: ReadLaterViewProps) {
+  const { dayBoundaryHour } = useDayBoundary();
   const { getBlocksByCategory, summarizeUrl, updateBlock } = useEntries();
   const { customTags } = useCustomTags();
   
@@ -459,9 +461,9 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
                     
                     <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground flex-wrap">
                       {getTagDisplay(block.tag)}
-                      <span>{formatDateJST(block.occurred_at)}</span>
+                      <span>{formatDisplayDateJST(block.occurred_at, dayBoundaryHour)}</span>
                       <span>•</span>
-                      <span>{formatTimeJST(block.occurred_at)}</span>
+                      <span>{formatTimeWithDayBoundary(block.occurred_at, dayBoundaryHour)}</span>
                       {block.is_done && block.done_at && (
                         <>
                           <span>•</span>

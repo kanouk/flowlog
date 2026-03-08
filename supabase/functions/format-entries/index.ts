@@ -510,7 +510,7 @@ serve(async (req) => {
   }
 
   try {
-    const { blocks, date } = await req.json() as { blocks: Block[]; date: string };
+    const { blocks, date, dayBoundaryHour = 0 } = await req.json() as { blocks: Block[]; date: string; dayBoundaryHour?: number };
     
     if (!blocks || blocks.length === 0) {
       return new Response(

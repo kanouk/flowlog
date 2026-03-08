@@ -4,7 +4,8 @@ import { icons } from 'lucide-react';
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
 import { TaskCheckbox } from '@/components/ui/task-checkbox';
-import { formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
+import { formatTimeWithDayBoundary, formatDisplayDateJST, parseTimestamp } from '@/lib/dateUtils';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { TagFilterDropdown } from './TagFilterDropdown';
@@ -40,6 +41,7 @@ function getIconComponent(iconName: string) {
 }
 
 export function TasksView({ targetBlockId, onBlockScrolled, onSearchCleared }: TasksViewProps) {
+  const { dayBoundaryHour } = useDayBoundary();
   const { getBlocksByCategory, updateBlock, deleteBlock } = useEntries();
   const { customTags } = useCustomTags();
   
@@ -414,9 +416,9 @@ export function TasksView({ targetBlockId, onBlockScrolled, onSearchCleared }: T
                     
                     <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground flex-wrap">
                       {getTagDisplay(block.tag)}
-                      <span>{formatDateJST(block.occurred_at)}</span>
+                      <span>{formatDisplayDateJST(block.occurred_at, dayBoundaryHour)}</span>
                       <span>•</span>
-                      <span>{formatTimeJST(block.occurred_at)}</span>
+                      <span>{formatTimeWithDayBoundary(block.occurred_at, dayBoundaryHour)}</span>
                       {/* Deadline display */}
                       {block.due_at && (
                         <>
@@ -447,7 +449,7 @@ export function TasksView({ targetBlockId, onBlockScrolled, onSearchCleared }: T
                         <>
                           <span>•</span>
                           <span className="text-green-600 dark:text-green-400">
-                            ✓ {formatDateJST(block.done_at)} {formatTimeJST(block.done_at)} 完了
+                            ✓ {formatDisplayDateJST(block.done_at, dayBoundaryHour)} {formatTimeWithDayBoundary(block.done_at, dayBoundaryHour)} 完了
                           </span>
                         </>
                       )}

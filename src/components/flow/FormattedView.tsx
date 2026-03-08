@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Entry, Block, BlockUpdatePayload } from '@/hooks/useEntries';
-import { parseTimestamp, formatTimeJST } from '@/lib/dateUtils';
+import { parseTimestamp, formatTimeWithDayBoundary } from '@/lib/dateUtils';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 import { CATEGORY_CONFIG, BlockCategory } from '@/lib/categoryUtils';
 import { BookOpen, ListTodo, Bookmark } from 'lucide-react';
 import { TaskCheckbox } from '@/components/ui/task-checkbox';
@@ -15,6 +16,7 @@ interface FormattedViewProps {
 type StockViewMode = 'journal' | 'tasks' | 'readLater';
 
 export function FormattedView({ entry, blocks, onUpdate }: FormattedViewProps) {
+  const { dayBoundaryHour } = useDayBoundary();
   const [viewMode, setViewMode] = useState<StockViewMode>('journal');
 
   // カテゴリでフィルタ + ソート
@@ -175,7 +177,7 @@ export function FormattedView({ entry, blocks, onUpdate }: FormattedViewProps) {
                         {config?.label}
                       </span>
                       <span className="timestamp-badge">
-                        {formatTimeJST(block.occurred_at)}
+                        {formatTimeWithDayBoundary(block.occurred_at, dayBoundaryHour)}
                       </span>
                     </div>
                   </div>

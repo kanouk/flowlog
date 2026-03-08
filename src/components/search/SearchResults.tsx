@@ -5,6 +5,8 @@ import { CheckCircle2, FileText, Calendar, StickyNote, BookmarkCheck, BookOpen }
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { SearchResults as SearchResultsType } from '@/hooks/useSearch';
+import { getOccurredAtDayKey } from '@/lib/dateUtils';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 
 interface SearchResultsProps {
   results: SearchResultsType | null;
@@ -98,6 +100,7 @@ export function SearchResults({
   selectedIndex = -1
 }: SearchResultsProps) {
   const selectedRef = useRef<HTMLButtonElement>(null);
+  const { dayBoundaryHour } = useDayBoundary();
 
   useEffect(() => {
     if (selectedIndex < 0 || !selectedRef.current) return;
@@ -156,7 +159,7 @@ export function SearchResults({
             </div>
             <div className="space-y-1">
               {results.blocks.map((block, index) => {
-                const dateKey = block.occurred_at.split('T')[0];
+                const dateKey = getOccurredAtDayKey(block.occurred_at, dayBoundaryHour);
                 const isSelected = index === selectedIndex;
                 const urlMeta = block.url_metadata as { summary?: string; title?: string; url?: string } | null;
                 const isUrlOnly = block.category === 'read_later' && (!block.content || /^https?:\/\/\S+$/.test(block.content.trim()));

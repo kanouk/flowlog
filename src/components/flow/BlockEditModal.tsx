@@ -38,6 +38,7 @@ import {
   isFutureDate, 
   parseTimestamp 
 } from '@/lib/dateUtils';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 
 // Helper to format time from ISO string
 const formatTimeFromISO = (isoString: string | null): string => {
@@ -89,6 +90,7 @@ export function BlockEditModal({
   onSave, 
   onDelete 
 }: BlockEditModalProps) {
+  const { dayBoundaryHour } = useDayBoundary();
   // Content
   const [content, setContent] = useState(block.content || '');
   const [isComposing, setIsComposing] = useState(false);
@@ -113,7 +115,7 @@ export function BlockEditModal({
   const [newImagePreviews, setNewImagePreviews] = useState<string[]>([]);
   
   // Date/Time for non-schedule
-  const [dayKey, setDayKey] = useState(getOccurredAtDayKey(block.occurred_at));
+  const [dayKey, setDayKey] = useState(getOccurredAtDayKey(block.occurred_at, dayBoundaryHour));
   const [time, setTime] = useState(formatTimeJST(block.occurred_at));
   
   // Schedule-specific states
@@ -154,7 +156,7 @@ export function BlockEditModal({
       setExistingImages(block.images || []);
       setNewImages([]);
       setNewImagePreviews([]);
-      setDayKey(getOccurredAtDayKey(block.occurred_at));
+      setDayKey(getOccurredAtDayKey(block.occurred_at, dayBoundaryHour));
       setTime(formatTimeJST(block.occurred_at));
       // Schedule states
       setIsAllDay(block.is_all_day || false);
@@ -329,7 +331,7 @@ export function BlockEditModal({
   const handleSave = async () => {
     if (isSaving) return;
     
-    const newOccurredAt = createOccurredAt(dayKey, time);
+    const newOccurredAt = createOccurredAt(dayKey, time, dayBoundaryHour);
     if (isFutureDate(newOccurredAt)) {
       toast.error('未来の日時は指定できません');
       return;

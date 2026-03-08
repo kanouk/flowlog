@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { useState } from 'react';
 import { getTodayKey } from '@/lib/dateUtils';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 
 interface DateNavigationProps {
   selectedDate: string;
@@ -15,7 +16,8 @@ interface DateNavigationProps {
 
 export function DateNavigation({ selectedDate, onDateChange, datesWithEntries = [] }: DateNavigationProps) {
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const today = getTodayKey();
+  const { dayBoundaryHour } = useDayBoundary();
+  const today = getTodayKey(dayBoundaryHour);
   const isToday = selectedDate === today;
   
   const selectedDateObj = new Date(selectedDate);
