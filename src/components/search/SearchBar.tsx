@@ -30,6 +30,7 @@ const categoryToTab = (category: string) => {
 };
 
 export function SearchBar({ onNavigateToDate }: SearchBarProps) {
+  const { dayBoundaryHour } = useDayBoundary();
   const isMobile = useIsMobile();
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(-1);
