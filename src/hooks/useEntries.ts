@@ -181,9 +181,9 @@ export function useEntries() {
   /**
    * 指定日付のブロックを occurred_at 範囲で取得（降順）
    */
-  const getBlocksByDate = useCallback(async (selectedDate: string) => {
+  const getBlocksByDate = useCallback(async (selectedDate: string, dayBoundaryHour: number = 0) => {
     if (!userId) return [];
-    const { start, end } = getDateRangeUTC(selectedDate);
+    const { start, end } = getDateRangeUTC(selectedDate, dayBoundaryHour);
     
     const { data, error } = await supabase
       .from('blocks')
@@ -276,6 +276,7 @@ export function useEntries() {
     priority = 0,
     due_at = null,
     due_all_day = false,
+    dayBoundaryHour = 0,
   }: { 
     content: string; 
     selectedDate: string; 
@@ -289,12 +290,13 @@ export function useEntries() {
     priority?: number;
     due_at?: string | null;
     due_all_day?: boolean;
+    dayBoundaryHour?: number;
   }) => {
     if (!userId) return { block: null, navigateToDate: null };
 
     setLoading(true);
     try {
-      const today = getTodayKey();
+      const today = getTodayKey(dayBoundaryHour);
       const isToday = selectedDate === today;
       
       let occurredAt: string;
@@ -303,9 +305,8 @@ export function useEntries() {
         occurredAt = new Date().toISOString();
       } else {
         // 過去日：その日の最終ブロック + 1分、なければ 23:59 JST
-        // 日付範囲内にクランプして翌日にはみ出さない
-        const { start, end } = getDateRangeUTC(selectedDate);
-        const endMs = parseTimestamp(end).getTime() - 1; // 翌日00:00の1ms前
+        const { start, end } = getDateRangeUTC(selectedDate, dayBoundaryHour);
+        const endMs = parseTimestamp(end).getTime() - 1;
         const { data: lastBlocks } = await supabase
           .from('blocks')
           .select('occurred_at')
@@ -318,14 +319,13 @@ export function useEntries() {
         if (lastBlocks && lastBlocks.length > 0) {
           const lastTime = parseTimestamp(lastBlocks[0].occurred_at);
           const candidateMs = lastTime.getTime() + 60 * 1000;
-          // 日付範囲内にクランプ
           occurredAt = new Date(Math.min(candidateMs, endMs)).toISOString();
         } else {
-          occurredAt = createOccurredAt(selectedDate, '23:59');
+          occurredAt = createOccurredAt(selectedDate, '23:59', dayBoundaryHour);
         }
       }
       
-      const dayKey = getOccurredAtDayKey(occurredAt);
+      const dayKey = getOccurredAtDayKey(occurredAt, dayBoundaryHour);
       const entry = await getOrCreateEntryForDate(dayKey);
       if (!entry) throw new Error('Failed to get/create entry');
 
@@ -378,7 +378,8 @@ export function useEntries() {
    */
   const updateBlock = useCallback(async (
     blockId: string, 
-    updates: BlockUpdatePayload
+    updates: BlockUpdatePayload,
+    dayBoundaryHour: number = 0
   ) => {
     if (!userId) return null;
 
@@ -442,7 +443,7 @@ export function useEntries() {
         updateData.due_all_day = updates.due_all_day;
       }
       if (updates.occurred_at) {
-        const newDayKey = getOccurredAtDayKey(updates.occurred_at);
+        const newDayKey = getOccurredAtDayKey(updates.occurred_at, dayBoundaryHour);
         const entry = await getOrCreateEntryForDate(newDayKey);
         if (!entry) throw new Error('Failed to get/create entry');
         
@@ -529,7 +530,7 @@ export function useEntries() {
   /**
    * エントリを整形（時刻推測 + 日記生成）
    */
-  const formatEntry = useCallback(async (entryId: string, blocks: Block[], date: string): Promise<FormatEntryResponse | null> => {
+  const formatEntry = useCallback(async (entryId: string, blocks: Block[], date: string, dayBoundaryHour: number = 0): Promise<FormatEntryResponse | null> => {
     if (!session) return null;
 
     setFormatting(true);
@@ -548,6 +549,7 @@ export function useEntries() {
             due_all_day: b.due_all_day,
           })),
           date,
+          dayBoundaryHour,
         },
       });
 

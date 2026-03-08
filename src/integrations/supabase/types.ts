@@ -355,6 +355,7 @@ export type Database = {
           created_at: string
           custom_summarize_prompt: string | null
           custom_system_prompt: string | null
+          day_boundary_hour: number
           google_api_key: string | null
           id: string
           openai_api_key: string | null
@@ -371,6 +372,7 @@ export type Database = {
           created_at?: string
           custom_summarize_prompt?: string | null
           custom_system_prompt?: string | null
+          day_boundary_hour?: number
           google_api_key?: string | null
           id?: string
           openai_api_key?: string | null
@@ -387,6 +389,7 @@ export type Database = {
           created_at?: string
           custom_summarize_prompt?: string | null
           custom_system_prompt?: string | null
+          day_boundary_hour?: number
           google_api_key?: string | null
           id?: string
           openai_api_key?: string | null

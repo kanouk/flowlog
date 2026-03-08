@@ -11,35 +11,67 @@ export function getDayKey(date: Date): string {
 }
 
 /**
- * JST の今日の日付キーを取得
+ * JST の今日の日付キーを取得（生活日基準）
+ * dayBoundaryHour=5 なら、03:00 JST は前日の生活日に属する
  */
-export function getTodayKey(): string {
-  return getDayKey(new Date());
+export function getTodayKey(dayBoundaryHour: number = 0): string {
+  if (dayBoundaryHour === 0) {
+    return getDayKey(new Date());
+  }
+  // 現在時刻から dayBoundaryHour 時間を引いた日付を返す
+  const now = new Date();
+  const shifted = new Date(now.getTime() - dayBoundaryHour * 60 * 60 * 1000);
+  return getDayKey(shifted);
 }
 
 /**
- * selectedDate (YYYY-MM-DD) から JST 00:00 ～ 翌日 00:00 の UTC 範囲を取得
- * クエリ: gte(start) & lt(end) で使用
+ * selectedDate (YYYY-MM-DD) から生活日の UTC 範囲を取得
+ * dayBoundaryHour=0: 00:00 JST ～ 翌日 00:00 JST
+ * dayBoundaryHour=5: 05:00 JST ～ 翌日 05:00 JST
  */
-export function getDateRangeUTC(selectedDate: string): { start: string; end: string } {
+export function getDateRangeUTC(selectedDate: string, dayBoundaryHour: number = 0): { start: string; end: string } {
+  const boundaryTime = String(dayBoundaryHour).padStart(2, '0') + ':00:00';
   const [year, month, day] = selectedDate.split('-').map(Number);
   const baseDate = new Date(Date.UTC(year, month - 1, day));
   const nextDate = addDays(baseDate, 1);
   const nextDateStr = format(nextDate, 'yyyy-MM-dd');
   
-  const start = fromZonedTime(`${selectedDate}T00:00:00`, TIMEZONE).toISOString();
-  const end = fromZonedTime(`${nextDateStr}T00:00:00`, TIMEZONE).toISOString();
+  const start = fromZonedTime(`${selectedDate}T${boundaryTime}`, TIMEZONE).toISOString();
+  const end = fromZonedTime(`${nextDateStr}T${boundaryTime}`, TIMEZONE).toISOString();
   
   return { start, end };
 }
 
 /**
- * dayKey + time から occurred_at ISO文字列を生成（Date直操作禁止）
+ * dayKey + time から occurred_at ISO文字列を生成（生活日基準）
  * ※これが occurred_at 生成の唯一の正規ルート
- * @param dayKey - YYYY-MM-DD形式の日付
+ * 
+ * dayBoundaryHour=5 の場合:
+ * - dayKey=2026-03-07, time=23:00 → 2026-03-07 23:00 JST (same calendar day)
+ * - dayKey=2026-03-07, time=01:30 → 2026-03-08 01:30 JST (next calendar day, still life-day 3/7)
+ * 
+ * ロジック: time の HH が dayBoundaryHour 未満なら、翌calendar dayとして解釈
+ * 
+ * @param dayKey - YYYY-MM-DD形式の生活日
  * @param time - HH:mm形式の時刻
+ * @param dayBoundaryHour - 生活日の区切り時刻 (0-12)
  */
-export function createOccurredAt(dayKey: string, time: string): string {
+export function createOccurredAt(dayKey: string, time: string, dayBoundaryHour: number = 0): string {
+  if (dayBoundaryHour === 0) {
+    return fromZonedTime(`${dayKey}T${time}:00`, TIMEZONE).toISOString();
+  }
+  
+  const [hours] = time.split(':').map(Number);
+  
+  // time の時刻が dayBoundaryHour 未満 → 翌calendar day
+  if (hours < dayBoundaryHour) {
+    const [y, m, d] = dayKey.split('-').map(Number);
+    const nextDay = addDays(new Date(Date.UTC(y, m - 1, d)), 1);
+    const nextDayStr = format(nextDay, 'yyyy-MM-dd');
+    return fromZonedTime(`${nextDayStr}T${time}:00`, TIMEZONE).toISOString();
+  }
+  
+  // それ以外は同calendar day
   return fromZonedTime(`${dayKey}T${time}:00`, TIMEZONE).toISOString();
 }
 
@@ -65,6 +97,26 @@ export function formatTimeJST(isoString: string): string {
 }
 
 /**
+ * occurred_at を生活日基準の時刻文字列にフォーマット
+ * dayBoundaryHour=5 なら、03:00 → 27:00, 04:59 → 28:59
+ */
+export function formatTimeWithDayBoundary(isoString: string, dayBoundaryHour: number = 0): string {
+  if (dayBoundaryHour === 0) {
+    return formatTimeJST(isoString);
+  }
+  
+  const hour = Number(formatInTimeZone(parseISO(isoString), TIMEZONE, 'H'));
+  const minute = formatInTimeZone(parseISO(isoString), TIMEZONE, 'mm');
+  
+  if (hour < dayBoundaryHour) {
+    // 区切り時刻未満 → 24+ 表記
+    return `${24 + hour}:${minute}`;
+  }
+  
+  return formatTimeJST(isoString);
+}
+
+/**
  * occurred_at を JST の日付文字列 (M月d日) にフォーマット
  */
 export function formatDateJST(isoString: string): string {
@@ -72,10 +124,30 @@ export function formatDateJST(isoString: string): string {
 }
 
 /**
- * occurred_at を JST の dayKey (YYYY-MM-DD) として取得
+ * occurred_at を生活日基準の日付文字列 (M月d日) にフォーマット
  */
-export function getOccurredAtDayKey(isoString: string): string {
-  return formatInTimeZone(parseISO(isoString), TIMEZONE, 'yyyy-MM-dd');
+export function formatDisplayDateJST(isoString: string, dayBoundaryHour: number = 0): string {
+  if (dayBoundaryHour === 0) {
+    return formatDateJST(isoString);
+  }
+  
+  const dayKey = getOccurredAtDayKey(isoString, dayBoundaryHour);
+  const [y, m, d] = dayKey.split('-').map(Number);
+  return `${m}月${d}日`;
+}
+
+/**
+ * occurred_at を JST の dayKey (YYYY-MM-DD) として取得（生活日基準）
+ */
+export function getOccurredAtDayKey(isoString: string, dayBoundaryHour: number = 0): string {
+  if (dayBoundaryHour === 0) {
+    return formatInTimeZone(parseISO(isoString), TIMEZONE, 'yyyy-MM-dd');
+  }
+  
+  // occurred_at から dayBoundaryHour 時間を引いた日付を返す
+  const date = parseISO(isoString);
+  const shifted = new Date(date.getTime() - dayBoundaryHour * 60 * 60 * 1000);
+  return formatInTimeZone(shifted, TIMEZONE, 'yyyy-MM-dd');
 }
 
 /**
@@ -91,24 +163,21 @@ export type MiddleOccurredAtResult =
   | { success: false; reason: string };
 
 /**
- * D&D並び替え用: 前後ブロックから中間時刻を計算（日付境界クランプ付き）
+ * D&D並び替え用: 前後ブロックから中間時刻を計算（生活日境界クランプ付き）
  * 
  * 【D&D例外】この関数のみ UTCミリ秒→ISO 直接生成を許可（READMEに明記）
  * 通常の occurred_at 生成は createOccurredAt() を使うこと
- * 
- * @param prevOccurredAt - 前のブロック（降順なのでより新しい）
- * @param nextOccurredAt - 次のブロック（降順なのでより古い）
- * @param selectedDate - 選択中の日付 (YYYY-MM-DD) ※必須
  */
 export function calculateMiddleOccurredAt(
   prevOccurredAt: string | null,
   nextOccurredAt: string | null,
-  selectedDate: string
+  selectedDate: string,
+  dayBoundaryHour: number = 0
 ): MiddleOccurredAtResult {
-  // 日付範囲を取得（JST 00:00 ～ 翌日 00:00 のUTC）
-  const { start, end } = getDateRangeUTC(selectedDate);
+  // 生活日範囲を取得（dayBoundaryHour 対応）
+  const { start, end } = getDateRangeUTC(selectedDate, dayBoundaryHour);
   const startMs = parseISO(start).getTime();
-  const endMs = parseISO(end).getTime() - 1; // endは翌日00:00なので-1ms
+  const endMs = parseISO(end).getTime() - 1; // endは翌日boundary時のので-1ms
 
   const now = Date.now();
   const fiveMinutesFromNow = now + 5 * 60 * 1000;
@@ -116,7 +185,6 @@ export function calculateMiddleOccurredAt(
   let newMs: number;
 
   if (prevOccurredAt && nextOccurredAt) {
-    // 両方存在: 中間時刻
     const prevMs = parseISO(prevOccurredAt).getTime();
     const nextMs = parseISO(nextOccurredAt).getTime();
     const gap = Math.abs(prevMs - nextMs);
@@ -127,18 +195,16 @@ export function calculateMiddleOccurredAt(
     
     newMs = Math.floor((prevMs + nextMs) / 2);
   } else if (nextOccurredAt) {
-    // 先頭に移動（降順なので next はより古い）: nextより1秒新しく
     const nextMs = parseISO(nextOccurredAt).getTime();
     newMs = nextMs + 1000;
   } else if (prevOccurredAt) {
-    // 末尾に移動（降順なので prev はより新しい）: prevより1秒古く
     const prevMs = parseISO(prevOccurredAt).getTime();
     newMs = prevMs - 1000;
   } else {
     return { success: false, reason: '移動先がありません' };
   }
 
-  // 日付範囲内にクランプ（クリティカル修正）
+  // 生活日範囲内にクランプ
   newMs = Math.max(startMs, Math.min(endMs, newMs));
 
   // 未来チェック
