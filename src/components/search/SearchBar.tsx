@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useSearch } from '@/hooks/useSearch';
 import { SearchResults } from './SearchResults';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { getOccurredAtDayKey } from '@/lib/dateUtils';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 
 interface SearchBarProps {
   onNavigateToDate: (date: string, tab?: string, blockId?: string, query?: string) => void;
