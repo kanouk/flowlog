@@ -104,12 +104,13 @@ function renderContentWithPhotoMarkers(
 
 export function JournalView({ entries, selectedDate, onDateSelect, blocks: externalBlocks = [] }: JournalViewProps) {
   const { getEntry, getBlocksByDate } = useEntries();
+  const { dayBoundaryHour } = useDayBoundary();
   
   const [entry, setEntry] = useState<Entry | null>(null);
   const [journalBlocks, setJournalBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
   const isMobile = useIsMobile();
-  const today = getTodayKey();
+  const today = getTodayKey(dayBoundaryHour);
   const isToday = selectedDate === today;
   
   // モバイルでは今日の場合はデフォルトでコンテンツを表示

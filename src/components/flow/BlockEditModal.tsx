@@ -331,7 +331,7 @@ export function BlockEditModal({
   const handleSave = async () => {
     if (isSaving) return;
     
-    const newOccurredAt = createOccurredAt(dayKey, time);
+    const newOccurredAt = createOccurredAt(dayKey, time, dayBoundaryHour);
     if (isFutureDate(newOccurredAt)) {
       toast.error('未来の日時は指定できません');
       return;

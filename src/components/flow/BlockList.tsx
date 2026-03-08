@@ -443,7 +443,7 @@ export function BlockList({
                           <CategoryBadge category={block.category} />
                           <TagBadge tag={block.tag} customTags={customTags} />
                           <span className="timestamp-badge">
-                            {formatTimeJST(block.occurred_at)}
+                            {formatTimeWithDayBoundary(block.occurred_at, dayBoundaryHour)}
                           </span>
                         </div>
                       </div>

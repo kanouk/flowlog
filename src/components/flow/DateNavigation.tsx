@@ -16,7 +16,8 @@ interface DateNavigationProps {
 
 export function DateNavigation({ selectedDate, onDateChange, datesWithEntries = [] }: DateNavigationProps) {
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const today = getTodayKey();
+  const { dayBoundaryHour } = useDayBoundary();
+  const today = getTodayKey(dayBoundaryHour);
   const isToday = selectedDate === today;
   
   const selectedDateObj = new Date(selectedDate);

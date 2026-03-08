@@ -211,7 +211,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
 
       const { block } = await addBlockWithDate({
         content: content.trim(),
-        selectedDate: getTodayKey(),
+        selectedDate: getTodayKey(dayBoundaryHour),
         mode: 'toNow',
         images: uploadedUrls,
         category,
@@ -220,6 +220,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
         ends_at: scheduleData?.ends_at || null,
         is_all_day: scheduleData?.is_all_day || false,
         priority: category === 'task' ? priority : 0,
+        dayBoundaryHour,
       });
 
       if (block) {

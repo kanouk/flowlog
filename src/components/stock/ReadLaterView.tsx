@@ -461,9 +461,9 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
                     
                     <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground flex-wrap">
                       {getTagDisplay(block.tag)}
-                      <span>{formatDateJST(block.occurred_at)}</span>
+                      <span>{formatDisplayDateJST(block.occurred_at, dayBoundaryHour)}</span>
                       <span>•</span>
-                      <span>{formatTimeJST(block.occurred_at)}</span>
+                      <span>{formatTimeWithDayBoundary(block.occurred_at, dayBoundaryHour)}</span>
                       {block.is_done && block.done_at && (
                         <>
                           <span>•</span>

@@ -416,9 +416,9 @@ export function TasksView({ targetBlockId, onBlockScrolled, onSearchCleared }: T
                     
                     <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground flex-wrap">
                       {getTagDisplay(block.tag)}
-                      <span>{formatDateJST(block.occurred_at)}</span>
+                      <span>{formatDisplayDateJST(block.occurred_at, dayBoundaryHour)}</span>
                       <span>•</span>
-                      <span>{formatTimeJST(block.occurred_at)}</span>
+                      <span>{formatTimeWithDayBoundary(block.occurred_at, dayBoundaryHour)}</span>
                       {/* Deadline display */}
                       {block.due_at && (
                         <>

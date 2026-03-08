@@ -177,7 +177,7 @@ export function FormattedView({ entry, blocks, onUpdate }: FormattedViewProps) {
                         {config?.label}
                       </span>
                       <span className="timestamp-badge">
-                        {formatTimeJST(block.occurred_at)}
+                        {formatTimeWithDayBoundary(block.occurred_at, dayBoundaryHour)}
                       </span>
                     </div>
                   </div>

@@ -158,7 +158,7 @@ export function SearchResults({
             </div>
             <div className="space-y-1">
               {results.blocks.map((block, index) => {
-                const dateKey = block.occurred_at.split('T')[0];
+                const dateKey = getOccurredAtDayKey(block.occurred_at, dayBoundaryHour);
                 const isSelected = index === selectedIndex;
                 const urlMeta = block.url_metadata as { summary?: string; title?: string; url?: string } | null;
                 const isUrlOnly = block.category === 'read_later' && (!block.content || /^https?:\/\/\S+$/.test(block.content.trim()));

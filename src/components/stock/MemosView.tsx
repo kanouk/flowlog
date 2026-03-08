@@ -229,9 +229,9 @@ export function MemosView({ targetBlockId, onBlockScrolled, onSearchCleared }: M
                     
                     <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground flex-wrap">
                       {getTagDisplay(memo.tag)}
-                      <span>{formatDateJST(memo.occurred_at)}</span>
+                      <span>{formatDisplayDateJST(memo.occurred_at, dayBoundaryHour)}</span>
                       <span>•</span>
-                      <span>{formatTimeJST(memo.occurred_at)}</span>
+                      <span>{formatTimeWithDayBoundary(memo.occurred_at, dayBoundaryHour)}</span>
                     </div>
                   </div>
                 </div>

@@ -69,7 +69,7 @@ export function SearchBar({ onNavigateToDate }: SearchBarProps) {
 
     if (index < results.blocks.length) {
       const block = results.blocks[index];
-      const dateKey = block.occurred_at.split('T')[0];
+      const dateKey = getOccurredAtDayKey(block.occurred_at, dayBoundaryHour);
       onNavigateToDate(dateKey, categoryToTab(block.category), block.id, query);
     } else {
       const entryIndex = index - results.blocks.length;
