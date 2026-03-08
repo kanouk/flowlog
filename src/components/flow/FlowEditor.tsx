@@ -60,7 +60,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     try {
       const entryData = await getEntry(date);
       setEntry(entryData);
-      const blocksData = await getBlocksByDate(date);
+      const blocksData = await getBlocksByDate(date, dayBoundaryHour);
       setBlocks(blocksData);
     } finally {
       setLoading(false);
