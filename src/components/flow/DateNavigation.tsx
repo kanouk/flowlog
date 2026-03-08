@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { useState } from 'react';
 import { getTodayKey } from '@/lib/dateUtils';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 
 interface DateNavigationProps {
   selectedDate: string;
