@@ -6,10 +6,11 @@ import { DateNavigation } from '@/components/flow/DateNavigation';
 import { TimeQuestion, getTimeFromTimeframe, Timeframe } from '@/components/flow/TimeQuestion';
 import { useEntries, Block, Entry, AddBlockMode, BlockUpdatePayload, TimeQuestion as TimeQuestionType } from '@/hooks/useEntries';
 import { toast } from 'sonner';
-import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDateJST, calculateMiddleOccurredAt, createOccurredAt } from '@/lib/dateUtils';
+import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDisplayDateJST, calculateMiddleOccurredAt, createOccurredAt } from '@/lib/dateUtils';
 import { BlockCategory, BlockTag } from '@/lib/categoryUtils';
 import { arrayMove } from '@dnd-kit/sortable';
 import { useTargetBlockHighlight } from '@/hooks/useTargetBlockHighlight';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 
 interface FlowViewProps {
   selectedDate: string;
@@ -34,7 +35,8 @@ function sortBlocksDesc(blocks: Block[]): Block[] {
 }
 
 export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWithEntries = [], targetBlockId, onBlockScrolled, searchQuery, onSearchCleared }: FlowViewProps) {
-  const today = getTodayKey();
+  const { dayBoundaryHour } = useDayBoundary();
+  const today = getTodayKey(dayBoundaryHour);
   const isToday = selectedDate === today;
 
   const { 
@@ -59,12 +61,12 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       const entryData = await getEntry(selectedDate);
       setEntry(entryData);
       
-      const blocksData = await getBlocksByDate(selectedDate);
+      const blocksData = await getBlocksByDate(selectedDate, dayBoundaryHour);
       setBlocks(blocksData);
     } finally {
       setLoading(false);
     }
-  }, [selectedDate, getEntry, getBlocksByDate]);
+  }, [selectedDate, getEntry, getBlocksByDate, dayBoundaryHour]);
 
   useEffect(() => {
     loadData();
@@ -94,17 +96,17 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
   const triggerAutoFormat = useCallback(async (targetDate: string) => {
     try {
       const entryData = await getEntry(targetDate);
-      const blocksData = await getBlocksByDate(targetDate);
+      const blocksData = await getBlocksByDate(targetDate, dayBoundaryHour);
       
       // 「出来事」カテゴリのブロックのみ抽出
       const eventBlocks = blocksData.filter(b => b.category === 'event');
       
       if (entryData && eventBlocks.length > 0) {
-        const result = await formatEntry(entryData.id, eventBlocks, targetDate);
+        const result = await formatEntry(entryData.id, eventBlocks, targetDate, dayBoundaryHour);
         
         // 時刻が更新された場合、ブロックをリロード
         if (result?.time_updates && result.time_updates.length > 0) {
-          const updatedBlocks = await getBlocksByDate(targetDate);
+          const updatedBlocks = await getBlocksByDate(targetDate, dayBoundaryHour);
           setBlocks(updatedBlocks);
         }
         
@@ -120,36 +122,29 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       }
     } catch (error) {
       console.error('Auto format error:', error);
-      // 自動整形のエラーは静かに処理（トースト不要）
     }
-  }, [getEntry, getBlocksByDate, formatEntry]);
+  }, [getEntry, getBlocksByDate, formatEntry, dayBoundaryHour]);
 
   /**
    * 時刻質問への回答
    */
   const handleTimeAnswer = useCallback(async (blockId: string, timeframe: Timeframe) => {
     const time = getTimeFromTimeframe(timeframe);
-    const newOccurredAt = createOccurredAt(selectedDate, time);
+    const newOccurredAt = createOccurredAt(selectedDate, time, dayBoundaryHour);
     
-    // ブロックを更新
     const updated = await updateBlock(blockId, { occurred_at: newOccurredAt });
     
     if (updated) {
-      // ローカルのブロックも更新
       setBlocks(prev => sortBlocksDesc(
         prev.map(b => b.id === blockId ? { ...b, occurred_at: newOccurredAt } : b)
       ));
-      
-      // 質問を削除
       setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
-      
-      // 再度整形をトリガー
       triggerAutoFormat(selectedDate);
     }
-  }, [selectedDate, updateBlock, triggerAutoFormat]);
+  }, [selectedDate, updateBlock, triggerAutoFormat, dayBoundaryHour]);
 
   const handleExactTimeAnswer = useCallback(async (blockId: string, time: string) => {
-    const newOccurredAt = createOccurredAt(selectedDate, time);
+    const newOccurredAt = createOccurredAt(selectedDate, time, dayBoundaryHour);
 
     const updated = await updateBlock(blockId, { occurred_at: newOccurredAt });
 
@@ -160,7 +155,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
       triggerAutoFormat(selectedDate);
     }
-  }, [selectedDate, updateBlock, triggerAutoFormat]);
+  }, [selectedDate, updateBlock, triggerAutoFormat, dayBoundaryHour]);
 
   /**
    * 時刻質問を無視
@@ -170,7 +165,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
   }, []);
 
   /**
-   * ブロック追加（楽観的更新 + 遷移処理 + 画像対応 + カテゴリ対応 + タグ対応 + 自動サマライズ + スケジュール対応）
+   * ブロック追加
    */
   const handleAddBlock = async (
     content: string, 
@@ -190,7 +185,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       due_all_day: boolean;
     }
   ): Promise<boolean> => {
-    // 一括登録モード：各行を個別タスクとして登録
+    // 一括登録モード
     if (batchMode && category === 'task') {
       const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
       if (lines.length === 0) return false;
@@ -232,6 +227,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
           priority,
           due_at: dueData?.due_at,
           due_all_day: dueData?.due_all_day,
+          dayBoundaryHour,
         });
 
         if (savedBlock) {
@@ -287,12 +283,13 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       priority: category === 'task' ? priority : 0,
       due_at: dueData?.due_at,
       due_all_day: dueData?.due_all_day,
+      dayBoundaryHour,
     });
     
     if (savedBlock) {
       if (navigateToDate) {
         onNavigateToDate?.(navigateToDate);
-        toast.success(`今日（${formatDateJST(new Date().toISOString())}）に追加しました`);
+        toast.success(`今日（${formatDisplayDateJST(new Date().toISOString(), dayBoundaryHour)}）に追加しました`);
       } else {
         setBlocks(prev => sortBlocksDesc(prev.map(b => b.id === tempId ? savedBlock : b)));
       }
@@ -301,7 +298,6 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       if (category === 'read_later') {
         const url = extractFirstUrl(content);
         if (url) {
-          // バックグラウンドでサマライズ（awaitしない）
           summarizeUrl(savedBlock.id, url).then(metadata => {
             if (metadata) {
               setBlocks(prev => prev.map(b => 
@@ -328,18 +324,14 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
    * ブロック削除
    */
   const handleDeleteBlock = async (blockId: string) => {
-    // 削除前にブロックのカテゴリを確認
     const blockToDelete = blocks.find(b => b.id === blockId);
     const wasEvent = blockToDelete?.category === 'event';
     
     const success = await deleteBlock(blockId);
     if (success) {
       setBlocks(prev => prev.filter(b => b.id !== blockId));
-      
-      // 関連する質問も削除
       setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
       
-      // 「出来事」カテゴリの場合、自動日記再生成
       if (wasEvent) {
         triggerAutoFormat(selectedDate);
       }
@@ -358,17 +350,16 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       b.id === blockId ? { ...b, ...updates } : b
     ));
     
-    const updated = await updateBlock(blockId, updates);
+    const updated = await updateBlock(blockId, updates, dayBoundaryHour);
     
     if (!updated) {
       setBlocks(originalBlocks);
     } else if (updates.occurred_at) {
-      const newDayKey = getOccurredAtDayKey(updates.occurred_at);
+      const newDayKey = getOccurredAtDayKey(updates.occurred_at, dayBoundaryHour);
       if (newDayKey !== selectedDate) {
         setBlocks(prev => prev.filter(b => b.id !== blockId));
-        toast.success(`${formatDateJST(updates.occurred_at)}に移動しました`);
+        toast.success(`${formatDisplayDateJST(updates.occurred_at, dayBoundaryHour)}に移動しました`);
         
-        // 「出来事」カテゴリの場合、両方の日の日記を再生成
         if (isEvent) {
           triggerAutoFormat(selectedDate);
           triggerAutoFormat(newDayKey);
@@ -376,13 +367,11 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       } else {
         setBlocks(prev => sortBlocksDesc(prev));
         
-        // 「出来事」カテゴリの場合、日記を再生成
         if (isEvent) {
           triggerAutoFormat(selectedDate);
         }
       }
     } else if (isEvent && (updates.content !== undefined)) {
-      // 内容更新の場合も日記を再生成
       triggerAutoFormat(selectedDate);
     }
   };
@@ -406,7 +395,8 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     const result = calculateMiddleOccurredAt(
       prevBlock?.occurred_at || null,
       nextBlock?.occurred_at || null,
-      selectedDate
+      selectedDate,
+      dayBoundaryHour
     );
 
     if (result.success === false) {
@@ -428,7 +418,6 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
         prev.map(b => b.id === activeId ? { ...b, occurred_at: newOccurredAt } : b)
       ));
       
-      // 「出来事」カテゴリの場合、日記を再生成
       if (isEvent) {
         triggerAutoFormat(selectedDate);
       }
@@ -445,21 +434,18 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
 
   return (
     <div className="space-y-6">
-      {/* Date Navigation - 入力フォームの上 */}
       <DateNavigation 
         selectedDate={selectedDate}
         onDateChange={onDateChange}
         datesWithEntries={datesWithEntries}
       />
 
-      {/* Input Form */}
       <FlowInput 
         onSubmit={handleAddBlock}
         selectedDate={selectedDate}
         isToday={isToday}
       />
 
-      {/* 時刻質問エリア */}
       {pendingQuestions.length > 0 && (
         <div className="space-y-2">
           {pendingQuestions.map(q => (
@@ -476,7 +462,6 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
         </div>
       )}
       
-      {/* Section Header */}
       <div className="flex items-center justify-between pb-3 border-b border-border">
         <div className="flex items-center gap-2">
           <div className="w-1 h-5 rounded-full bg-primary/60" />
@@ -488,7 +473,6 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
           </span>
         </div>
         
-        {/* 自動整形中のインジケータ */}
         {formatting && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -498,14 +482,13 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       </div>
       
       <BlockList 
-        blocks={blocks} 
+        blocks={blocks}
         onDelete={handleDeleteBlock}
         onUpdate={handleUpdateBlock}
         onDragEnd={handleDragEnd}
-        showDelete={true}
-        editable={true}
         selectedDate={selectedDate}
         highlightQuery={searchQuery}
+        dayBoundaryHour={dayBoundaryHour}
       />
     </div>
   );

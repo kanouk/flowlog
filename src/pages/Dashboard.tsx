@@ -16,6 +16,7 @@ import { AppSplash } from '@/components/common/AppSplash';
 import { getTodayKey } from '@/lib/dateUtils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useTabSwipe } from '@/hooks/useTabSwipe';
+import { DayBoundaryProvider, useDayBoundary } from '@/contexts/DayBoundaryContext';
 import logoImage from '@/assets/logo.png';
 
 type DashboardTab = 'flow' | 'journal' | 'tasks' | 'schedule' | 'memos' | 'readLater';
@@ -40,23 +41,12 @@ const TAB_DOT_COLORS: Record<DashboardTab, string> = {
   readLater: 'bg-green-500',
 };
 
-// カテゴリからタブへのマッピング
-const categoryToTab = (category: string): DashboardTab => {
-  switch (category) {
-    case 'task': return 'tasks';
-    case 'memo':
-    case 'thought': return 'memos';
-    case 'schedule': return 'schedule';
-    case 'read_later': return 'readLater';
-    default: return 'flow';
-  }
-};
-
-export default function Dashboard() {
+function DashboardContent() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, loading: authLoading, signOut } = useAuth();
   const { getEntries } = useEntries();
+  const { dayBoundaryHour, loading: dbhLoading } = useDayBoundary();
   
   const [entries, setEntries] = useState<Entry[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -64,7 +54,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState<string | null>(null);
   const isMobile = useIsMobile();
   
-  const today = getTodayKey();
+  const today = getTodayKey(dayBoundaryHour);
   const selectedDate = searchParams.get('date') || today;
   const targetBlockId = searchParams.get('block');
 
@@ -170,7 +160,7 @@ export default function Dashboard() {
     navigate('/auth');
   };
 
-  if (authLoading || (initialLoading && entries.length === 0)) {
+  if (authLoading || dbhLoading || (initialLoading && entries.length === 0)) {
     return <AppSplash />;
   }
 
@@ -287,7 +277,7 @@ export default function Dashboard() {
         </Tabs>
       </div>
 
-      {/* Mobile Bottom Tab Bar - 6 tabs, icons only */}
+      {/* Mobile Bottom Tab Bar */}
       {isMobile && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-border safe-area-bottom">
           <div className="flex h-16">
@@ -329,5 +319,13 @@ export default function Dashboard() {
         </nav>
       )}
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <DayBoundaryProvider>
+      <DashboardContent />
+    </DayBoundaryProvider>
   );
 }

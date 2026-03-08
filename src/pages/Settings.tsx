@@ -2,28 +2,31 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, User, LogOut, Tag, Target, ChevronRight, Plug, Bot, Settings2 } from 'lucide-react';
+import { ChevronLeft, User, LogOut, Tag, Target, ChevronRight, Plug, Bot, Settings2, Clock } from 'lucide-react';
 import { ScoreSettingsSection } from '@/components/settings/ScoreSettingsSection';
 import { TagManagementSection } from '@/components/settings/TagManagementSection';
 import { McpSettingsSection } from '@/components/settings/McpSettingsSection';
 import { AIModelManagementSection } from '@/components/settings/AIModelManagementSection';
 import { AIFeatureSettingsSection } from '@/components/settings/AIFeatureSettingsSection';
+import { DayBoundarySection } from '@/components/settings/DayBoundarySection';
+import { DayBoundaryProvider } from '@/contexts/DayBoundaryContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { AppSplash } from '@/components/common/AppSplash';
 
-type SettingsSection = 'tags' | 'models' | 'features' | 'score' | 'mcp' | 'account';
+type SettingsSection = 'tags' | 'models' | 'features' | 'score' | 'dayBoundary' | 'mcp' | 'account';
 
 const SECTIONS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
   { id: 'tags', label: 'タグ管理', icon: Tag },
   { id: 'models', label: '生成AIモデル管理', icon: Bot },
   { id: 'features', label: '処理別AI設定', icon: Settings2 },
   { id: 'score', label: '今日の得点', icon: Target },
+  { id: 'dayBoundary', label: '1日の区切り', icon: Clock },
   { id: 'mcp', label: 'MCP連携', icon: Plug },
   { id: 'account', label: 'アカウント', icon: User },
 ];
 
-export default function Settings() {
+function SettingsContent() {
   const navigate = useNavigate();
   const { user, loading, signOut } = useAuth();
   const isMobile = useIsMobile();
@@ -105,6 +108,8 @@ export default function Settings() {
         return <AIFeatureSettingsSection />;
       case 'score':
         return <ScoreSettingsSection />;
+      case 'dayBoundary':
+        return <DayBoundarySection />;
       case 'mcp':
         return <McpSettingsSection />;
       case 'account':
@@ -218,5 +223,13 @@ export default function Settings() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function Settings() {
+  return (
+    <DayBoundaryProvider>
+      <SettingsContent />
+    </DayBoundaryProvider>
   );
 }
