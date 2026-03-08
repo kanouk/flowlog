@@ -100,6 +100,7 @@ export function SearchResults({
   selectedIndex = -1
 }: SearchResultsProps) {
   const selectedRef = useRef<HTMLButtonElement>(null);
+  const { dayBoundaryHour } = useDayBoundary();
 
   useEffect(() => {
     if (selectedIndex < 0 || !selectedRef.current) return;

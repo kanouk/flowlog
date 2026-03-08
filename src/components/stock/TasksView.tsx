@@ -449,7 +449,7 @@ export function TasksView({ targetBlockId, onBlockScrolled, onSearchCleared }: T
                         <>
                           <span>•</span>
                           <span className="text-green-600 dark:text-green-400">
-                            ✓ {formatDateJST(block.done_at)} {formatTimeJST(block.done_at)} 完了
+                            ✓ {formatDisplayDateJST(block.done_at, dayBoundaryHour)} {formatTimeWithDayBoundary(block.done_at, dayBoundaryHour)} 完了
                           </span>
                         </>
                       )}
