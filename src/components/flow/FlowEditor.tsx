@@ -180,15 +180,15 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       b.id === blockId ? { ...b, ...updates } : b
     ));
     
-    const updated = await updateBlock(blockId, updates);
+    const updated = await updateBlock(blockId, updates, dayBoundaryHour);
     
     if (!updated) {
       setBlocks(originalBlocks);
     } else if (updates.occurred_at) {
-      const newDayKey = getOccurredAtDayKey(updates.occurred_at);
+      const newDayKey = getOccurredAtDayKey(updates.occurred_at, dayBoundaryHour);
       if (newDayKey !== date) {
         setBlocks(prev => prev.filter(b => b.id !== blockId));
-        toast.success(`${formatDateJST(updates.occurred_at)}に移動しました`);
+        toast.success(`${formatDisplayDateJST(updates.occurred_at, dayBoundaryHour)}に移動しました`);
       } else {
         setBlocks(prev => sortBlocksDesc(prev));
       }
