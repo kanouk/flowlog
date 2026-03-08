@@ -69,6 +69,7 @@ const MODAL_CONFIG: Record<QuickAddCategory, { title: string; placeholder: strin
 
 export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: QuickAddModalProps) {
   const { addBlockWithDate } = useEntries();
+  const { dayBoundaryHour } = useDayBoundary();
   const { customTags, createCustomTag } = useCustomTags();
   const { uploadImages, maxImages } = useImageUpload();
   
