@@ -129,7 +129,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     if (savedBlock) {
       if (navigateToDate) {
         onNavigateToDate?.(navigateToDate);
-        toast.success(`今日（${formatDateJST(new Date().toISOString())}）に追加しました`);
+        toast.success(`今日（${formatDisplayDateJST(new Date().toISOString(), dayBoundaryHour)}）に追加しました`);
       } else {
         setBlocks(prev => sortBlocksDesc(prev.map(b => b.id === tempId ? savedBlock : b)));
       }
