@@ -16,6 +16,7 @@ interface FormattedViewProps {
 type StockViewMode = 'journal' | 'tasks' | 'readLater';
 
 export function FormattedView({ entry, blocks, onUpdate }: FormattedViewProps) {
+  const { dayBoundaryHour } = useDayBoundary();
   const [viewMode, setViewMode] = useState<StockViewMode>('journal');
 
   // カテゴリでフィルタ + ソート
