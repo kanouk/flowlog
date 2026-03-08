@@ -549,6 +549,7 @@ export function useEntries() {
             due_all_day: b.due_all_day,
           })),
           date,
+          dayBoundaryHour,
         },
       });
 
