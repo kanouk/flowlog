@@ -162,6 +162,7 @@ export function BlockList({
   editable = true,
   selectedDate,
   highlightQuery,
+  dayBoundaryHour = 0,
 }: BlockListProps) {
   const [modalImage, setModalImage] = useState<string | null>(null);
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
