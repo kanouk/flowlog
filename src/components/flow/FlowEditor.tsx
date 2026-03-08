@@ -33,7 +33,8 @@ function sortBlocksDesc(blocks: Block[]): Block[] {
 }
 
 export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps) {
-  const today = getTodayKey();
+  const { dayBoundaryHour } = useDayBoundary();
+  const today = getTodayKey(dayBoundaryHour);
   const date = propDate || today;
   const isToday = date === today;
 
