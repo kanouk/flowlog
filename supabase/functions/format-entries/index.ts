@@ -28,6 +28,9 @@ interface Block {
   images?: string[];
   category?: string;
   is_done?: boolean;
+  done_at?: string | null;
+  due_at?: string | null;
+  due_all_day?: boolean | null;
 }
 
 interface FeatureAIConfig {
@@ -229,7 +232,7 @@ async function callAIWithConfig(
 
 // Fetch feature AI config via direct server-side queries (no RPC, no key exposure)
 async function getFeatureConfig(
-  serviceClient: ReturnType<typeof createClient>,
+  serviceClient: any,
   userId: string,
   featureKey: string,
 ): Promise<FeatureAIConfig | null> {
@@ -606,7 +609,7 @@ JSON形式で回答してください。`;
                 if (supabase) {
                   const { error: updateError } = await supabase
                     .from('blocks')
-                    .update({ occurred_at: newOccurredAt })
+                    .update({ occurred_at: newOccurredAt } as any)
                     .eq('id', block.id);
                   
                   if (!updateError) {
@@ -810,7 +813,7 @@ ${blocksText}`;
 
       if (!validation.ok) {
         console.warn(`Phase 2 validation failed after retry: ${validation.reason}. Using fallback formatter.`);
-        formattedContent = buildFallbackDiary(sortedBlocks);
+        formattedContent = buildFallbackDiary(sortedBlocks, date);
       }
     } catch (error) {
       if (error instanceof Error) {
@@ -831,7 +834,7 @@ ${blocksText}`;
     }
 
     if (!formattedContent) {
-      formattedContent = buildFallbackDiary(sortedBlocks);
+      formattedContent = buildFallbackDiary(sortedBlocks, date);
     }
 
     // Extract summary
