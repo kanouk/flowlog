@@ -443,7 +443,7 @@ export function useEntries() {
         updateData.due_all_day = updates.due_all_day;
       }
       if (updates.occurred_at) {
-        const newDayKey = getOccurredAtDayKey(updates.occurred_at);
+        const newDayKey = getOccurredAtDayKey(updates.occurred_at, dayBoundaryHour);
         const entry = await getOrCreateEntryForDate(newDayKey);
         if (!entry) throw new Error('Failed to get/create entry');
         
