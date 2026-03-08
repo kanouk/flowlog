@@ -118,6 +118,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const categorySwipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const reviewOpenedAtRef = useRef<number>(0);
   const submitLockedRef = useRef(false);
   const { uploadImages, maxImages } = useImageUpload();
@@ -258,6 +259,40 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setTag(nextTag);
     setLastTag(nextTag);
     triggerLightHaptic();
+  };
+
+  const currentCategoryIndex = CATEGORY_KEYBOARD_ORDER.indexOf(category);
+  const getCategoryByOffset = (offset: number): BlockCategory => {
+    const nextIndex = (currentCategoryIndex + offset + CATEGORY_KEYBOARD_ORDER.length) % CATEGORY_KEYBOARD_ORDER.length;
+    return CATEGORY_KEYBOARD_ORDER[nextIndex];
+  };
+
+  const handleCategoryStep = (direction: 'prev' | 'next') => {
+    handleCategoryChange(getCategoryByOffset(direction === 'prev' ? -1 : 1));
+  };
+
+  const handleCategorySwipeStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    categorySwipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleCategorySwipeEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const start = categorySwipeStartRef.current;
+    categorySwipeStartRef.current = null;
+    if (!start) return;
+
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - start.x;
+    const deltaY = Math.abs(touch.clientY - start.y);
+
+    if (Math.abs(deltaX) < 40 || deltaY > 80) return;
+
+    if (deltaX > 0) {
+      handleCategoryStep('prev');
+      return;
+    }
+
+    handleCategoryStep('next');
   };
 
   const handleCompositionStart = () => {
@@ -536,6 +571,8 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   };
 
   const currentConfig = CATEGORY_CONFIG[category];
+  const previousCategory = CATEGORY_CONFIG[getCategoryByOffset(-1)];
+  const nextCategory = CATEGORY_CONFIG[getCategoryByOffset(1)];
   const allTagIds = [...TAGS, ...customTags.map((customTag) => customTag.id)];
   const visibleTopTagIds = topTagIds.filter((tagId) => allTagIds.includes(tagId)).slice(0, 3);
   const remainingTagIds = allTagIds.filter((tagId) => !visibleTopTagIds.includes(tagId));
@@ -654,7 +691,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
           side={isMobile ? 'bottom' : 'right'}
           className={
             isMobile
-              ? 'h-[78dvh] max-h-[78dvh] overflow-hidden rounded-t-3xl px-5 pb-6 pt-8 sm:px-6'
+              ? 'h-[92dvh] max-h-[92dvh] overflow-hidden rounded-t-3xl px-5 pb-4 pt-8 sm:px-6'
               : 'h-full w-full px-6 pb-6 pt-8 sm:max-w-xl md:max-w-2xl lg:max-w-[640px]'
           }
           onCloseAutoFocus={(event) => {
@@ -944,7 +981,41 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
               )}
             </div>
 
-            <div className="animate-fade-up shrink-0 border-t border-border bg-background/95 pb-1 pt-4 backdrop-blur" style={{ animationDelay: '120ms' }}>
+            <div className="animate-fade-up safe-area-bottom shrink-0 border-t border-border bg-background/95 pb-2 pt-4 backdrop-blur" style={{ animationDelay: '120ms' }}>
+              {isMobile && (
+                <div
+                  className="mb-3 rounded-2xl border border-border/70 bg-muted/40 p-2"
+                  onTouchStart={handleCategorySwipeStart}
+                  onTouchEnd={handleCategorySwipeEnd}
+                >
+                  <div className="mb-1 text-center text-[11px] font-medium text-muted-foreground">
+                    左右にスワイプしてカテゴリ変更
+                  </div>
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleCategoryStep('prev')}
+                      className="flex min-w-0 items-center justify-start gap-1 rounded-xl px-2 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{previousCategory.label}</span>
+                    </button>
+                    <div
+                      className={`min-w-[124px] rounded-xl border px-4 py-2.5 text-center text-sm font-semibold shadow-sm ${currentConfig.bgColor} ${currentConfig.color} ${currentConfig.borderColor}`}
+                    >
+                      {currentConfig.label}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCategoryStep('next')}
+                      className="flex min-w-0 items-center justify-end gap-1 rounded-xl px-2 py-2 text-right text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                    >
+                      <span className="truncate">{nextCategory.label}</span>
+                      <ArrowRight className="h-3.5 w-3.5 shrink-0" />
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="flex gap-3">
               <Button
                 type="button"
