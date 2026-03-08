@@ -214,7 +214,8 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     const result = calculateMiddleOccurredAt(
       prevBlock?.occurred_at || null,
       nextBlock?.occurred_at || null,
-      date
+      date,
+      dayBoundaryHour
     );
 
     if (result.success === false) {
