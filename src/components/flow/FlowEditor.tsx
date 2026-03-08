@@ -123,6 +123,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       starts_at: scheduleData?.starts_at,
       ends_at: scheduleData?.ends_at,
       is_all_day: scheduleData?.is_all_day,
+      dayBoundaryHour,
     });
     
     if (savedBlock) {
