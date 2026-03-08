@@ -41,6 +41,7 @@ function getIconComponent(iconName: string) {
 }
 
 export function TasksView({ targetBlockId, onBlockScrolled, onSearchCleared }: TasksViewProps) {
+  const { dayBoundaryHour } = useDayBoundary();
   const { getBlocksByCategory, updateBlock, deleteBlock } = useEntries();
   const { customTags } = useCustomTags();
   
