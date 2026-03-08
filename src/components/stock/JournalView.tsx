@@ -4,6 +4,7 @@ import { ja } from 'date-fns/locale';
 import { Loader2, BookOpen, CalendarDays, ArrowLeft, Trophy, Sunrise, Sun, Sunset, Moon, Sparkles, Copy, Check, Camera, FileText } from 'lucide-react';
 import { useEntries, Entry, Block } from '@/hooks/useEntries';
 import { getTodayKey } from '@/lib/dateUtils';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 import { DateSelector } from '@/components/flow/DateSelector';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
