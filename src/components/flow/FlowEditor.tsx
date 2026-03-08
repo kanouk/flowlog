@@ -11,9 +11,10 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDateJST, calculateMiddleOccurredAt } from '@/lib/dateUtils';
+import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDateJST, formatDisplayDateJST, calculateMiddleOccurredAt } from '@/lib/dateUtils';
 import { BlockCategory, BlockTag } from '@/lib/categoryUtils';
 import { arrayMove } from '@dnd-kit/sortable';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 
 interface FlowEditorProps {
   date?: string;
