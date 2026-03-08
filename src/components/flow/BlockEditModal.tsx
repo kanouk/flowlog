@@ -90,6 +90,7 @@ export function BlockEditModal({
   onSave, 
   onDelete 
 }: BlockEditModalProps) {
+  const { dayBoundaryHour } = useDayBoundary();
   // Content
   const [content, setContent] = useState(block.content || '');
   const [isComposing, setIsComposing] = useState(false);
