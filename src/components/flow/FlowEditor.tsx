@@ -226,7 +226,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
 
     const newOccurredAt = result.occurredAt;
 
-    const updated = await updateBlock(activeId, { occurred_at: newOccurredAt });
+    const updated = await updateBlock(activeId, { occurred_at: newOccurredAt }, dayBoundaryHour);
     
     if (!updated) {
       setBlocks(originalBlocks);
