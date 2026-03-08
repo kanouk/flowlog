@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Entry, Block, BlockUpdatePayload } from '@/hooks/useEntries';
-import { parseTimestamp, formatTimeJST } from '@/lib/dateUtils';
+import { parseTimestamp, formatTimeWithDayBoundary } from '@/lib/dateUtils';
+import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 import { CATEGORY_CONFIG, BlockCategory } from '@/lib/categoryUtils';
 import { BookOpen, ListTodo, Bookmark } from 'lucide-react';
 import { TaskCheckbox } from '@/components/ui/task-checkbox';
