@@ -28,6 +28,9 @@ interface Block {
   images?: string[];
   category?: string;
   is_done?: boolean;
+  done_at?: string | null;
+  due_at?: string | null;
+  due_all_day?: boolean | null;
 }
 
 interface FeatureAIConfig {
