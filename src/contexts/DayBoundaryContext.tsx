@@ -64,15 +64,17 @@ export function DayBoundaryProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (existing) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await supabase
           .from('user_ai_settings')
-          .update({ day_boundary_hour: hour } as Record<string, unknown>)
+          .update({ day_boundary_hour: hour } as any)
           .eq('user_id', user.id);
         if (error) throw error;
       } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await supabase
           .from('user_ai_settings')
-          .insert({ user_id: user.id, day_boundary_hour: hour } as Record<string, unknown>);
+          .insert({ user_id: user.id, day_boundary_hour: hour } as any);
         if (error) throw error;
       }
 
