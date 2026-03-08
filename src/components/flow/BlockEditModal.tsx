@@ -115,7 +115,7 @@ export function BlockEditModal({
   const [newImagePreviews, setNewImagePreviews] = useState<string[]>([]);
   
   // Date/Time for non-schedule
-  const [dayKey, setDayKey] = useState(getOccurredAtDayKey(block.occurred_at));
+  const [dayKey, setDayKey] = useState(getOccurredAtDayKey(block.occurred_at, dayBoundaryHour));
   const [time, setTime] = useState(formatTimeJST(block.occurred_at));
   
   // Schedule-specific states
