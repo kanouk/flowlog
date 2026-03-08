@@ -34,6 +34,7 @@ function getIconComponent(iconName: string) {
 }
 
 export function MemosView({ targetBlockId, onBlockScrolled, onSearchCleared }: MemosViewProps) {
+  const { dayBoundaryHour } = useDayBoundary();
   const { getBlocksByCategory, updateBlock, deleteBlock } = useEntries();
   const { customTags } = useCustomTags();
   const [memos, setMemos] = useState<Block[]>([]);
