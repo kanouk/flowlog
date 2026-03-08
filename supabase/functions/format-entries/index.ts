@@ -813,7 +813,7 @@ ${blocksText}`;
 
       if (!validation.ok) {
         console.warn(`Phase 2 validation failed after retry: ${validation.reason}. Using fallback formatter.`);
-        formattedContent = buildFallbackDiary(sortedBlocks);
+        formattedContent = buildFallbackDiary(sortedBlocks, date);
       }
     } catch (error) {
       if (error instanceof Error) {
