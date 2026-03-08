@@ -181,9 +181,9 @@ export function useEntries() {
   /**
    * 指定日付のブロックを occurred_at 範囲で取得（降順）
    */
-  const getBlocksByDate = useCallback(async (selectedDate: string) => {
+  const getBlocksByDate = useCallback(async (selectedDate: string, dayBoundaryHour: number = 0) => {
     if (!userId) return [];
-    const { start, end } = getDateRangeUTC(selectedDate);
+    const { start, end } = getDateRangeUTC(selectedDate, dayBoundaryHour);
     
     const { data, error } = await supabase
       .from('blocks')
