@@ -855,15 +855,15 @@ export function BlockEditModal({
                 <PopoverTrigger asChild>
                   <Button variant="outline" size="sm" className="h-8 px-2 text-sm">
                     <Calendar className="h-3.5 w-3.5 mr-1.5" />
-                    {dayKey}
+                    {calendarDate}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
                   <CalendarComponent
                     mode="single"
-                    selected={parseTimestamp(`${dayKey}T00:00:00Z`)}
+                    selected={parseTimestamp(`${calendarDate}T00:00:00Z`)}
                     onSelect={handleDateSelect}
-                    disabled={(date) => date > new Date()}
+                    disabled={(date) => date > getMaxCalendarDate(dayBoundaryHour)}
                     initialFocus
                     className="pointer-events-auto"
                   />
