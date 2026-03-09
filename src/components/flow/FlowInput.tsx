@@ -118,7 +118,13 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const categorySwipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const categorySwipeGestureRef = useRef<{
+    startX: number;
+    startY: number;
+    lastX: number;
+    lastY: number;
+    axis: 'x' | 'y' | null;
+  } | null>(null);
   const reviewOpenedAtRef = useRef<number>(0);
   const submitLockedRef = useRef(false);
   const { uploadImages, maxImages } = useImageUpload();
@@ -272,20 +278,60 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   };
 
   const handleCategorySwipeStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('input, textarea, select, [contenteditable="true"], [data-no-category-swipe="true"]')) {
+      categorySwipeGestureRef.current = null;
+      return;
+    }
+
     const touch = event.touches[0];
-    categorySwipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+    categorySwipeGestureRef.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      lastX: touch.clientX,
+      lastY: touch.clientY,
+      axis: null,
+    };
+  };
+
+  const handleCategorySwipeMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    const gesture = categorySwipeGestureRef.current;
+    if (!gesture) return;
+
+    const touch = event.touches[0];
+    const deltaX = touch.clientX - gesture.startX;
+    const deltaY = touch.clientY - gesture.startY;
+
+    gesture.lastX = touch.clientX;
+    gesture.lastY = touch.clientY;
+
+    if (!gesture.axis) {
+      if (Math.abs(deltaX) >= 12 && Math.abs(deltaX) > Math.abs(deltaY)) {
+        gesture.axis = 'x';
+      } else if (Math.abs(deltaY) >= 12 && Math.abs(deltaY) > Math.abs(deltaX)) {
+        gesture.axis = 'y';
+      }
+    }
+
+    if (gesture.axis === 'x') {
+      event.preventDefault();
+    }
   };
 
   const handleCategorySwipeEnd = (event: React.TouchEvent<HTMLDivElement>) => {
-    const start = categorySwipeStartRef.current;
-    categorySwipeStartRef.current = null;
-    if (!start) return;
+    const gesture = categorySwipeGestureRef.current;
+    categorySwipeGestureRef.current = null;
+    if (!gesture) return;
 
     const touch = event.changedTouches[0];
-    const deltaX = touch.clientX - start.x;
-    const deltaY = Math.abs(touch.clientY - start.y);
+    const endX = gesture.axis === 'x' ? gesture.lastX : touch.clientX;
+    const endY = gesture.axis === 'x' ? gesture.lastY : touch.clientY;
+    const deltaX = endX - gesture.startX;
+    const deltaY = Math.abs(endY - gesture.startY);
 
-    if (Math.abs(deltaX) < 40 || deltaY > 80) return;
+    if (gesture.axis === 'y') return;
+    if (Math.abs(deltaX) < 28) return;
+    if (Math.abs(deltaY) > 72 && Math.abs(deltaY) >= Math.abs(deltaX)) return;
 
     if (deltaX > 0) {
       handleCategoryStep('prev');
@@ -698,8 +744,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
           }}
         >
           <div
-            className="animate-review-enter flex h-full min-h-0 flex-col"
+            className="animate-review-enter flex h-full min-h-0 touch-pan-y flex-col"
             onTouchStart={isMobile ? handleCategorySwipeStart : undefined}
+            onTouchMove={isMobile ? handleCategorySwipeMove : undefined}
             onTouchEnd={isMobile ? handleCategorySwipeEnd : undefined}
           >
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pb-4">
