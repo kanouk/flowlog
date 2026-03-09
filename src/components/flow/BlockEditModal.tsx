@@ -924,6 +924,34 @@ export function BlockEditModal({
         </DialogFooter>
       </DialogContent>
 
+      {/* Life-day mismatch confirmation */}
+      <AlertDialog open={!!lifeDayMismatch} onOpenChange={(open) => { if (!open) setLifeDayMismatch(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>別の生活日に保存されます</AlertDialogTitle>
+            <AlertDialogDescription>
+              {lifeDayMismatch && (() => {
+                const [, m, d] = lifeDayMismatch.targetLifeDay.split('-').map(Number);
+                return `この時刻は ${m}月${d}日 のログとして登録されます。保存しますか？`;
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (lifeDayMismatch) {
+                  await executeSave(lifeDayMismatch.occurredAt);
+                  setLifeDayMismatch(null);
+                }
+              }}
+            >
+              保存
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
