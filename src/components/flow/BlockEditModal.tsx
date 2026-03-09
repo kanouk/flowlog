@@ -302,7 +302,7 @@ export function BlockEditModal({
     const day = String(now.getDate()).padStart(2, '0');
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
-    setDayKey(`${year}-${month}-${day}`);
+    setCalendarDate(`${year}-${month}-${day}`);
     setTime(`${hours}:${minutes}`);
   };
   
