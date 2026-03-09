@@ -761,12 +761,12 @@ JSON形式で回答してください。`;
               const inferredMinutes = inferredH * 60 + inferredM;
               
               if (Math.abs(currentMinutes - inferredMinutes) >= 30) {
-                const newOccurredAt = createOccurredAtFromTime(date, result.inferred_time);
+                const newOccurredAt = createOccurredAtFromTime(date, result.inferred_time, dbh);
                 
                 if (supabase) {
                   const { error: updateError } = await supabase
                     .from('blocks')
-                    .update({ occurred_at: newOccurredAt } as any)
+                    .update({ occurred_at: newOccurredAt })
                     .eq('id', block.id);
                   
                   if (!updateError) {
