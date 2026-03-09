@@ -799,7 +799,7 @@ JSON形式で回答してください。`;
     );
 
     const blocksText = sortedBlocks.map((block) => {
-      const time = formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH:mm');
+      const time = formatTimeWithBoundary(block.occurred_at, dbh);
       const categoryLabel = block.category ? `[${getCategoryLabel(block.category)}]` : '';
       let doneNote = '';
       if (block.is_done) {
