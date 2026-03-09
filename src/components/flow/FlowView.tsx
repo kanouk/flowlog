@@ -136,7 +136,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     const time = getTimeFromTimeframe(timeframe);
     const newOccurredAt = createOccurredAt(selectedDate, time, dayBoundaryHour);
     
-    const updated = await updateBlock(blockId, { occurred_at: newOccurredAt });
+    const updated = await updateBlock(blockId, { occurred_at: newOccurredAt }, dayBoundaryHour);
     
     if (updated) {
       setBlocks(prev => sortBlocksDesc(
@@ -150,7 +150,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
   const handleExactTimeAnswer = useCallback(async (blockId: string, time: string) => {
     const newOccurredAt = createOccurredAt(selectedDate, time, dayBoundaryHour);
 
-    const updated = await updateBlock(blockId, { occurred_at: newOccurredAt });
+    const updated = await updateBlock(blockId, { occurred_at: newOccurredAt }, dayBoundaryHour);
 
     if (updated) {
       setBlocks(prev => sortBlocksDesc(

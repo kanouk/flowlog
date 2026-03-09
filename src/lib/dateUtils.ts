@@ -100,15 +100,11 @@ export function getCalendarDateJST(isoString: string): string {
 }
 
 /**
- * カレンダー日時の最大許容日付を取得（dayBoundaryHour 考慮）
- * dayBoundaryHour=4 の場合、今日の翌日も選択可能（深夜帯は翌カレンダー日に属するため）
+ * カレンダー入力で選択できる最大日付を取得
+ * 手動日時編集では実カレンダー日付を直接入力するため、常に「今日」までに制限する
  */
-export function getMaxCalendarDate(dayBoundaryHour: number): Date {
-  if (dayBoundaryHour === 0) return new Date();
-  // 翌日の dayBoundaryHour - 1 時台まで許容するので、翌日末までOK
-  const tomorrow = addDays(new Date(), 1);
-  tomorrow.setHours(23, 59, 59, 999);
-  return tomorrow;
+export function getMaxCalendarDate(_dayBoundaryHour: number): Date {
+  return new Date();
 }
 
 /**
