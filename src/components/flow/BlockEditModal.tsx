@@ -334,13 +334,29 @@ export function BlockEditModal({
   const handleSave = async () => {
     if (isSaving) return;
     
-    const newOccurredAt = createOccurredAt(dayKey, time, dayBoundaryHour);
+    // カレンダー日付 + 実時刻から occurred_at を直接生成（生活日解釈なし）
+    const newOccurredAt = createOccurredAtFromCalendarInput(calendarDate, time);
+    
+    // 本当に未来かどうかだけチェック
     if (isFutureDate(newOccurredAt)) {
       toast.error('未来の日時は指定できません');
       return;
     }
     
-    setIsSaving(true);
+    // 所属生活日を計算
+    const targetLifeDay = getOccurredAtDayKey(newOccurredAt, dayBoundaryHour);
+    
+    // 現在開いている生活日と異なる場合、確認ダイアログを表示
+    if (selectedDate && targetLifeDay !== selectedDate) {
+      setLifeDayMismatch({ targetLifeDay, occurredAt: newOccurredAt });
+      return;
+    }
+    
+    // 一致する場合はそのまま保存
+    await executeSave(newOccurredAt);
+  };
+  
+  const executeSave = async (newOccurredAt: string) => {
     try {
       // 1. Upload new images
       let uploadedUrls: string[] = [];
