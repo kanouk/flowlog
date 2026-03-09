@@ -518,6 +518,7 @@ export function BlockList({
           onOpenChange={(open) => !open && setEditingBlock(null)}
           onSave={handleEditSave}
           onDelete={showDelete ? handleEditDelete : undefined}
+          selectedDate={selectedDate}
         />
       )}
 
