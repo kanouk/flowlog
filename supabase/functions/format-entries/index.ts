@@ -1053,13 +1053,15 @@ ${blocksText}`;
 
 必ずJSON形式で回答してください。`;
 
+      const scoreBoundaryNote = dbh > 0 ? `\n\n## 生活日の区切りについて\n${buildDayBoundaryContext(dbh)}\n深夜帯（例: 25時に寝た = 実時刻1:00）はこの生活日内の行動として評価してください。` : '';
+
       const scoreSystemPrompt = scoreConfig?.system_prompt || SCORE_PROMPT;
 
       const scoreUserPrompt = `## 行動規範
 ${behaviorRules}
 
 ## 今日の日記
-${formattedContent}
+${formattedContent}${scoreBoundaryNote}
 
 上記の日記を行動規範と照らし合わせて、100点からの減点方式でスコアを算出してください。`;
 
