@@ -34,7 +34,9 @@ import type { TaskPriority as TaskPriorityValue } from '@/lib/taskPriority';
 import { 
   formatTimeJST, 
   getOccurredAtDayKey, 
-  createOccurredAt, 
+  createOccurredAtFromCalendarInput,
+  getCalendarDateJST,
+  getMaxCalendarDate,
   isFutureDate, 
   parseTimestamp 
 } from '@/lib/dateUtils';
@@ -81,6 +83,7 @@ interface BlockEditModalProps {
   onOpenChange: (open: boolean) => void;
   onSave: (updates: BlockUpdatePayload & { images?: string[] }) => Promise<void>;
   onDelete?: () => void;
+  selectedDate?: string; // 現在開いている生活日（life-day）
 }
 
 export function BlockEditModal({ 
@@ -88,7 +91,8 @@ export function BlockEditModal({
   open, 
   onOpenChange, 
   onSave, 
-  onDelete 
+  onDelete,
+  selectedDate,
 }: BlockEditModalProps) {
   const { dayBoundaryHour } = useDayBoundary();
   // Content
@@ -114,9 +118,12 @@ export function BlockEditModal({
   const [newImages, setNewImages] = useState<File[]>([]);
   const [newImagePreviews, setNewImagePreviews] = useState<string[]>([]);
   
-  // Date/Time for non-schedule
-  const [dayKey, setDayKey] = useState(getOccurredAtDayKey(block.occurred_at, dayBoundaryHour));
+  // Date/Time for non-schedule (calendar date, not life-day)
+  const [calendarDate, setCalendarDate] = useState(getCalendarDateJST(block.occurred_at));
   const [time, setTime] = useState(formatTimeJST(block.occurred_at));
+  
+  // Life-day mismatch confirmation dialog
+  const [lifeDayMismatch, setLifeDayMismatch] = useState<{ targetLifeDay: string; occurredAt: string } | null>(null);
   
   // Schedule-specific states
   const [isAllDay, setIsAllDay] = useState(block.is_all_day || false);
@@ -156,7 +163,7 @@ export function BlockEditModal({
       setExistingImages(block.images || []);
       setNewImages([]);
       setNewImagePreviews([]);
-      setDayKey(getOccurredAtDayKey(block.occurred_at, dayBoundaryHour));
+      setCalendarDate(getCalendarDateJST(block.occurred_at));
       setTime(formatTimeJST(block.occurred_at));
       // Schedule states
       setIsAllDay(block.is_all_day || false);
@@ -281,14 +288,10 @@ export function BlockEditModal({
   
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
-      if (date > new Date()) {
-        toast.error('未来の日付は指定できません');
-        return;
-      }
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
-      setDayKey(`${year}-${month}-${day}`);
+      setCalendarDate(`${year}-${month}-${day}`);
     }
   };
   
@@ -299,7 +302,7 @@ export function BlockEditModal({
     const day = String(now.getDate()).padStart(2, '0');
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
-    setDayKey(`${year}-${month}-${day}`);
+    setCalendarDate(`${year}-${month}-${day}`);
     setTime(`${hours}:${minutes}`);
   };
   
@@ -331,12 +334,29 @@ export function BlockEditModal({
   const handleSave = async () => {
     if (isSaving) return;
     
-    const newOccurredAt = createOccurredAt(dayKey, time, dayBoundaryHour);
+    // カレンダー日付 + 実時刻から occurred_at を直接生成（生活日解釈なし）
+    const newOccurredAt = createOccurredAtFromCalendarInput(calendarDate, time);
+    
+    // 本当に未来かどうかだけチェック
     if (isFutureDate(newOccurredAt)) {
       toast.error('未来の日時は指定できません');
       return;
     }
     
+    // 所属生活日を計算
+    const targetLifeDay = getOccurredAtDayKey(newOccurredAt, dayBoundaryHour);
+    
+    // 現在開いている生活日と異なる場合、確認ダイアログを表示
+    if (selectedDate && targetLifeDay !== selectedDate) {
+      setLifeDayMismatch({ targetLifeDay, occurredAt: newOccurredAt });
+      return;
+    }
+    
+    // 一致する場合はそのまま保存
+    await executeSave(newOccurredAt);
+  };
+  
+  const executeSave = async (newOccurredAt: string) => {
     setIsSaving(true);
     try {
       // 1. Upload new images
@@ -835,15 +855,15 @@ export function BlockEditModal({
                 <PopoverTrigger asChild>
                   <Button variant="outline" size="sm" className="h-8 px-2 text-sm">
                     <Calendar className="h-3.5 w-3.5 mr-1.5" />
-                    {dayKey}
+                    {calendarDate}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
                   <CalendarComponent
                     mode="single"
-                    selected={parseTimestamp(`${dayKey}T00:00:00Z`)}
+                    selected={parseTimestamp(`${calendarDate}T00:00:00Z`)}
                     onSelect={handleDateSelect}
-                    disabled={(date) => date > new Date()}
+                    disabled={(date) => date > getMaxCalendarDate(dayBoundaryHour)}
                     initialFocus
                     className="pointer-events-auto"
                   />
@@ -903,6 +923,34 @@ export function BlockEditModal({
           </div>
         </DialogFooter>
       </DialogContent>
+
+      {/* Life-day mismatch confirmation */}
+      <AlertDialog open={!!lifeDayMismatch} onOpenChange={(open) => { if (!open) setLifeDayMismatch(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>別の生活日に保存されます</AlertDialogTitle>
+            <AlertDialogDescription>
+              {lifeDayMismatch && (() => {
+                const [, m, d] = lifeDayMismatch.targetLifeDay.split('-').map(Number);
+                return `この時刻は ${m}月${d}日 のログとして登録されます。保存しますか？`;
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (lifeDayMismatch) {
+                  await executeSave(lifeDayMismatch.occurredAt);
+                  setLifeDayMismatch(null);
+                }
+              }}
+            >
+              保存
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
