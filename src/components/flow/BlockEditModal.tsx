@@ -118,9 +118,12 @@ export function BlockEditModal({
   const [newImages, setNewImages] = useState<File[]>([]);
   const [newImagePreviews, setNewImagePreviews] = useState<string[]>([]);
   
-  // Date/Time for non-schedule
-  const [dayKey, setDayKey] = useState(getOccurredAtDayKey(block.occurred_at, dayBoundaryHour));
+  // Date/Time for non-schedule (calendar date, not life-day)
+  const [calendarDate, setCalendarDate] = useState(getCalendarDateJST(block.occurred_at));
   const [time, setTime] = useState(formatTimeJST(block.occurred_at));
+  
+  // Life-day mismatch confirmation dialog
+  const [lifeDayMismatch, setLifeDayMismatch] = useState<{ targetLifeDay: string; occurredAt: string } | null>(null);
   
   // Schedule-specific states
   const [isAllDay, setIsAllDay] = useState(block.is_all_day || false);
