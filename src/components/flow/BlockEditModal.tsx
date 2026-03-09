@@ -91,7 +91,8 @@ export function BlockEditModal({
   open, 
   onOpenChange, 
   onSave, 
-  onDelete 
+  onDelete,
+  selectedDate,
 }: BlockEditModalProps) {
   const { dayBoundaryHour } = useDayBoundary();
   // Content
