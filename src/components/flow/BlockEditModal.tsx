@@ -357,6 +357,7 @@ export function BlockEditModal({
   };
   
   const executeSave = async (newOccurredAt: string) => {
+    setIsSaving(true);
     try {
       // 1. Upload new images
       let uploadedUrls: string[] = [];
