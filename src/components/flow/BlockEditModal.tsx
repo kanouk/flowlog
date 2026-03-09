@@ -34,7 +34,9 @@ import type { TaskPriority as TaskPriorityValue } from '@/lib/taskPriority';
 import { 
   formatTimeJST, 
   getOccurredAtDayKey, 
-  createOccurredAt, 
+  createOccurredAtFromCalendarInput,
+  getCalendarDateJST,
+  getMaxCalendarDate,
   isFutureDate, 
   parseTimestamp 
 } from '@/lib/dateUtils';
