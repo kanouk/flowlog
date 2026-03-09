@@ -826,6 +826,12 @@ JSON形式で回答してください。`;
       return `[${time}] ${categoryLabel}${doneNote}${deadlineNote}${imageNote} ${content}`.trim();
     }).join('\n');
 
+    const nightEndDisplay = dbh > 0 ? `${String(dbh - 1).padStart(2, '0')}:59（翌${String(dbh).padStart(2, '0')}:00が翌日の始まり）` : '4:59';
+    const dayBoundaryDiaryNote = dbh > 0 ? `
+15. ${buildDayBoundaryContext(dbh)}
+    深夜帯（0:00〜${String(dbh - 1).padStart(2, '0')}:59）のブロックは「## 夜」セクションに含める
+    「25時」「26時」のような表現を自然に使ってよい` : '';
+
     const DEFAULT_SYSTEM_PROMPT = `あなたは日記を整形するアシスタントです。ユーザーが一日の中で記録した「出来事」を、読みやすい日記形式に整形してください。
 
 以下のルールに従ってください：
@@ -835,7 +841,7 @@ JSON形式で回答してください。`;
    - 朝（5:00-10:59）
    - 昼（11:00-14:59）
    - 夕方（15:00-17:59）
-   - 夜（18:00-4:59）
+   - 夜（18:00-${nightEndDisplay}）
 4. 各セクションは「## 朝」のようなMarkdown見出しで始める
 5. 具体的な出来事に紐付かない「思ったこと」「感じたこと」「気づき」「内省」がある場合は
    「## 思ったこと」セクションにまとめる
@@ -862,7 +868,7 @@ JSON形式で回答してください。`;
     - 良い例: 「ラーメン屋でラーメンを食べた {{PHOTO:abc123:1}}」
     - 良い例: 「いろいろな風景を見た {{PHOTO:def456:3}}」
     - 悪い例: 「ラーメンを食べた\n{{PHOTO:abc123:1}}」（別の行に配置）
-    - 写真マーカーはその出来事を説明する文の末尾に配置すること
+    - 写真マーカーはその出来事を説明する文の末尾に配置すること${dayBoundaryDiaryNote}
 
 出力はMarkdown形式で返してください。`;
 
@@ -876,7 +882,8 @@ JSON形式で回答してください。`;
 
     const diarySystemPrompt = `${diaryConfig?.system_prompt || DEFAULT_SYSTEM_PROMPT}\n${DIARY_OUTPUT_GUARD}`;
 
-    const userPrompt = `以下は${date}のログです。整形してください：
+    const dayBoundaryUserNote = dbh > 0 ? `\n${buildDayBoundaryContext(dbh)}` : '';
+    const userPrompt = `以下は${date}のログです。整形してください：${dayBoundaryUserNote}
 
 ${blocksText}`;
 
