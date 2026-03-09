@@ -74,6 +74,150 @@ function getCategoryLabel(category: string): string {
   return labels[category] || category;
 }
 
+// ========== 生活日基準ヘルパー関数 ==========
+
+/**
+ * occurred_at (ISO) → 生活日基準の時刻表示
+ * dbh=5 のとき 03:00 → "27:00", 04:59 → "28:59"
+ * dbh=0 のときは通常の HH:mm
+ */
+function formatTimeWithBoundary(occurredAt: string, dayBoundaryHour: number): string {
+  const hour = Number(formatInTimeZone(parseISO(occurredAt), TIMEZONE, 'H'));
+  const minute = formatInTimeZone(parseISO(occurredAt), TIMEZONE, 'mm');
+  if (dayBoundaryHour > 0 && hour < dayBoundaryHour) {
+    return `${24 + hour}:${minute}`;
+  }
+  return formatInTimeZone(parseISO(occurredAt), TIMEZONE, 'HH:mm');
+}
+
+/**
+ * 生活日基準の時間帯バケットを返す
+ * dbh未満の時刻は「夜」として扱う
+ */
+function getTimeBucketWithBoundary(occurredAt: string, dayBoundaryHour: number): '朝' | '昼' | '夕方' | '夜' {
+  const hour = Number(formatInTimeZone(parseISO(occurredAt), TIMEZONE, 'H'));
+  if (dayBoundaryHour > 0 && hour < dayBoundaryHour) {
+    return '夜'; // dbh未満は前日の夜の延長
+  }
+  if (hour >= 5 && hour <= 10) return '朝';
+  if (hour >= 11 && hour <= 14) return '昼';
+  if (hour >= 15 && hour <= 17) return '夕方';
+  return '夜';
+}
+
+/**
+ * プロンプト用の生活日説明テキストを生成
+ */
+function buildDayBoundaryContext(dayBoundaryHour: number): string {
+  if (dayBoundaryHour === 0) return '';
+  const endHour = dayBoundaryHour - 1;
+  return `
+【生活日の区切り】
+- この日記の「1日」は ${String(dayBoundaryHour).padStart(2, '0')}:00 に始まり、翌日の ${String(endHour).padStart(2, '0')}:59 に終わります。
+- 0:00〜${String(endHour).padStart(2, '0')}:59 は前日の続き（深夜〜明け方）として扱います。
+- 例: 1:30 は前日の生活日における 25:30 に相当します。
+- 深夜帯のブロックはその生活日の「夜」セクションに含めてください。
+`;
+}
+
+/**
+ * 時刻推測プロンプトを動的生成
+ */
+function buildTimeAnalysisPrompt(dayBoundaryHour: number): string {
+  const boundaryContext = dayBoundaryHour > 0 ? `
+### 生活日の区切りについて（重要）
+${buildDayBoundaryContext(dayBoundaryHour)}
+- 深夜の出来事（0:00〜${String(dayBoundaryHour - 1).padStart(2, '0')}:59）は「この生活日の夜の延長」として扱ってください。
+- 推測時刻は実時刻の HH:mm で返してください（例: 深夜1時半なら "01:30"）。
+- 「25時に寝た」は "01:00" として返してください（翌calendar dayの実時刻）。
+` : `
+### 深夜時刻表記（非常に重要）
+日本語では前日の延長として深夜を表現することがある。これらはその日の最後（23:59）として扱う：
+
+- 「24時」「25時」「26時」「27時」「28時」→ 23:59（その日の終わり）
+  - 例: 「25時半に寝た」→ 翌日1:30ではなく、その日の23:59として記録
+  - 例: 「26時まで起きてた」→ その日の23:59
+
+- 「深夜1時」「深夜2時」「深夜3時」（就寝文脈）→ 23:59
+  - 例: 「深夜2時に寝た」→ その日の23:59
+  - 注意: 起床の文脈なら早朝扱い（「深夜2時に目が覚めた」→ 02:00）
+
+- 「明け方」「夜中」「夜更かし」（就寝・活動終了文脈）→ 23:59
+
+### 深夜時刻の判断基準
+1. 「寝た」「就寝」「おやすみ」「終わった」「まで起きてた」→ その日の終わりとして23:59
+2. 「起きた」「目覚めた」「スタート」「から始めた」→ その日の始まりとして02:00-04:00
+3. 文脈から「前日の延長」と判断できる場合 → 23:59
+`;
+
+  return `あなたは日記の各ブロックの実際の発生時刻を推測するアシスタントです。
+
+各ブロックの内容を分析し、実際に起きた時刻を推測してください。
+
+## 時間の手がかり例
+
+### 明示的な時刻表現
+- 「10時に」「午後3時」「朝8時」→ その時刻
+- 「正午に」→ 12:00
+- 「深夜に」→ 00:00-02:00
+
+### 食事・生活リズム
+- 「朝ごはん」「朝食」→ 07:00-09:00
+- 「ランチ」「昼ごはん」「昼食」→ 12:00-13:00
+- 「おやつ」「3時のおやつ」→ 15:00
+- 「夕食」「夕ごはん」「晩ごはん」→ 18:00-20:00
+- 「夜食」→ 22:00-00:00
+
+### 行動パターン
+- 「起床」「起きた」「目覚めた」→ 06:00-08:00
+- 「出勤」「会社に向かう」→ 08:00-09:00
+- 「帰宅」「家に帰った」→ 18:00-20:00
+- 「就寝」「寝る」「おやすみ」→ 22:00-00:00
+
+### 相対表現
+- 「その後」「それから」→ 前のブロックの30分〜1時間後
+- 「さっき」→ 現在より30分前程度
+
+### 時間帯表現
+- 「朝」「午前中」→ 08:00-11:00
+- 「昼」「お昼」→ 12:00-13:00
+- 「午後」→ 14:00-17:00
+- 「夕方」→ 17:00-19:00
+- 「夜」→ 19:00-23:00
+${boundaryContext}
+## 出力形式
+
+JSON形式で回答してください：
+{
+  "results": [
+    { 
+      "index": 0, 
+      "inferred_time": "08:00", 
+      "confidence": "high", 
+      "reason": "朝ごはんという記述から朝8時頃と推測" 
+    },
+    { 
+      "index": 1, 
+      "inferred_time": "14:00", 
+      "confidence": "medium", 
+      "reason": "その後という記述から前のブロックの後と推測" 
+    },
+    { 
+      "index": 2, 
+      "inferred_time": null, 
+      "confidence": "none", 
+      "question": "これはいつ頃のことですか？" 
+    }
+  ]
+}
+
+## 注意事項
+- confidence は "high"（明確な手がかりあり）、"medium"（推測可能）、"none"（手がかりなし）
+- confidence が "none" の場合、inferred_time は null、question を設定
+- 現在の occurred_at より大幅に異なる推測のみ報告（±30分以内なら変更不要）
+- inferred_time は "HH:mm" 形式（例: "08:00", "14:30"）`;
+}
+
 async function callOpenAI(apiKey: string, model: string, systemPrompt: string, userPrompt: string): Promise<AIResult> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -374,11 +518,17 @@ JSON形式で回答してください：
 - 現在の occurred_at より大幅に異なる推測のみ報告（±30分以内なら変更不要）
 - inferred_time は "HH:mm" 形式（例: "08:00", "14:30"）`;
 
-// 時刻をJSTのHH:mm形式のISO文字列に変換
-function createOccurredAtFromTime(date: string, timeStr: string): string {
-  const jstDate = new Date(`${date}T${timeStr}:00`);
-  const utcDate = fromZonedTime(jstDate, TIMEZONE);
-  return utcDate.toISOString();
+// 時刻をJSTのHH:mm形式のISO文字列に変換（dayBoundaryHour対応）
+function createOccurredAtFromTime(date: string, timeStr: string, dayBoundaryHour: number = 0): string {
+  const [hours] = timeStr.split(':').map(Number);
+  // dbh > 0 かつ推測時刻が dbh 未満 → 翌calendar dayの時刻
+  if (dayBoundaryHour > 0 && hours < dayBoundaryHour) {
+    const baseDate = new Date(`${date}T00:00:00Z`);
+    baseDate.setUTCDate(baseDate.getUTCDate() + 1);
+    const nextDateStr = baseDate.toISOString().split('T')[0];
+    return fromZonedTime(`${nextDateStr}T${timeStr}:00`, TIMEZONE).toISOString();
+  }
+  return fromZonedTime(`${date}T${timeStr}:00`, TIMEZONE).toISOString();
 }
 
 function normalizeDiaryMarkdown(raw: string): string {
@@ -557,13 +707,20 @@ serve(async (req) => {
     // ========== Phase 1: 時刻推測 ==========
     console.log('Phase 1: Time inference...');
     
+    const dbh = dayBoundaryHour || 0;
+
     const timeAnalysisInput = blocks.map((block, index) => {
       const currentTime = formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH:mm');
-      return `[${index}] 現在時刻: ${currentTime}, 内容: ${block.content || '(画像のみ)'}`;
+      const lifeTime = dbh > 0 ? formatTimeWithBoundary(block.occurred_at, dbh) : currentTime;
+      const timeDisplay = dbh > 0 && lifeTime !== currentTime
+        ? `生活日時刻: ${lifeTime} (実時刻: ${currentTime})`
+        : `現在時刻: ${currentTime}`;
+      return `[${index}] ${timeDisplay}, 内容: ${block.content || '(画像のみ)'}`;
     }).join('\n');
 
-    const timeSystemPrompt = timeConfig?.system_prompt || TIME_ANALYSIS_PROMPT;
-    const timeAnalysisPrompt = `以下は${date}のブロックです。各ブロックの実際の発生時刻を推測してください：
+    const timeSystemPrompt = timeConfig?.system_prompt || buildTimeAnalysisPrompt(dbh);
+    const dayBoundaryNote = dbh > 0 ? `\n${buildDayBoundaryContext(dbh)}` : '';
+    const timeAnalysisPrompt = `以下は${date}のブロックです。各ブロックの実際の発生時刻を推測してください：${dayBoundaryNote}
 
 ${timeAnalysisInput}
 
@@ -604,12 +761,12 @@ JSON形式で回答してください。`;
               const inferredMinutes = inferredH * 60 + inferredM;
               
               if (Math.abs(currentMinutes - inferredMinutes) >= 30) {
-                const newOccurredAt = createOccurredAtFromTime(date, result.inferred_time);
+                const newOccurredAt = createOccurredAtFromTime(date, result.inferred_time, dbh);
                 
                 if (supabase) {
                   const { error: updateError } = await supabase
                     .from('blocks')
-                    .update({ occurred_at: newOccurredAt } as any)
+                    .update({ occurred_at: newOccurredAt })
                     .eq('id', block.id);
                   
                   if (!updateError) {
@@ -642,7 +799,7 @@ JSON形式で回答してください。`;
     );
 
     const blocksText = sortedBlocks.map((block) => {
-      const time = formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH:mm');
+      const time = formatTimeWithBoundary(block.occurred_at, dbh);
       const categoryLabel = block.category ? `[${getCategoryLabel(block.category)}]` : '';
       let doneNote = '';
       if (block.is_done) {
@@ -669,6 +826,12 @@ JSON形式で回答してください。`;
       return `[${time}] ${categoryLabel}${doneNote}${deadlineNote}${imageNote} ${content}`.trim();
     }).join('\n');
 
+    const nightEndDisplay = dbh > 0 ? `${String(dbh - 1).padStart(2, '0')}:59（翌${String(dbh).padStart(2, '0')}:00が翌日の始まり）` : '4:59';
+    const dayBoundaryDiaryNote = dbh > 0 ? `
+15. ${buildDayBoundaryContext(dbh)}
+    深夜帯（0:00〜${String(dbh - 1).padStart(2, '0')}:59）のブロックは「## 夜」セクションに含める
+    「25時」「26時」のような表現を自然に使ってよい` : '';
+
     const DEFAULT_SYSTEM_PROMPT = `あなたは日記を整形するアシスタントです。ユーザーが一日の中で記録した「出来事」を、読みやすい日記形式に整形してください。
 
 以下のルールに従ってください：
@@ -678,7 +841,7 @@ JSON形式で回答してください。`;
    - 朝（5:00-10:59）
    - 昼（11:00-14:59）
    - 夕方（15:00-17:59）
-   - 夜（18:00-4:59）
+   - 夜（18:00-${nightEndDisplay}）
 4. 各セクションは「## 朝」のようなMarkdown見出しで始める
 5. 具体的な出来事に紐付かない「思ったこと」「感じたこと」「気づき」「内省」がある場合は
    「## 思ったこと」セクションにまとめる
@@ -705,7 +868,7 @@ JSON形式で回答してください。`;
     - 良い例: 「ラーメン屋でラーメンを食べた {{PHOTO:abc123:1}}」
     - 良い例: 「いろいろな風景を見た {{PHOTO:def456:3}}」
     - 悪い例: 「ラーメンを食べた\n{{PHOTO:abc123:1}}」（別の行に配置）
-    - 写真マーカーはその出来事を説明する文の末尾に配置すること
+    - 写真マーカーはその出来事を説明する文の末尾に配置すること${dayBoundaryDiaryNote}
 
 出力はMarkdown形式で返してください。`;
 
@@ -719,7 +882,8 @@ JSON形式で回答してください。`;
 
     const diarySystemPrompt = `${diaryConfig?.system_prompt || DEFAULT_SYSTEM_PROMPT}\n${DIARY_OUTPUT_GUARD}`;
 
-    const userPrompt = `以下は${date}のログです。整形してください：
+    const dayBoundaryUserNote = dbh > 0 ? `\n${buildDayBoundaryContext(dbh)}` : '';
+    const userPrompt = `以下は${date}のログです。整形してください：${dayBoundaryUserNote}
 
 ${blocksText}`;
 
@@ -762,18 +926,15 @@ ${blocksText}`;
       return { ok: true };
     }
 
-    // Fallback: generate from blocks using fixed template
+    // Fallback: generate from blocks using fixed template (dbh-aware)
     function buildFallbackDiary(sortedBlks: Block[], dateStr: string): string {
       const timeSlots: Record<string, string[]> = { '朝': [], '昼': [], '夕方': [], '夜': [] };
       for (const block of sortedBlks) {
-        const hour = parseInt(formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH'));
         const content = block.content || '(画像のみ)';
         const imageNote = block.images?.length ? ` {{PHOTO:${block.id}:${block.images.length}}}` : '';
         const line = `${content}${imageNote}`;
-        if (hour >= 5 && hour < 11) timeSlots['朝'].push(line);
-        else if (hour >= 11 && hour < 15) timeSlots['昼'].push(line);
-        else if (hour >= 15 && hour < 18) timeSlots['夕方'].push(line);
-        else timeSlots['夜'].push(line);
+        const bucket = getTimeBucketWithBoundary(block.occurred_at, dbh);
+        timeSlots[bucket].push(line);
       }
       let result = '';
       for (const [slot, lines] of Object.entries(timeSlots)) {
@@ -892,13 +1053,15 @@ ${blocksText}`;
 
 必ずJSON形式で回答してください。`;
 
+      const scoreBoundaryNote = dbh > 0 ? `\n\n## 生活日の区切りについて\n${buildDayBoundaryContext(dbh)}\n深夜帯（例: 25時に寝た = 実時刻1:00）はこの生活日内の行動として評価してください。` : '';
+
       const scoreSystemPrompt = scoreConfig?.system_prompt || SCORE_PROMPT;
 
       const scoreUserPrompt = `## 行動規範
 ${behaviorRules}
 
 ## 今日の日記
-${formattedContent}
+${formattedContent}${scoreBoundaryNote}
 
 上記の日記を行動規範と照らし合わせて、100点からの減点方式でスコアを算出してください。`;
 
