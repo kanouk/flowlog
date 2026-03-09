@@ -518,11 +518,17 @@ JSON形式で回答してください：
 - 現在の occurred_at より大幅に異なる推測のみ報告（±30分以内なら変更不要）
 - inferred_time は "HH:mm" 形式（例: "08:00", "14:30"）`;
 
-// 時刻をJSTのHH:mm形式のISO文字列に変換
-function createOccurredAtFromTime(date: string, timeStr: string): string {
-  const jstDate = new Date(`${date}T${timeStr}:00`);
-  const utcDate = fromZonedTime(jstDate, TIMEZONE);
-  return utcDate.toISOString();
+// 時刻をJSTのHH:mm形式のISO文字列に変換（dayBoundaryHour対応）
+function createOccurredAtFromTime(date: string, timeStr: string, dayBoundaryHour: number = 0): string {
+  const [hours] = timeStr.split(':').map(Number);
+  // dbh > 0 かつ推測時刻が dbh 未満 → 翌calendar dayの時刻
+  if (dayBoundaryHour > 0 && hours < dayBoundaryHour) {
+    const baseDate = new Date(`${date}T00:00:00Z`);
+    baseDate.setUTCDate(baseDate.getUTCDate() + 1);
+    const nextDateStr = baseDate.toISOString().split('T')[0];
+    return fromZonedTime(`${nextDateStr}T${timeStr}:00`, TIMEZONE).toISOString();
+  }
+  return fromZonedTime(`${date}T${timeStr}:00`, TIMEZONE).toISOString();
 }
 
 function normalizeDiaryMarkdown(raw: string): string {
