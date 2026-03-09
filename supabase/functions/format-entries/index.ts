@@ -926,18 +926,15 @@ ${blocksText}`;
       return { ok: true };
     }
 
-    // Fallback: generate from blocks using fixed template
+    // Fallback: generate from blocks using fixed template (dbh-aware)
     function buildFallbackDiary(sortedBlks: Block[], dateStr: string): string {
       const timeSlots: Record<string, string[]> = { '朝': [], '昼': [], '夕方': [], '夜': [] };
       for (const block of sortedBlks) {
-        const hour = parseInt(formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH'));
         const content = block.content || '(画像のみ)';
         const imageNote = block.images?.length ? ` {{PHOTO:${block.id}:${block.images.length}}}` : '';
         const line = `${content}${imageNote}`;
-        if (hour >= 5 && hour < 11) timeSlots['朝'].push(line);
-        else if (hour >= 11 && hour < 15) timeSlots['昼'].push(line);
-        else if (hour >= 15 && hour < 18) timeSlots['夕方'].push(line);
-        else timeSlots['夜'].push(line);
+        const bucket = getTimeBucketWithBoundary(block.occurred_at, dbh);
+        timeSlots[bucket].push(line);
       }
       let result = '';
       for (const [slot, lines] of Object.entries(timeSlots)) {
