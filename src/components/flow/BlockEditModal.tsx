@@ -83,6 +83,7 @@ interface BlockEditModalProps {
   onOpenChange: (open: boolean) => void;
   onSave: (updates: BlockUpdatePayload & { images?: string[] }) => Promise<void>;
   onDelete?: () => void;
+  selectedDate?: string; // 現在開いている生活日（life-day）
 }
 
 export function BlockEditModal({ 
