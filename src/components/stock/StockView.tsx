@@ -6,8 +6,6 @@ import { TasksView } from './TasksView';
 import { ReadLaterView } from './ReadLaterView';
 import { MemosView } from './MemosView';
 import { ScheduleView } from './ScheduleView';
-import { useTabSwipe } from '@/hooks/useTabSwipe';
-import { useIsMobile } from '@/hooks/use-mobile';
 
 type StockSubTab = 'journal' | 'tasks' | 'memos' | 'readLater' | 'schedule';
 
@@ -46,7 +44,6 @@ const TAB_COLORS: Record<StockSubTab, { active: string; hover: string }> = {
 export function StockView({ entries, selectedDate, onDateSelect }: StockViewProps) {
   const [subTab, setSubTab] = useState<StockSubTab>('journal');
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
-  const isMobile = useIsMobile();
   const prevTabRef = useRef<StockSubTab>(subTab);
 
   // タブ切り替え（方向を記録）
@@ -63,29 +60,6 @@ export function StockView({ entries, selectedDate, onDateSelect }: StockViewProp
     prevTabRef.current = subTab;
     setSubTab(newTab);
   }, [subTab]);
-
-  // 次のタブへ移動
-  const goToNextTab = useCallback(() => {
-    const currentIndex = TAB_ORDER.indexOf(subTab);
-    if (currentIndex < TAB_ORDER.length - 1) {
-      switchTab(TAB_ORDER[currentIndex + 1]);
-    }
-  }, [subTab, switchTab]);
-
-  // 前のタブへ移動
-  const goToPrevTab = useCallback(() => {
-    const currentIndex = TAB_ORDER.indexOf(subTab);
-    if (currentIndex > 0) {
-      switchTab(TAB_ORDER[currentIndex - 1]);
-    }
-  }, [subTab, switchTab]);
-
-  // モバイルでのみスワイプを有効化
-  useTabSwipe({
-    onSwipeLeft: goToNextTab,
-    onSwipeRight: goToPrevTab,
-    enabled: isMobile,
-  });
 
   const tabClass = (tab: StockSubTab) => {
     const colors = TAB_COLORS[tab];

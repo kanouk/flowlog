@@ -15,7 +15,6 @@ import { LogOut, Settings, PenLine, BookOpen, ListTodo, CalendarClock, FileText,
 import { AppSplash } from '@/components/common/AppSplash';
 import { getTodayKey } from '@/lib/dateUtils';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useTabSwipe } from '@/hooks/useTabSwipe';
 import { DayBoundaryProvider, useDayBoundary } from '@/contexts/DayBoundaryContext';
 import logoImage from '@/assets/logo.png';
 
@@ -61,23 +60,6 @@ function DashboardContent() {
   const datesWithEntries = useMemo(() => {
     return entries.map(e => e.date);
   }, [entries]);
-
-  // 6タブ間スワイプ
-  const goToNextTab = useCallback(() => {
-    const idx = TAB_ORDER.indexOf(activeTab);
-    if (idx < TAB_ORDER.length - 1) setActiveTab(TAB_ORDER[idx + 1]);
-  }, [activeTab]);
-
-  const goToPrevTab = useCallback(() => {
-    const idx = TAB_ORDER.indexOf(activeTab);
-    if (idx > 0) setActiveTab(TAB_ORDER[idx - 1]);
-  }, [activeTab]);
-
-  useTabSwipe({
-    onSwipeLeft: goToNextTab,
-    onSwipeRight: goToPrevTab,
-    enabled: isMobile,
-  });
 
   useEffect(() => {
     if (!authLoading && !user) {

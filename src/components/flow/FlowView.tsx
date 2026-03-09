@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { FlowInput } from '@/components/flow/FlowInput';
 import { BlockList } from '@/components/flow/BlockList';
@@ -11,6 +11,8 @@ import { BlockCategory, BlockTag } from '@/lib/categoryUtils';
 import { arrayMove } from '@dnd-kit/sortable';
 import { useTargetBlockHighlight } from '@/hooks/useTargetBlockHighlight';
 import { useDayBoundary } from '@/contexts/DayBoundaryContext';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { addDays, subDays, format, isFuture, isToday as isTodayFn } from 'date-fns';
 
 interface FlowViewProps {
   selectedDate: string;
@@ -36,8 +38,10 @@ function sortBlocksDesc(blocks: Block[]): Block[] {
 
 export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWithEntries = [], targetBlockId, onBlockScrolled, searchQuery, onSearchCleared }: FlowViewProps) {
   const { dayBoundaryHour } = useDayBoundary();
+  const isMobile = useIsMobile();
   const today = getTodayKey(dayBoundaryHour);
   const isToday = selectedDate === today;
+  const dateSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const { 
     formatting, 
@@ -163,6 +167,49 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
   const handleTimeDismiss = useCallback((blockId: string) => {
     setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
   }, []);
+
+  const handlePrevDay = useCallback(() => {
+    const prevDate = subDays(new Date(selectedDate), 1);
+    onDateChange(format(prevDate, 'yyyy-MM-dd'));
+  }, [onDateChange, selectedDate]);
+
+  const handleNextDay = useCallback(() => {
+    const nextDate = addDays(new Date(selectedDate), 1);
+    if (!isFuture(nextDate) || isTodayFn(nextDate)) {
+      onDateChange(format(nextDate, 'yyyy-MM-dd'));
+    }
+  }, [onDateChange, selectedDate]);
+
+  const handleDateSwipeStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (!isMobile) return;
+
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button, input, textarea, [role="button"], [data-no-date-swipe="true"]')) {
+      dateSwipeStartRef.current = null;
+      return;
+    }
+
+    const touch = event.touches[0];
+    dateSwipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+  }, [isMobile]);
+
+  const handleDateSwipeEnd = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (!isMobile || !dateSwipeStartRef.current) return;
+
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - dateSwipeStartRef.current.x;
+    const deltaY = Math.abs(touch.clientY - dateSwipeStartRef.current.y);
+    dateSwipeStartRef.current = null;
+
+    if (Math.abs(deltaX) < 70 || deltaY > 80) return;
+
+    if (deltaX < 0) {
+      handleNextDay();
+      return;
+    }
+
+    handlePrevDay();
+  }, [handleNextDay, handlePrevDay, isMobile]);
 
   /**
    * ブロック追加
@@ -433,7 +480,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" onTouchStart={handleDateSwipeStart} onTouchEnd={handleDateSwipeEnd}>
       <DateNavigation 
         selectedDate={selectedDate}
         onDateChange={onDateChange}

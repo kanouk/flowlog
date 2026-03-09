@@ -571,8 +571,6 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   };
 
   const currentConfig = CATEGORY_CONFIG[category];
-  const previousCategory = CATEGORY_CONFIG[getCategoryByOffset(-1)];
-  const nextCategory = CATEGORY_CONFIG[getCategoryByOffset(1)];
   const allTagIds = [...TAGS, ...customTags.map((customTag) => customTag.id)];
   const visibleTopTagIds = topTagIds.filter((tagId) => allTagIds.includes(tagId)).slice(0, 3);
   const remainingTagIds = allTagIds.filter((tagId) => !visibleTopTagIds.includes(tagId));
@@ -699,7 +697,11 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
             focusTextarea();
           }}
         >
-          <div className="animate-review-enter flex h-full min-h-0 flex-col">
+          <div
+            className="animate-review-enter flex h-full min-h-0 flex-col"
+            onTouchStart={isMobile ? handleCategorySwipeStart : undefined}
+            onTouchEnd={isMobile ? handleCategorySwipeEnd : undefined}
+          >
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pb-4">
               <section className="animate-fade-up space-y-3">
               <div className="hidden text-xs text-muted-foreground md:block">矢印キーで移動 / Enterで保存</div>
@@ -982,40 +984,6 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
             </div>
 
             <div className="animate-fade-up safe-area-bottom shrink-0 border-t border-border bg-background/95 pb-2 pt-4 backdrop-blur" style={{ animationDelay: '120ms' }}>
-              {isMobile && (
-                <div
-                  className="mb-3 rounded-2xl border border-border/70 bg-muted/40 p-2"
-                  onTouchStart={handleCategorySwipeStart}
-                  onTouchEnd={handleCategorySwipeEnd}
-                >
-                  <div className="mb-1 text-center text-[11px] font-medium text-muted-foreground">
-                    左右にスワイプしてカテゴリ変更
-                  </div>
-                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleCategoryStep('prev')}
-                      className="flex min-w-0 items-center justify-start gap-1 rounded-xl px-2 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-                    >
-                      <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{previousCategory.label}</span>
-                    </button>
-                    <div
-                      className={`min-w-[124px] rounded-xl border px-4 py-2.5 text-center text-sm font-semibold shadow-sm ${currentConfig.bgColor} ${currentConfig.color} ${currentConfig.borderColor}`}
-                    >
-                      {currentConfig.label}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleCategoryStep('next')}
-                      className="flex min-w-0 items-center justify-end gap-1 rounded-xl px-2 py-2 text-right text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-                    >
-                      <span className="truncate">{nextCategory.label}</span>
-                      <ArrowRight className="h-3.5 w-3.5 shrink-0" />
-                    </button>
-                  </div>
-                </div>
-              )}
               <div className="flex gap-3">
               <Button
                 type="button"
