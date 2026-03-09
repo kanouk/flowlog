@@ -83,6 +83,35 @@ export function getJSTTimeAsUTC(dateStr: string, timeStr: string): Date {
 }
 
 /**
+ * カレンダー日付 + 実時刻 → occurred_at ISO文字列を生成
+ * ※ BlockEditModal など、ユーザーがカレンダー日付と時刻を直接指定する場合に使用
+ * ※ createOccurredAt() と違い、生活日解釈をしない（カレンダー日付をそのまま使う）
+ */
+export function createOccurredAtFromCalendarInput(calendarDate: string, time: string): string {
+  return fromZonedTime(`${calendarDate}T${time}:00`, TIMEZONE).toISOString();
+}
+
+/**
+ * occurred_at の JST カレンダー日付 (YYYY-MM-DD) を取得
+ * ※ getOccurredAtDayKey() と違い、生活日オフセットを適用しない
+ */
+export function getCalendarDateJST(isoString: string): string {
+  return formatInTimeZone(parseISO(isoString), TIMEZONE, 'yyyy-MM-dd');
+}
+
+/**
+ * カレンダー日時の最大許容日付を取得（dayBoundaryHour 考慮）
+ * dayBoundaryHour=4 の場合、今日の翌日も選択可能（深夜帯は翌カレンダー日に属するため）
+ */
+export function getMaxCalendarDate(dayBoundaryHour: number): Date {
+  if (dayBoundaryHour === 0) return new Date();
+  // 翌日の dayBoundaryHour - 1 時台まで許容するので、翌日末までOK
+  const tomorrow = addDays(new Date(), 1);
+  tomorrow.setHours(23, 59, 59, 999);
+  return tomorrow;
+}
+
+/**
  * ISO8601 文字列を Date にパース（Supabase TIMESTAMPTZ 用）
  */
 export function parseTimestamp(isoString: string): Date {
