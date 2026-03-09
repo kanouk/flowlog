@@ -707,13 +707,20 @@ serve(async (req) => {
     // ========== Phase 1: 時刻推測 ==========
     console.log('Phase 1: Time inference...');
     
+    const dbh = dayBoundaryHour || 0;
+
     const timeAnalysisInput = blocks.map((block, index) => {
       const currentTime = formatInTimeZone(parseISO(block.occurred_at), TIMEZONE, 'HH:mm');
-      return `[${index}] 現在時刻: ${currentTime}, 内容: ${block.content || '(画像のみ)'}`;
+      const lifeTime = dbh > 0 ? formatTimeWithBoundary(block.occurred_at, dbh) : currentTime;
+      const timeDisplay = dbh > 0 && lifeTime !== currentTime
+        ? `生活日時刻: ${lifeTime} (実時刻: ${currentTime})`
+        : `現在時刻: ${currentTime}`;
+      return `[${index}] ${timeDisplay}, 内容: ${block.content || '(画像のみ)'}`;
     }).join('\n');
 
-    const timeSystemPrompt = timeConfig?.system_prompt || TIME_ANALYSIS_PROMPT;
-    const timeAnalysisPrompt = `以下は${date}のブロックです。各ブロックの実際の発生時刻を推測してください：
+    const timeSystemPrompt = timeConfig?.system_prompt || buildTimeAnalysisPrompt(dbh);
+    const dayBoundaryNote = dbh > 0 ? `\n${buildDayBoundaryContext(dbh)}` : '';
+    const timeAnalysisPrompt = `以下は${date}のブロックです。各ブロックの実際の発生時刻を推測してください：${dayBoundaryNote}
 
 ${timeAnalysisInput}
 
