@@ -75,6 +75,7 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
   const { dayBoundaryHour } = useDayBoundary();
   const { getBlocksByCategory, summarizeUrl, updateBlock } = useEntries();
   const { customTags } = useCustomTags();
+  const { syncRaindrop, syncing: raindropSyncing, hasRaindropToken } = useExternalSync();
   
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
