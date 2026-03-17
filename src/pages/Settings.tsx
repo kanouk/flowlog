@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, User, LogOut, Tag, Target, ChevronRight, Plug, Bot, Settings2, Clock } from 'lucide-react';
+import { ChevronLeft, User, LogOut, Tag, Target, ChevronRight, Plug, Bot, Settings2, Clock, Link2 } from 'lucide-react';
 import { ScoreSettingsSection } from '@/components/settings/ScoreSettingsSection';
 import { TagManagementSection } from '@/components/settings/TagManagementSection';
 import { McpSettingsSection } from '@/components/settings/McpSettingsSection';
