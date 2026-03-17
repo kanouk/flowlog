@@ -23,6 +23,7 @@ const SECTIONS: { id: SettingsSection; label: string; icon: React.ElementType }[
   { id: 'features', label: '処理別AI設定', icon: Settings2 },
   { id: 'score', label: '今日の得点', icon: Target },
   { id: 'dayBoundary', label: '1日の区切り', icon: Clock },
+  { id: 'integrations', label: '外部連携', icon: Link2 },
   { id: 'mcp', label: 'MCP連携', icon: Plug },
   { id: 'account', label: 'アカウント', icon: User },
 ];
