@@ -112,6 +112,8 @@ function SettingsContent() {
         return <ScoreSettingsSection />;
       case 'dayBoundary':
         return <DayBoundarySection />;
+      case 'integrations':
+        return <ExternalIntegrationsSection />;
       case 'mcp':
         return <McpSettingsSection />;
       case 'account':
