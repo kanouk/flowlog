@@ -107,9 +107,9 @@ export function useAIFeatureSettings() {
     fetchSettings();
   }, [fetchSettings]);
 
-  const getSettingForFeature = (featureKey: FeatureKey): FeatureSetting | undefined => {
+  const getSettingForFeature = useCallback((featureKey: FeatureKey): FeatureSetting | undefined => {
     return settings.find(s => s.feature_key === featureKey);
-  };
+  }, [settings]);
 
   const upsertSetting = async (featureKey: FeatureKey, updates: FeatureSettingUpdate): Promise<boolean> => {
     if (!user) return false;

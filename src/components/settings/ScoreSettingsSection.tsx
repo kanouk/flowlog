@@ -29,8 +29,10 @@ export function ScoreSettingsSection() {
   const [origEnabled, setOrigEnabled] = useState(false);
   const [origRules, setOrigRules] = useState('');
 
+  const [initialized, setInitialized] = useState(false);
+
   useEffect(() => {
-    if (!loading) {
+    if (!loading && !initialized) {
       const scoreSetting = getSettingForFeature('score_evaluation');
       const enabled = scoreSetting?.enabled ?? false;
       const rules = scoreSetting?.user_prompt_template || '';
@@ -39,12 +41,13 @@ export function ScoreSettingsSection() {
       setBehaviorRules(rules);
       setOrigEnabled(enabled);
       setOrigRules(rules);
+      setInitialized(true);
       
       if (enabled) {
         setIsOpen(true);
       }
     }
-  }, [loading, getSettingForFeature]);
+  }, [loading, initialized, getSettingForFeature]);
 
   useEffect(() => {
     const enabledChanged = scoreEnabled !== origEnabled;
