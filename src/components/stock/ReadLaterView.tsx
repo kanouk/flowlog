@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
-import { Loader2, Bookmark, ExternalLink, Sparkles, RefreshCw, FileText, Circle, CheckCircle2, AlertCircle, Plus } from 'lucide-react';
+import { Loader2, Bookmark, ExternalLink, Sparkles, RefreshCw, FileText, Circle, CheckCircle2, AlertCircle, Plus, CloudDownload } from 'lucide-react';
 import { icons } from 'lucide-react';
 import { useEntries, Block, UrlMetadata } from '@/hooks/useEntries';
 import { formatTimeWithDayBoundary, formatDisplayDateJST, formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
