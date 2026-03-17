@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
-import { Loader2, Bookmark, ExternalLink, Sparkles, RefreshCw, FileText, Circle, CheckCircle2, AlertCircle, Plus } from 'lucide-react';
+import { Loader2, Bookmark, ExternalLink, Sparkles, RefreshCw, FileText, Circle, CheckCircle2, AlertCircle, Plus, CloudDownload } from 'lucide-react';
 import { icons } from 'lucide-react';
 import { useEntries, Block, UrlMetadata } from '@/hooks/useEntries';
 import { formatTimeWithDayBoundary, formatDisplayDateJST, formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
@@ -99,20 +99,25 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
     loadData();
   }, [loadData]);
 
-  // Diff sync from Raindrop when tab opens
+  // Diff sync from Raindrop when tab opens (after initial load completes)
   useEffect(() => {
+    if (loading) return; // Wait for initial load
     let cancelled = false;
     (async () => {
       const connected = await hasRaindropToken();
       if (connected && !cancelled) {
         const result = await syncRaindrop('diff');
         if (result?.imported && result.imported > 0 && !cancelled) {
-          loadData();
+          // Re-fetch with latest loadData reference
+          const data = await getBlocksByCategory('read_later', { limit: 200, includeCompleted: true });
+          if (!cancelled) {
+            setBlocks(data);
+          }
         }
       }
     })();
     return () => { cancelled = true; };
-  }, []); // Run once on mount
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useTargetBlockHighlight({
     targetBlockId,
@@ -481,6 +486,15 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
                       <span>{formatDisplayDateJST(block.occurred_at, dayBoundaryHour)}</span>
                       <span>•</span>
                       <span>{formatTimeWithDayBoundary(block.occurred_at, dayBoundaryHour)}</span>
+                      {block.url_metadata && (block.url_metadata as any).source === 'raindrop' && (
+                        <>
+                          <span>•</span>
+                          <span className="inline-flex items-center gap-1 text-blue-500/70 dark:text-blue-400/70">
+                            <CloudDownload className="h-3 w-3" />
+                            Raindrop
+                          </span>
+                        </>
+                      )}
                       {block.is_done && block.done_at && (
                         <>
                           <span>•</span>

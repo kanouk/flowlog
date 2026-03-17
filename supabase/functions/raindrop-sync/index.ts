@@ -163,6 +163,7 @@ Deno.serve(async (req) => {
         title: item.title || '',
         summary: item.excerpt || '',
         fetched_at: new Date().toISOString(),
+        source: 'raindrop',
       };
       if (item.cover) {
         urlMetadata.cover = item.cover;
