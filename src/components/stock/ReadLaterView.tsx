@@ -11,6 +11,7 @@ import { QuickAddModal } from './QuickAddModal';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useTargetBlockHighlight } from '@/hooks/useTargetBlockHighlight';
+import { useExternalSync } from '@/hooks/useExternalSync';
 
 type TagFilter = 'all' | BlockTag | string;
 type ReadFilter = 'all' | 'unread' | 'read';
