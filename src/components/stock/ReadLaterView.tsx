@@ -99,6 +99,21 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
     loadData();
   }, [loadData]);
 
+  // Diff sync from Raindrop when tab opens
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const connected = await hasRaindropToken();
+      if (connected && !cancelled) {
+        const result = await syncRaindrop('diff');
+        if (result?.imported && result.imported > 0 && !cancelled) {
+          loadData();
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []); // Run once on mount
+
   useTargetBlockHighlight({
     targetBlockId,
     enabled: !loading && blocks.length > 0,
