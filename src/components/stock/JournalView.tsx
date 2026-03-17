@@ -119,7 +119,7 @@ export function JournalView({ entries, selectedDate, onDateSelect, blocks: exter
   // Score animation state
   const [displayScore, setDisplayScore] = useState(0);
   const [copied, setCopied] = useState(false);
-  const scoreAnimationRef = useRef<NodeJS.Timeout | null>(null);
+  const scoreAnimationRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Handle mobile date selection
   const handleMobileDateSelect = (date: string) => {
