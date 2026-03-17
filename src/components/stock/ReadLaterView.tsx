@@ -99,20 +99,25 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
     loadData();
   }, [loadData]);
 
-  // Diff sync from Raindrop when tab opens
+  // Diff sync from Raindrop when tab opens (after initial load completes)
   useEffect(() => {
+    if (loading) return; // Wait for initial load
     let cancelled = false;
     (async () => {
       const connected = await hasRaindropToken();
       if (connected && !cancelled) {
         const result = await syncRaindrop('diff');
         if (result?.imported && result.imported > 0 && !cancelled) {
-          loadData();
+          // Re-fetch with latest loadData reference
+          const data = await getBlocksByCategory('read_later', { limit: 200, includeCompleted: true });
+          if (!cancelled) {
+            setBlocks(data);
+          }
         }
       }
     })();
     return () => { cancelled = true; };
-  }, []); // Run once on mount
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useTargetBlockHighlight({
     targetBlockId,
