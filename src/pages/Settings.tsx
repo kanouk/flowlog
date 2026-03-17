@@ -10,6 +10,7 @@ import { AIModelManagementSection } from '@/components/settings/AIModelManagemen
 import { AIFeatureSettingsSection } from '@/components/settings/AIFeatureSettingsSection';
 import { DayBoundarySection } from '@/components/settings/DayBoundarySection';
 import { DayBoundaryProvider } from '@/contexts/DayBoundaryContext';
+import { ExternalIntegrationsSection } from '@/components/settings/ExternalIntegrationsSection';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { AppSplash } from '@/components/common/AppSplash';
