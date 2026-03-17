@@ -15,7 +15,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { AppSplash } from '@/components/common/AppSplash';
 
-type SettingsSection = 'tags' | 'models' | 'features' | 'score' | 'dayBoundary' | 'mcp' | 'account';
+type SettingsSection = 'tags' | 'models' | 'features' | 'score' | 'dayBoundary' | 'integrations' | 'mcp' | 'account';
 
 const SECTIONS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
   { id: 'tags', label: 'タグ管理', icon: Tag },
