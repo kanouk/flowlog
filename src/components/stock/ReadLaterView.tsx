@@ -11,6 +11,7 @@ import { QuickAddModal } from './QuickAddModal';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useTargetBlockHighlight } from '@/hooks/useTargetBlockHighlight';
+import { useExternalSync } from '@/hooks/useExternalSync';
 
 type TagFilter = 'all' | BlockTag | string;
 type ReadFilter = 'all' | 'unread' | 'read';
@@ -74,6 +75,7 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
   const { dayBoundaryHour } = useDayBoundary();
   const { getBlocksByCategory, summarizeUrl, updateBlock } = useEntries();
   const { customTags } = useCustomTags();
+  const { syncRaindrop, syncing: raindropSyncing, hasRaindropToken } = useExternalSync();
   
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,6 +98,21 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Diff sync from Raindrop when tab opens
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const connected = await hasRaindropToken();
+      if (connected && !cancelled) {
+        const result = await syncRaindrop('diff');
+        if (result?.imported && result.imported > 0 && !cancelled) {
+          loadData();
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []); // Run once on mount
 
   useTargetBlockHighlight({
     targetBlockId,

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, User, LogOut, Tag, Target, ChevronRight, Plug, Bot, Settings2, Clock } from 'lucide-react';
+import { ChevronLeft, User, LogOut, Tag, Target, ChevronRight, Plug, Bot, Settings2, Clock, Link2 } from 'lucide-react';
 import { ScoreSettingsSection } from '@/components/settings/ScoreSettingsSection';
 import { TagManagementSection } from '@/components/settings/TagManagementSection';
 import { McpSettingsSection } from '@/components/settings/McpSettingsSection';
@@ -10,11 +10,12 @@ import { AIModelManagementSection } from '@/components/settings/AIModelManagemen
 import { AIFeatureSettingsSection } from '@/components/settings/AIFeatureSettingsSection';
 import { DayBoundarySection } from '@/components/settings/DayBoundarySection';
 import { DayBoundaryProvider } from '@/contexts/DayBoundaryContext';
+import { ExternalIntegrationsSection } from '@/components/settings/ExternalIntegrationsSection';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { AppSplash } from '@/components/common/AppSplash';
 
-type SettingsSection = 'tags' | 'models' | 'features' | 'score' | 'dayBoundary' | 'mcp' | 'account';
+type SettingsSection = 'tags' | 'models' | 'features' | 'score' | 'dayBoundary' | 'integrations' | 'mcp' | 'account';
 
 const SECTIONS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
   { id: 'tags', label: 'タグ管理', icon: Tag },
@@ -22,6 +23,7 @@ const SECTIONS: { id: SettingsSection; label: string; icon: React.ElementType }[
   { id: 'features', label: '処理別AI設定', icon: Settings2 },
   { id: 'score', label: '今日の得点', icon: Target },
   { id: 'dayBoundary', label: '1日の区切り', icon: Clock },
+  { id: 'integrations', label: '外部連携', icon: Link2 },
   { id: 'mcp', label: 'MCP連携', icon: Plug },
   { id: 'account', label: 'アカウント', icon: User },
 ];
@@ -110,6 +112,8 @@ function SettingsContent() {
         return <ScoreSettingsSection />;
       case 'dayBoundary':
         return <DayBoundarySection />;
+      case 'integrations':
+        return <ExternalIntegrationsSection />;
       case 'mcp':
         return <McpSettingsSection />;
       case 'account':
