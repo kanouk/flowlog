@@ -55,8 +55,17 @@ export function TagChipSelector({
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const allowedTagIds = visibleTagIds ?? getRecentTagIds();
-  const filteredBaseTags = TAGS.filter((tagId) => allowedTagIds.includes(tagId));
-  const filteredCustomTags = customTags.filter((tag) => allowedTagIds.includes(tag.id));
+  const customTagMap = new Map(customTags.map((t) => [t.id, t]));
+
+  // Build unified ordered list preserving allowedTagIds order
+  const orderedTags = allowedTagIds
+    .map((id) => {
+      if (TAGS.includes(id as BlockTag)) return { type: 'base' as const, id };
+      const custom = customTagMap.get(id);
+      if (custom) return { type: 'custom' as const, id, tag: custom };
+      return null;
+    })
+    .filter(Boolean) as ({ type: 'base'; id: string } | { type: 'custom'; id: string; tag: CustomTag })[];
 
   const handleTagToggle = (tagId: string | null) => {
     onChange(value === tagId ? null : tagId);
@@ -94,36 +103,35 @@ export function TagChipSelector({
           </SelectableControl>
         )}
 
-        {filteredBaseTags.map((tagId) => {
-          const config = TAG_CONFIG[tagId];
-          const Icon = config.icon;
-          const isSelected = isBaseTag(value) && value === tagId;
+        {orderedTags.map((item) => {
+          if (item.type === 'base') {
+            const config = TAG_CONFIG[item.id as BlockTag];
+            const Icon = config.icon;
+            const isSelected = value === item.id;
+            return (
+              <SelectableControl
+                key={item.id}
+                onClick={() => handleTagToggle(item.id)}
+                appearance="pill"
+                size="pill"
+                selected={isSelected}
+                className={cn(
+                  'min-h-9 text-[10px] font-medium sm:text-[11px]',
+                  isSelected
+                    ? `${config.bgColor} ${config.color} border-current`
+                    : 'border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground'
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {config.label}
+              </SelectableControl>
+            );
+          }
 
-          return (
-            <SelectableControl
-              key={tagId}
-              onClick={() => handleTagToggle(tagId)}
-              appearance="pill"
-              size="pill"
-              selected={isSelected}
-              className={cn(
-                'min-h-9 text-[10px] font-medium sm:text-[11px]',
-                isSelected
-                  ? `${config.bgColor} ${config.color} border-current`
-                  : 'border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground'
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {config.label}
-            </SelectableControl>
-          );
-        })}
-
-        {filteredCustomTags.map((tag) => {
+          const { tag } = item;
           const IconComponent = getIconComponent(tag.icon);
           const colorConfig = TAG_COLORS[tag.color];
           const isSelected = value === tag.id;
-
           return (
             <SelectableControl
               key={tag.id}
