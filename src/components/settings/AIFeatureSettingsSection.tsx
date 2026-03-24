@@ -250,7 +250,7 @@ export function AIFeatureSettingsSection() {
       </p>
 
       <div className="space-y-3">
-        {FEATURE_DEFINITIONS.map(def => {
+        {FEATURE_DEFINITIONS.filter(def => def.key !== 'score_evaluation').map(def => {
           const setting = getSettingForFeature(def.key);
           return (
             <FeatureCard
