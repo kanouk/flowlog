@@ -1,28 +1,29 @@
 
 
-# 検索対象に「あとで読む」の要約文を追加
+# 得点フラグが勝手にオフになる原因と修正
 
-## 概要
-現在ブロック検索は `content` カラムのみを対象としているが、Read Later ブロックの URL 要約（`url_metadata` JSONB 内の `summary` フィールド）も検索対象に含める。
+## 原因
 
-## 変更内容
+`ScoreSettingsSection` と `AIFeatureSettingsSection` が同じ `score_evaluation` 行を**別々の `useAIFeatureSettings` フックインスタンス**で管理している。
 
-### `src/hooks/useSearch.ts`
-- ブロック検索クエリの `select` に `url_metadata` を追加
-- フィルタ条件を `.ilike('content', ...)` 単体から `.or()` に変更し、`url_metadata->summary` の ILIKE 検索を追加：
-  ```
-  .or(`content.ilike.%${q}%,url_metadata->>summary.ilike.%${q}%`)
-  ```
-- `BlockSearchResult` インターフェースに `url_metadata` フィールドを追加
+具体的な問題箇所: `AIFeatureSettingsSection` 内の `FeatureCard` に「デフォルトに戻す」ボタンがあり、これは `deleteSetting('score_evaluation')` を呼ぶ。行が削除されると、`ScoreSettingsSection` は `scoreSetting?.enabled ?? false` でフォールバックし、**オフとして表示**される。
 
-### `src/components/search/SearchResults.tsx`
-- Read Later ブロックの表示テキストに、`content` が空または URL のみの場合は `url_metadata.summary` をフォールバック表示
-- 要約文中のキーワードもハイライト対象にする
+また、`FeatureCard` と `ScoreSettingsSection` で `enabled` のデフォルト値が逆:
+- `FeatureCard`: `initialData?.enabled ?? true` (デフォルト: オン)
+- `ScoreSettingsSection`: `scoreSetting?.enabled ?? false` (デフォルト: オフ)
 
-### ファイル一覧
+## 修正
+
+**`AIFeatureSettingsSection` から `score_evaluation` を除外する。**
+
+得点設定は専用の `ScoreSettingsSection` で完結させ、`AIFeatureSettingsSection` の処理一覧には表示しない。これにより二重管理の競合を根本的に解消する。
 
 | File | Change |
 |---|---|
-| `src/hooks/useSearch.ts` | 検索条件に `url_metadata->>summary` を追加、select に `url_metadata` 追加 |
-| `src/components/search/SearchResults.tsx` | Read Later ブロックで要約テキストを表示 |
+| `src/components/settings/AIFeatureSettingsSection.tsx` | `FEATURE_DEFINITIONS` のループから `score_evaluation` をフィルタリングして除外 |
+
+変更は1行のフィルター追加のみ:
+```tsx
+{FEATURE_DEFINITIONS.filter(def => def.key !== 'score_evaluation').map(def => { ... })}
+```
 
