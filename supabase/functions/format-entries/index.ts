@@ -946,7 +946,20 @@ ${blocksText}`;
           result += `## ${slot}\n${lines.join('\n')}\n\n`;
         }
       }
-      result += `## 今日の3行まとめ\n${dateStr}の記録です。\n出来事を振り返りました。\nお疲れさまでした。`;
+      // Build a content-based 3-line summary from actual blocks
+      const summaryLines: string[] = [];
+      for (const block of sortedBlks) {
+        if (summaryLines.length >= 3) break;
+        const text = (block.content || '').trim();
+        if (!text) continue;
+        // Truncate long content to ~40 chars
+        summaryLines.push(text.length > 40 ? text.slice(0, 40) + '…' : text);
+      }
+      // Pad to 3 lines if not enough blocks
+      while (summaryLines.length < 3) {
+        summaryLines.push(summaryLines.length === 0 ? `${dateStr}の記録` : 'お疲れさまでした');
+      }
+      result += `## 今日の3行まとめ\n${summaryLines.join('\n')}`;
       return result;
     }
 
