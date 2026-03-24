@@ -849,6 +849,10 @@ JSON形式で回答してください。`;
    - このセクションは時間帯セクションの後、3行まとめの前に配置
    - 該当する内容がない場合は、このセクションは出力しない
 6. 最後に「## 今日の3行まとめ」を追加し、その日の要点を3行でまとめる
+   - 各行は具体的な出来事・行動・感情を含むこと（「充実した一日」「いろいろあった」のような抽象表現は禁止）
+   - ブロックに書かれた固有名詞・場所・人物・食べ物・作品名などを積極的に使う
+   - 良い例: 「朝からカフェで読書、午後は友人とランチでパスタを食べた」
+   - 悪い例: 「いろいろなことがあった一日だった」「充実した時間を過ごした」
 7. 元の内容の意味を変えないこと
 8. 日本語で出力すること
 9. 入力には[出来事]のブロックのみが含まれます。自然な日記文に整形してください
@@ -942,7 +946,20 @@ ${blocksText}`;
           result += `## ${slot}\n${lines.join('\n')}\n\n`;
         }
       }
-      result += `## 今日の3行まとめ\n${dateStr}の記録です。\n出来事を振り返りました。\nお疲れさまでした。`;
+      // Build a content-based 3-line summary from actual blocks
+      const summaryLines: string[] = [];
+      for (const block of sortedBlks) {
+        if (summaryLines.length >= 3) break;
+        const text = (block.content || '').trim();
+        if (!text) continue;
+        // Truncate long content to ~40 chars
+        summaryLines.push(text.length > 40 ? text.slice(0, 40) + '…' : text);
+      }
+      // Pad to 3 lines if not enough blocks
+      while (summaryLines.length < 3) {
+        summaryLines.push(summaryLines.length === 0 ? `${dateStr}の記録` : 'お疲れさまでした');
+      }
+      result += `## 今日の3行まとめ\n${summaryLines.join('\n')}`;
       return result;
     }
 
