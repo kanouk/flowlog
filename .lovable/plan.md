@@ -1,29 +1,26 @@
 
 
-# 得点フラグが勝手にオフになる原因と修正
+# 3行まとめの品質改善
 
-## 原因
+## 変更内容
 
-`ScoreSettingsSection` と `AIFeatureSettingsSection` が同じ `score_evaluation` 行を**別々の `useAIFeatureSettings` フックインスタンス**で管理している。
+### 1. プロンプト改善（`format-entries/index.ts`）
 
-具体的な問題箇所: `AIFeatureSettingsSection` 内の `FeatureCard` に「デフォルトに戻す」ボタンがあり、これは `deleteSetting('score_evaluation')` を呼ぶ。行が削除されると、`ScoreSettingsSection` は `scoreSetting?.enabled ?? false` でフォールバックし、**オフとして表示**される。
+ルール6の指示を具体的に強化：
 
-また、`FeatureCard` と `ScoreSettingsSection` で `enabled` のデフォルト値が逆:
-- `FeatureCard`: `initialData?.enabled ?? true` (デフォルト: オン)
-- `ScoreSettingsSection`: `scoreSetting?.enabled ?? false` (デフォルト: オフ)
+```
+6. 最後に「## 今日の3行まとめ」を追加し、その日の要点を3行でまとめる
+   - 各行は具体的な出来事・行動・感情を含むこと（「充実した一日」のような抽象表現は禁止）
+   - ブロックに書かれた固有名詞・場所・人物・食べ物などを積極的に使う
+   - 例: 「朝からカフェで読書、午後は友人とランチでパスタを食べた」
+   - 悪い例: 「いろいろなことがあった一日だった」
+```
 
-## 修正
+### 2. フォールバック3行まとめの改善（`format-entries/index.ts`）
 
-**`AIFeatureSettingsSection` から `score_evaluation` を除外する。**
-
-得点設定は専用の `ScoreSettingsSection` で完結させ、`AIFeatureSettingsSection` の処理一覧には表示しない。これにより二重管理の競合を根本的に解消する。
+定型文の代わりに、ブロックの実際の内容から先頭3件を要約文として使う。現在のコード（945行目）を修正し、ブロック内容を短縮して3行に組み立てる。
 
 | File | Change |
 |---|---|
-| `src/components/settings/AIFeatureSettingsSection.tsx` | `FEATURE_DEFINITIONS` のループから `score_evaluation` をフィルタリングして除外 |
-
-変更は1行のフィルター追加のみ:
-```tsx
-{FEATURE_DEFINITIONS.filter(def => def.key !== 'score_evaluation').map(def => { ... })}
-```
+| `supabase/functions/format-entries/index.ts` | プロンプトのルール6を強化 + フォールバック3行まとめをブロック内容ベースに変更 |
 
