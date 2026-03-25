@@ -29,25 +29,24 @@ export function ScoreSettingsSection() {
   const [origEnabled, setOrigEnabled] = useState(false);
   const [origRules, setOrigRules] = useState('');
 
-  const [initialized, setInitialized] = useState(false);
-
+  // Sync local state with DB settings reactively (not just once)
   useEffect(() => {
-    if (!loading && !initialized) {
-      const scoreSetting = getSettingForFeature('score_evaluation');
-      const enabled = scoreSetting?.enabled ?? false;
-      const rules = scoreSetting?.user_prompt_template || '';
-      
+    if (loading) return;
+    const scoreSetting = getSettingForFeature('score_evaluation');
+    const enabled = scoreSetting?.enabled ?? false;
+    const rules = scoreSetting?.user_prompt_template || '';
+
+    // Only sync from DB if user has no unsaved local changes
+    if (!hasChanges) {
       setScoreEnabled(enabled);
       setBehaviorRules(rules);
-      setOrigEnabled(enabled);
-      setOrigRules(rules);
-      setInitialized(true);
-      
       if (enabled) {
         setIsOpen(true);
       }
     }
-  }, [loading, initialized, getSettingForFeature]);
+    setOrigEnabled(enabled);
+    setOrigRules(rules);
+  }, [loading, getSettingForFeature]);
 
   useEffect(() => {
     const enabledChanged = scoreEnabled !== origEnabled;
