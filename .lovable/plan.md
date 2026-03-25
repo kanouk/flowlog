@@ -1,26 +1,36 @@
 
 
-# 3行まとめの品質改善
+# 得点設定がオンにならない原因分析
 
-## 変更内容
+## 根本原因: 初期化タイミングの競合（レースコンディション）
 
-### 1. プロンプト改善（`format-entries/index.ts`）
+以下の順序で問題が発生する:
 
-ルール6の指示を具体的に強化：
-
+```text
+1. useAuth: user=null, loading=true
+2. useAIFeatureSettings.fetchSettings: user=null → settings=[], loading=false
+3. ScoreSettingsSection: loading=false && !initialized
+   → getSettingForFeature('score_evaluation') = undefined
+   → scoreEnabled = false, initialized = true  ← ★ここで空データで初期化確定
+4. Auth完了: user が取得される
+5. fetchSettings 再実行 → DB から実データ取得、settings 更新
+6. しかし initialized=true のため、ScoreSettingsSection は再読み込みしない
+   → UIは永遠に scoreEnabled=false のまま
 ```
-6. 最後に「## 今日の3行まとめ」を追加し、その日の要点を3行でまとめる
-   - 各行は具体的な出来事・行動・感情を含むこと（「充実した一日」のような抽象表現は禁止）
-   - ブロックに書かれた固有名詞・場所・人物・食べ物などを積極的に使う
-   - 例: 「朝からカフェで読書、午後は友人とランチでパスタを食べた」
-   - 悪い例: 「いろいろなことがあった一日だった」
-```
 
-### 2. フォールバック3行まとめの改善（`format-entries/index.ts`）
+**要するに**: `useAIFeatureSettings` が `user=null` の段階で `loading=false` にしてしまい、`ScoreSettingsSection` が空データで初期化を完了してしまう。その後に実データが届いても `initialized` フラグが邪魔して反映されない。
 
-定型文の代わりに、ブロックの実際の内容から先頭3件を要約文として使う。現在のコード（945行目）を修正し、ブロック内容を短縮して3行に組み立てる。
+## 修正方針
+
+**`ScoreSettingsSection.tsx`**: `initialized` フラグを廃止し、`settings` の変更に追従する方式に変更。ユーザーが未保存の変更をしていない場合のみ、DB値で同期する。
 
 | File | Change |
 |---|---|
-| `supabase/functions/format-entries/index.ts` | プロンプトのルール6を強化 + フォールバック3行まとめをブロック内容ベースに変更 |
+| `src/components/settings/ScoreSettingsSection.tsx` | `initialized` フラグを削除し、`settings` 変化時に `hasChanges=false` なら再同期するロジックに置換 |
+
+具体的には:
+- `initialized` state を削除
+- useEffect の依存を `[loading, getSettingForFeature]` に変更
+- `hasChanges` が false の場合のみ DB 値で上書き
+- これにより auth 完了後の再フェッチ結果が正しく UI に反映される
 
