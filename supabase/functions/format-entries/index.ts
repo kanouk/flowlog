@@ -1026,13 +1026,24 @@ ${blocksText}`;
     // ========== Phase 3: スコアリング ==========
     let score: number | undefined;
     let scoreDetails: string | undefined;
+    let scoreStatus: string;
+    let scoreMessage: string | undefined;
 
-    // Determine if scoring is enabled from new config only
-    const scoreEnabled = scoreConfig?.enabled ?? false;
-    const behaviorRules = scoreConfig?.user_prompt_template;
-
-    if (scoreEnabled && behaviorRules) {
+    if (!scoreConfig) {
+      scoreStatus = 'config_missing';
+      scoreMessage = '得点設定が見つかりません';
+      console.log('Phase 3: Skipped - score_evaluation config not found');
+    } else if (!scoreConfig.enabled) {
+      scoreStatus = 'disabled';
+      scoreMessage = '得点機能は無効です';
+      console.log('Phase 3: Skipped - scoring is disabled');
+    } else if (!scoreConfig.user_prompt_template || scoreConfig.user_prompt_template.trim() === '') {
+      scoreStatus = 'missing_rules';
+      scoreMessage = '行動規範が設定されていません';
+      console.log('Phase 3: Skipped - enabled but user_prompt_template is empty');
+    } else {
       console.log('Phase 3: Scoring diary...');
+      const behaviorRules = scoreConfig.user_prompt_template;
       
       const SCORE_PROMPT = `あなたは行動規範の達成度を評価するアシスタントです。
 
@@ -1090,22 +1101,35 @@ ${formattedContent}${scoreBoundaryNote}
         const scoreJsonMatch = scoreAIResult.text.match(/\{[\s\S]*\}/);
         if (scoreJsonMatch) {
           const scoreResult = JSON.parse(scoreJsonMatch[0]);
-          score = Math.max(0, Math.min(100, scoreResult.score || 100));
-          
-          const deductions = scoreResult.deductions || [];
-          if (deductions.length > 0) {
-            const deductionLines = deductions.map((d: { rule: string; points: number; reason: string }) => 
-              `・${d.rule}: ${d.points}点\n  → ${d.reason}`
-            ).join('\n');
-            scoreDetails = `減点内訳:\n${deductionLines}\n\n💬 ${scoreResult.summary || ''}`;
+          if (typeof scoreResult.score === 'number' || typeof scoreResult.score === 'string') {
+            score = Math.max(0, Math.min(100, Number(scoreResult.score) || 100));
+            
+            const deductions = scoreResult.deductions || [];
+            if (deductions.length > 0) {
+              const deductionLines = deductions.map((d: { rule: string; points: number; reason: string }) => 
+                `・${d.rule}: ${d.points}点\n  → ${d.reason}`
+              ).join('\n');
+              scoreDetails = `減点内訳:\n${deductionLines}\n\n💬 ${scoreResult.summary || ''}`;
+            } else {
+              scoreDetails = scoreResult.summary || 'すべてのルールを守れました！';
+            }
+            
+            scoreStatus = 'success';
+            console.log('Score calculated:', score);
           } else {
-            scoreDetails = scoreResult.summary || 'すべてのルールを守れました！';
+            scoreStatus = 'ai_error';
+            scoreMessage = '採点処理中にエラーが発生しました';
+            console.error('Phase 3: AI response JSON missing "score" field. Raw:', scoreAIResult.text);
           }
-          
-          console.log('Score calculated:', score);
+        } else {
+          scoreStatus = 'ai_error';
+          scoreMessage = '採点処理中にエラーが発生しました';
+          console.error('Phase 3: No JSON found in AI response. Raw:', scoreAIResult.text);
         }
       } catch (scoreError) {
-        console.error('Score calculation error:', scoreError);
+        scoreStatus = 'ai_error';
+        scoreMessage = '採点処理中にエラーが発生しました';
+        console.error('Phase 3: Score calculation error:', scoreError);
       }
     }
 
@@ -1128,10 +1152,17 @@ ${formattedContent}${scoreBoundaryNote}
       questions?: TimeQuestion[];
       score?: number;
       score_details?: string;
+      score_status: string;
+      score_message?: string;
     } = {
       formatted_content: formattedContent,
       summary,
+      score_status: scoreStatus,
     };
+
+    if (scoreMessage) {
+      responseData.score_message = scoreMessage;
+    }
 
     if (score !== undefined) {
       responseData.score = score;
