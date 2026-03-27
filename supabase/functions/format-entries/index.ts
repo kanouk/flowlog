@@ -1152,10 +1152,17 @@ ${formattedContent}${scoreBoundaryNote}
       questions?: TimeQuestion[];
       score?: number;
       score_details?: string;
+      score_status: string;
+      score_message?: string;
     } = {
       formatted_content: formattedContent,
       summary,
+      score_status: scoreStatus,
     };
+
+    if (scoreMessage) {
+      responseData.score_message = scoreMessage;
+    }
 
     if (score !== undefined) {
       responseData.score = score;
