@@ -606,6 +606,19 @@ function getTimeBucket(occurredAt: string): '朝' | '昼' | '夕方' | '夜' {
   return '夜';
 }
 
+function buildPhotoMarkers(images?: string[]): string {
+  return (images || [])
+    .filter((url) => typeof url === 'string' && /^https?:\/\//.test(url))
+    .map((url) => `{{PHOTO:${url}}}`)
+    .join('\n');
+}
+
+function withPhotoMarkers(content: string, images?: string[]): string {
+  const markers = buildPhotoMarkers(images);
+  if (!markers) return content;
+  return `${content}\n\n${markers}`;
+}
+
 function buildFallbackDiary(sortedBlocks: Block[]): string {
   const sections: Record<'朝' | '昼' | '夕方' | '夜' | '思ったこと', string[]> = {
     朝: [],
@@ -617,10 +630,7 @@ function buildFallbackDiary(sortedBlocks: Block[]): string {
 
   for (const block of sortedBlocks) {
     const content = (block.content || '').trim();
-    const imageNote = block.images && block.images.length > 0
-      ? ` {{PHOTO:${block.id}:${block.images.length}}}`
-      : '';
-    const line = `${content || '写真を記録した'}${imageNote}`.trim();
+    const line = withPhotoMarkers(content || '写真を記録した', block.images);
 
     if (block.category === 'thought') {
       sections['思ったこと'].push(`- ${line}`);
