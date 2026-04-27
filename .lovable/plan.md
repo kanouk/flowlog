@@ -1,99 +1,132 @@
-# Gyazo APIキー保存失敗の修正プラン
+最新版ソースを確認したところ、別開発分として `format-entries` はすでに「今日の3行まとめ」を出力しない設計に変わっています。この変更は維持しつつ、写真マーカー仕様だけを新仕様へ変更します。
 
-## 原因見立て
+## 現状確認
 
-現在の実装では、Gyazo token を `user_image_storage_settings` テーブルへフロントエンドから直接 `upsert` しています。
+- `format-entries` はまだ旧形式 `{{PHOTO:block_id:count}}` を生成しています。
+  - 通常AI入力用: `blocksText` 内
+  - fallback formatter: 2箇所
+- 現在のAIプロンプトは旧ルールのままです。
+  - 写真マーカーを文末インラインに置く
+  - 改行して別行にしない
+- `JournalView` は旧形式のみ対応しています。
+- `/entries/:date` は `entries.formatted_content` をそのまま返しています。
+- MCP `get_entry` も `formatted_content` をそのまま返しています。
+- OpenAPI の `Entry.formatted_content` に写真マーカー展開仕様の説明はありません。
 
-ただしこのテーブルは token を含む機密テーブルとして `SELECT` を禁止しており、`upsert(..., { onConflict: 'user_id' })` は既存行との競合判定・返却処理の都合で RLS / 権限に引っかかりやすい構成です。そのため、UI側では汎用エラー「画像保存先の保存に失敗しました」が表示されます。
+## 実装方針
 
-また、現状は token 保存ロジックがクライアント側の通常テーブル操作になっており、「平文tokenをフロントへ返さない」設計は満たしていますが、保存経路としてはより安全にサーバー側関数へ寄せるのが適切です。
+1. `format-entries` の写真マーカー生成を新形式へ変更
+   - `block.images` を画像URLごとのマーカーに変換します。
+   - 例:
+     ```md
+     {{PHOTO:https://example.com/1.jpg}}
+     {{PHOTO:https://example.com/2.jpg}}
+     ```
+   - 入力ブロックに複数画像がある場合は、1枚につき1マーカーにします。
+   - 現在の「今日の3行まとめを出力しない」仕様は維持します。
 
-## 修正方針
+2. AIプロンプトを新ルールへ更新
+   - 旧ルールを削除します。
+     - `{{PHOTO:xxx:N}}`
+     - 文中に自然に配置
+     - 改行して別行にしない
+     - 文末配置
+   - 新ルールを追加します。
+     - `{{PHOTO:https://...}}` は必ずそのまま出力
+     - URLを書き換えない、省略しない
+     - 写真マーカーは独立行に置く
+     - 前後に空行を入れる
+     - 複数写真は1行に1つずつ並べる
+     - 文末インラインにしない
+   - `DIARY_OUTPUT_GUARD` にも写真マーカーの空行・独立行ルールを追加して、カスタムプロンプトがある場合でも優先されるようにします。
 
-Gyazo token の保存・解除を、フロントエンドからの直接 `upsert` ではなく Lovable Cloud の backend function 経由に変更します。
+3. 保存前の正規化を追加
+   - AI出力が多少崩れても、`normalizeDiaryMarkdown()` で `{{PHOTO:https://...}}` の前後に空行を入れるよう補正します。
+   - 旧形式マーカーも後方互換のため同様に独立行化します。
+   - 既存のコードフェンス除去、見出し正規化、まとめセクション除去は維持します。
 
-```text
-Settings UI
-  -> save-image-storage-settings backend function
-      -> 認証ユーザー確認
-      -> service権限で user_image_storage_settings を upsert
-      -> tokenはレスポンスに含めない
-  -> get_user_image_storage_settings_safe RPC で安全情報のみ再取得
-```
+4. fallback formatter を新仕様へ変更
+   - 写真ありブロックは、本文行の直後に空行を入れて画像URLごとのマーカーを出力します。
+   - 画像のみブロックは `写真を記録した` など既存相当の本文を残し、その下にマーカーを出します。
+   - 文末インライン形式は使いません。
 
-## 変更ファイル
+5. Journal 表示を新旧両対応に変更
+   - `src/components/stock/JournalView.tsx` の写真マーカー処理を更新します。
+   - 対応形式:
+     - 新形式: `{{PHOTO:https://...}}`
+     - 旧形式: `{{PHOTO:block_id:count}}`
+   - 新形式はマーカー内URLを `PhotoMarker` に渡します。
+   - 旧形式は既存通り `blocksById` から `block.images` を取得します。
+   - 複数行に複数マーカーが並んでも写真UIとして表示します。
+   - block が見つからない旧形式マーカーは、表示を壊さないよう安全にスキップまたは元テキスト保持にします。
 
-| File | Change |
-|---|---|
-| `supabase/functions/save-image-storage-settings/index.ts` | 新規追加。provider / Gyazo token 保存・解除をサーバー側で実行 |
-| `src/hooks/useImageStorageSettings.ts` | 直接 `from('user_image_storage_settings').upsert()` をやめ、backend function 呼び出しに変更 |
-| `supabase/config.toml` | 必要な場合のみ、新規 function の設定ブロックを追加 |
+6. コピー処理を新旧両対応に変更
+   - `JournalView` のコピー処理で、どちらの形式も実URLへ変換します。
+   - URLは文末に詰めず、前後に空行を入れます。
+   - 新形式はマーカー内URLをそのまま使用します。
+   - 旧形式は `blocksById` から `block.images` を展開します。
 
-## backend function の仕様
+7. REST API `/entries/:date` の返却を変更
+   - 保存値は変更せず、返却時だけ `formatted_content` を展開します。
+   - 新形式 `{{PHOTO:https://...}}` はURL文字列へ変換します。
+   - 旧形式 `{{PHOTO:block_id:count}}` は同一ユーザーの `blocks.images` を参照してURL複数行へ変換します。
+   - block 不在・画像なしの場合は元マーカーを残し、データ破壊を避けます。
+   - 展開時は前後空行を確保します。
 
-### Request
+8. MCP `get_entry` の返却を変更
+   - REST API と同じ写真マーカー展開ヘルパーを `mcp-server` 側にも実装します。
+   - `formatted_content` が外部利用者へ渡る時点では、`{{PHOTO:...}}` ではなくURLが見える状態にします。
+   - 旧形式も同一ユーザーの `blocks.images` から展開します。
 
-```json
-{
-  "provider": "default" | "gyazo",
-  "gyazo_token": "optional string",
-  "clear_gyazo_token": true | false
-}
-```
+9. OpenAPI / API docs を更新
+   - `/entries/:date` の説明に「写真マーカーはAPI返却時にURLへ展開される」ことを追記します。
+   - `Entry.formatted_content` の schema description にも、返却時は写真URL展開済みである旨を追加します。
 
-### 保存ルール
+10. 過去データ移行を追加
+   - 既存 `entries.formatted_content` の旧形式 `{{PHOTO:block_id:count}}` を、可能な範囲で新形式へ変換します。
+   - 対象:
+     - 全 `entries`
+     - `formatted_content` に旧形式マーカーが含まれるものだけ
+   - 同一 `user_id` の `blocks` を参照します。
+   - `blocks.images` がある場合のみ、画像URLごとの `{{PHOTO:url}}` に置換します。
+   - block 不在・画像なしの場合は元マーカーを残します。
+   - 更新前に dry-run 相当の件数確認を行い、更新後に何件更新したかログ確認します。
 
-- 未ログインなら `401`
-- `provider` が `default` / `gyazo` 以外なら `400`
-- `provider = "gyazo"` かつ既存tokenも新規tokenもない場合は `422`
-- `provider = "gyazo"` で token 入力ありなら保存
-- `provider = "gyazo"` で token 入力なし、既存tokenありなら token は保持したまま provider だけ保存
-- `provider = "default"` の場合は provider を default に戻す
-- 「解除」操作では `clear_gyazo_token: true` として token も削除
-- レスポンスには token 本体を一切含めない
+## 技術詳細
 
-### Response
+- 新形式検出:
+  ```ts
+  /\{\{PHOTO:(https?:\/\/[^}\s]+)\}\}/g
+  ```
+- 旧形式検出:
+  ```ts
+  /\{\{PHOTO:([a-zA-Z0-9-]+):(\d+)\}\}/g
+  ```
+- URL展開時の基本形:
+  ```md
 
-```json
-{
-  "success": true
-}
-```
+  https://example.com/image.jpg
 
-エラー時も token や内部詳細は返さず、詳細はサーバーログに残します。
+  ```
+- 保存用マーカー整形の基本形:
+  ```md
 
-## フロントエンド修正
+  {{PHOTO:https://example.com/image.jpg}}
 
-`useImageStorageSettings.ts` の以下を変更します。
+  ```
+- API/MCP では backend 側で `blocks` を `user_id` 条件付きで取得し、他ユーザーの画像を解決しないようにします。
+- DBスキーマ変更は不要です。
+- 既存の `blocks.images` URL配列、既存画像表示方式、Gyazo/デフォルト保存方式には触れません。
+- 最新版で入っている「まとめセクションを出力しない」仕様は維持します。
 
-- `saveSettings()`
-  - 現在の `supabase.from('user_image_storage_settings').upsert(...)` を削除
-  - `supabase.functions.invoke('save-image-storage-settings', { body: ... })` に変更
-  - 成功後は既存どおり `get_user_image_storage_settings_safe()` で再取得
+## 確認項目
 
-- `resetToDefault()`
-  - 同じ backend function を呼び、`provider: 'default'`, `clear_gyazo_token: true` を送る
-
-UI文言は維持します。
-
-- 「デフォルト」表示のまま
-- 「Supabase Storage」という文言は出さない
-- Gyazo token は入力時のみ送信し、再表示しない
-
-## DB変更
-
-新しいテーブル・カラムは追加しません。
-既存の `user_image_storage_settings` と `get_user_image_storage_settings_safe()` をそのまま使います。
-
-必要に応じて migration は追加せず、Edge Function / フロントエンド修正のみで対応します。
-
-## 動作確認観点
-
-1. Gyazo を選択し token を入力して保存できる
-2. 保存後、設定取得結果が `provider: "gyazo"`, `has_gyazo_token: true` になる
-3. UIには token 本体ではなく `****xxxx` のようなヒントだけが表示される
-4. token 入力なしで Gyazo を再保存しても既存tokenが消えない
-5. 「解除」で provider が「デフォルト」に戻り、Gyazo token が削除される
-6. Gyazo 選択後の新規画像アップロードが `https://i.gyazo.com/...` の直URLを `blocks.images` に保存する
-7. 既存のデフォルト保存画像URLは引き続き表示・削除できる
-8. エラー時に token や内部詳細がレスポンス・UIに露出しない
+- 新規日記生成で `{{PHOTO:https://...}}` が保存される
+- 写真マーカーが文末インラインではなく独立行になる
+- `/entries/:date` で新形式マーカーがURL文字列に展開される
+- `/entries/:date` で旧形式マーカーもURLに展開される
+- MCP `get_entry` でも展開済み本文が返る
+- Journal 表示で新旧両方のマーカーが写真UIとして表示される
+- コピー時に新旧両方のマーカーがURLに変換され、前後空行が入る
+- 過去データ移行で既存 `formatted_content` が可能な範囲で新形式へ変換される
+- 画像なしブロックや存在しない `block_id` で壊れない

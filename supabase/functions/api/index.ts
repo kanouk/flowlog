@@ -301,6 +301,35 @@ async function searchBlocksHelper(
   return data;
 }
 
+async function expandPhotoMarkersForContent(userId: string, content: string | null): Promise<string | null> {
+  if (!content) return content;
+
+  const legacyIds = Array.from(content.matchAll(/\{\{PHOTO:([a-zA-Z0-9-]+):(\d+)\}\}/g)).map((match) => match[1]);
+  const blocksById = new Map<string, { images?: string[] }>();
+
+  if (legacyIds.length > 0) {
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const { data, error } = await supabase
+      .from("blocks")
+      .select("id, images")
+      .eq("user_id", userId)
+      .in("id", [...new Set(legacyIds)]);
+
+    if (!error && data) {
+      data.forEach((block: any) => blocksById.set(block.id, { images: block.images || [] }));
+    }
+  }
+
+  return content
+    .replace(/\{\{PHOTO:(https?:\/\/[^}\s]+)\}\}/g, (_match, url) => `\n\n${url}\n\n`)
+    .replace(/\{\{PHOTO:([a-zA-Z0-9-]+):(\d+)\}\}/g, (match, blockId) => {
+      const images = blocksById.get(blockId)?.images || [];
+      return images.length > 0 ? `\n\n${images.join('\n')}\n\n` : match;
+    })
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 // ===== ルートハンドラー =====
 
 // ヘルスチェック
@@ -400,7 +429,7 @@ app.get("/docs", (c) => {
       },
       {
         method: "GET", path: "/entries/:date",
-        description: "指定日のエントリーを取得",
+        description: "指定日のエントリーを取得。formatted_content 内の写真マーカーはURL文字列へ展開されます。",
         params: { date: "string (YYYY-MM-DD)" },
       },
       {
@@ -469,7 +498,7 @@ app.get("/openapi.json", (c) => {
             user_id: { type: "string", format: "uuid" },
             date: { type: "string", format: "date" },
             summary: { type: "string", nullable: true },
-            formatted_content: { type: "string", nullable: true },
+            formatted_content: { type: "string", nullable: true, description: "AI整形済み本文。写真マーカーはAPI返却時に実URL文字列へ展開されます。" },
             score: { type: "integer", nullable: true },
             score_details: { type: "string", nullable: true },
             created_at: { type: "string", format: "date-time" },
@@ -681,6 +710,7 @@ app.get("/openapi.json", (c) => {
       "/entries/{date}": {
         get: {
           summary: "指定日のエントリーを取得",
+          description: "formatted_content 内の写真マーカーはAPI返却時に実URL文字列へ展開されます。",
           parameters: [{ name: "date", in: "path", required: true, schema: { type: "string", format: "date" }, description: "YYYY-MM-DD" }],
           responses: {
             "200": { description: "OK", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean" }, data: { $ref: "#/components/schemas/Entry" } } } } } },
@@ -1077,8 +1107,10 @@ async function getEntryHandler(c: any) {
     if (!data) {
       return c.json({ success: true, data: null, message: "エントリーが見つかりません" });
     }
+
+    const formattedContent = await expandPhotoMarkersForContent(userId, data.formatted_content);
     
-    return c.json({ success: true, data });
+    return c.json({ success: true, data: { ...data, formatted_content: formattedContent } });
   } catch (error: any) {
     return c.json({ success: false, error: error.message }, 500);
   }
