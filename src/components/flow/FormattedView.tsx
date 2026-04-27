@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Entry, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { parseTimestamp, formatTimeWithDayBoundary } from '@/lib/dateUtils';
 import { useDayBoundary } from '@/contexts/DayBoundaryContext';
@@ -6,6 +6,7 @@ import { CATEGORY_CONFIG, BlockCategory } from '@/lib/categoryUtils';
 import { BookOpen, ListTodo, Bookmark } from 'lucide-react';
 import { TaskCheckbox } from '@/components/ui/task-checkbox';
 import { parseDiarySections } from '@/lib/diaryParser';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 
 interface FormattedViewProps {
   entry: Entry | null;
@@ -14,6 +15,81 @@ interface FormattedViewProps {
 }
 
 type StockViewMode = 'journal' | 'tasks' | 'readLater';
+
+const PHOTO_MARKER_PATTERN = /\{\{PHOTO:(https?:\/\/[^}\s]+|[a-zA-Z0-9-]+:\d+)\}\}/g;
+
+function resolvePhotoMarker(value: string, blocksById: Map<string, Block>): string[] | null {
+  if (/^https?:\/\//.test(value)) return [value];
+  const legacyMatch = value.match(/^([a-zA-Z0-9-]+):(\d+)$/);
+  if (!legacyMatch) return null;
+  const block = blocksById.get(legacyMatch[1]);
+  return block?.images && block.images.length > 0 ? block.images : null;
+}
+
+function normalizePhotoMarkerPunctuation(text: string): string {
+  const marker = String.raw`\{\{PHOTO:(?:https?:\/\/[^}\s]+|[a-zA-Z0-9-]+:\d+)\}\}`;
+  const markerGroup = String.raw`((?:${marker}\n\n)+)`;
+  return text.replace(new RegExp(`([^\\n])\\n\\n${markerGroup}([。！？!?])(?=\\s|$)`, 'g'), '$1$3\n\n$2');
+}
+
+function PhotoMarker({ images }: { images: string[] }) {
+  if (!images.length) return null;
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button
+          className={`my-3 inline-grid max-w-full gap-2 rounded-lg bg-transparent p-0.5 transition-opacity hover:opacity-95 ${
+            images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'
+          }`}
+          aria-label="写真を拡大表示"
+        >
+          {images.map((url, i) => (
+            <span key={url} className="block overflow-hidden rounded-lg bg-background ring-1 ring-border/60">
+              <img
+                src={url}
+                alt={`写真 ${i + 1}`}
+                className={images.length === 1 ? 'max-h-80 w-full max-w-md object-cover' : 'h-32 w-32 object-cover sm:h-40 sm:w-40'}
+              />
+            </span>
+          ))}
+        </button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl p-4">
+        <div className={`grid gap-2 ${images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+          {images.map((url, i) => (
+            <img key={url} src={url} alt={`写真 ${i + 1}`} className="w-full rounded-lg object-contain max-h-[70vh]" />
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function renderContentWithPhotoMarkers(text: string, blocksById: Map<string, Block>) {
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+
+  PHOTO_MARKER_PATTERN.lastIndex = 0;
+  while ((match = PHOTO_MARKER_PATTERN.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(<span key={`text-${lastIndex}`}>{text.substring(lastIndex, match.index)}</span>);
+    }
+
+    const images = resolvePhotoMarker(match[1], blocksById);
+    if (images?.length) {
+      parts.push(<PhotoMarker key={`photo-${match.index}`} images={images} />);
+    }
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(<span key="text-end">{text.substring(lastIndex)}</span>);
+  }
+
+  return parts.length ? parts : text;
+}
 
 export function FormattedView({ entry, blocks, onUpdate }: FormattedViewProps) {
   const { dayBoundaryHour } = useDayBoundary();
@@ -54,8 +130,14 @@ export function FormattedView({ entry, blocks, onUpdate }: FormattedViewProps) {
 
   // AI整形版のセクション分割
   const sections = useMemo(() => {
-    return parseDiarySections(entry?.formatted_content || '');
+    return parseDiarySections(normalizePhotoMarkerPunctuation(entry?.formatted_content || ''));
   }, [entry?.formatted_content]);
+
+  const blocksById = useMemo(() => {
+    const map = new Map<string, Block>();
+    blocks.forEach((block) => map.set(block.id, block));
+    return map;
+  }, [blocks]);
 
   const handleTaskToggle = (block: Block) => {
     if (!onUpdate || block.category !== 'task') return;
@@ -209,11 +291,19 @@ export function FormattedView({ entry, blocks, onUpdate }: FormattedViewProps) {
                 {section.title}
               </h4>
               <div className="prose prose-sm max-w-none text-foreground/90">
-                {section.body.split('\n').map((line, i) => (
-                  <p key={i} className="mb-2 last:mb-0 leading-relaxed">
-                    {line.replace(/^[-*]\s*/, '• ')}
-                  </p>
-                ))}
+                {section.body.split('\n').map((line, i) => {
+                  const processedLine = line.replace(/^[-*]\s*/, '• ');
+                  const hasPhotoMarker = PHOTO_MARKER_PATTERN.test(processedLine);
+                  PHOTO_MARKER_PATTERN.lastIndex = 0;
+
+                  return (
+                    <p key={i} className="mb-2 last:mb-0 leading-relaxed">
+                      {hasPhotoMarker
+                        ? renderContentWithPhotoMarkers(processedLine, blocksById)
+                        : processedLine}
+                    </p>
+                  );
+                })}
               </div>
             </div>
           ))}

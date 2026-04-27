@@ -619,6 +619,12 @@ function withPhotoMarkers(content: string, images?: string[]): string {
   return `${content}\n\n${markers}`;
 }
 
+function normalizePhotoMarkerPunctuation(text: string): string {
+  const marker = String.raw`\{\{PHOTO:(?:https?:\/\/[^}\s]+|[a-zA-Z0-9-]+:\d+)\}\}`;
+  const markerGroup = String.raw`((?:${marker}\n\n)+)`;
+  return text.replace(new RegExp(`([^\\n])\\n\\n${markerGroup}([。！？!?])(?=\\s|$)`, 'g'), '$1$3\n\n$2');
+}
+
 function buildFallbackDiary(sortedBlocks: Block[]): string {
   const sections: Record<'朝' | '昼' | '夕方' | '夜' | '思ったこと', string[]> = {
     朝: [],
@@ -916,6 +922,7 @@ ${blocksText}`;
       text = text.replace(/^##\s*(?:今日の3行まとめ|3行まとめ|まとめ|要約)\s*\n[\s\S]*?(?=^## |\s*$)/gm, '');
       // Keep photo markers as standalone lines with blank lines around them.
       text = text.replace(/\s*(\{\{PHOTO:(?:https?:\/\/[^}\s]+|[a-zA-Z0-9-]+:\d+)\}\})\s*/g, '\n\n$1\n\n');
+      text = normalizePhotoMarkerPunctuation(text);
       // Normalize consecutive blank lines
       text = text.replace(/\n{3,}/g, '\n\n');
       return text.trim();

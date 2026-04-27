@@ -36,7 +36,13 @@ function formatPhotoUrlsForText(urls: string[]): string {
   return `\n\n${urls.join('\n')}\n\n`;
 }
 
-// PhotoMarker component - displays camera icon that opens photo dialog
+function normalizePhotoMarkerPunctuation(text: string): string {
+  const marker = String.raw`\{\{PHOTO:(?:https?:\/\/[^}\s]+|[a-zA-Z0-9-]+:\d+)\}\}`;
+  const markerGroup = String.raw`((?:${marker}\n\n)+)`;
+  return text.replace(new RegExp(`([^\\n])\\n\\n${markerGroup}([。！？!?])(?=\\s|$)`, 'g'), '$1$3\n\n$2');
+}
+
+// PhotoMarker component - displays image thumbnails that open a photo dialog
 interface PhotoMarkerProps {
   images: string[];
 }
@@ -48,13 +54,31 @@ function PhotoMarker({ images }: PhotoMarkerProps) {
     <Dialog>
       <DialogTrigger asChild>
         <button 
-          className="inline-flex items-center gap-0.5 mx-1 px-1.5 py-0.5 rounded-md bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-colors cursor-pointer align-middle"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Camera className="h-3.5 w-3.5" />
-          {images.length > 1 && (
-            <span className="text-xs font-medium">{images.length}</span>
+          className={cn(
+            "my-3 inline-grid max-w-full gap-2 rounded-lg bg-transparent p-0.5 transition-opacity hover:opacity-95",
+            images.length === 1 ? "grid-cols-1" : "grid-cols-2"
           )}
+          onClick={(e) => e.stopPropagation()}
+          aria-label="写真を拡大表示"
+        >
+          {images.map((url, i) => (
+            <span key={url} className="relative block overflow-hidden rounded-lg bg-background ring-1 ring-border/60">
+              <img
+                src={url}
+                alt={`写真 ${i + 1}`}
+                className={cn(
+                  "object-cover",
+                  images.length === 1 ? "max-h-80 w-full max-w-md" : "h-32 w-32 sm:h-40 sm:w-40"
+                )}
+              />
+              {images.length > 1 && i === 0 && (
+                <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-background/90 px-2 py-0.5 text-xs font-medium text-foreground shadow-sm">
+                  <Camera className="h-3 w-3" />
+                  {images.length}
+                </span>
+              )}
+            </span>
+          ))}
         </button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl p-4">
@@ -197,7 +221,7 @@ export function JournalView({ entries, selectedDate, onDateSelect, blocks: exter
 
   // AI formatted content sections
   const sections = useMemo(() => {
-    return parseDiarySections(entry?.formatted_content || '');
+    return parseDiarySections(normalizePhotoMarkerPunctuation(entry?.formatted_content || ''));
   }, [entry?.formatted_content]);
 
   const formattedDate = format(new Date(selectedDate), 'M月d日（E）', { locale: ja });
@@ -234,7 +258,7 @@ export function JournalView({ entries, selectedDate, onDateSelect, blocks: exter
   // Helper function to replace photo markers with URLs for clipboard copy
   const processContentForClipboard = useCallback((content: string): string => {
     PHOTO_MARKER_PATTERN.lastIndex = 0;
-    return content
+    return normalizePhotoMarkerPunctuation(content)
       .replace(PHOTO_MARKER_PATTERN, (match, markerValue) => {
         const urls = resolvePhotoMarker(markerValue, blocksById);
         return urls && urls.length > 0 ? formatPhotoUrlsForText(urls) : match;
