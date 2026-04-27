@@ -234,13 +234,13 @@ export function JournalView({ entries, selectedDate, onDateSelect, blocks: exter
   // Helper function to replace photo markers with URLs for clipboard copy
   const processContentForClipboard = useCallback((content: string): string => {
     PHOTO_MARKER_PATTERN.lastIndex = 0;
-    return content.replace(PHOTO_MARKER_PATTERN, (match, blockId) => {
-      const block = blocksById.get(blockId);
-      if (block?.images && block.images.length > 0) {
-        return block.images.join('\n');
-      }
-      return '';
-    });
+    return content
+      .replace(PHOTO_MARKER_PATTERN, (match, markerValue) => {
+        const urls = resolvePhotoMarker(markerValue, blocksById);
+        return urls && urls.length > 0 ? formatPhotoUrlsForText(urls) : match;
+      })
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }, [blocksById]);
 
   // Copy to clipboard
