@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.raindrop-sync]
 verify_jwt = true
+
+[functions.gyazo-upload]
+verify_jwt = true
+
+[functions.gyazo-delete]
+verify_jwt = true
