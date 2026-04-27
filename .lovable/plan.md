@@ -1,198 +1,99 @@
-# 画像保存先設定: デフォルト / Gyazo 対応プラン
+# Gyazo APIキー保存失敗の修正プラン
 
-## 目的
+## 原因見立て
 
-- 既存の画像URL保存構造（`blocks.images: string[] / TEXT[]`）は維持する
-- 既存の「デフォルト」保存方式はそのまま残す
-- 新規アップロード時だけ、ユーザー設定に応じて「デフォルト」または「Gyazo」を使い分ける
-- Gyazo API token はフロントエンドへ平文で返さない
-- 既存画像は移行せず、デフォルト画像と Gyazo 画像が混在しても表示・編集できるようにする
+現在の実装では、Gyazo token を `user_image_storage_settings` テーブルへフロントエンドから直接 `upsert` しています。
 
-## 変更ファイル一覧
+ただしこのテーブルは token を含む機密テーブルとして `SELECT` を禁止しており、`upsert(..., { onConflict: 'user_id' })` は既存行との競合判定・返却処理の都合で RLS / 権限に引っかかりやすい構成です。そのため、UI側では汎用エラー「画像保存先の保存に失敗しました」が表示されます。
 
-| 種別 | File | 変更内容 |
-|---|---|---|
-| DB | `supabase/migrations/...sql` | `user_image_storage_settings` 作成、RLS、安全な取得RPC追加 |
-| Edge Function | `supabase/functions/gyazo-upload/index.ts` | Gyazo アップロード用 Function 追加 |
-| Edge Function | `supabase/functions/gyazo-delete/index.ts` | Gyazo 削除用 Function 追加 |
-| Config | `supabase/config.toml` | 新規 Function の認証設定を追加 |
-| Hook | `src/hooks/useImageStorageSettings.ts` | 画像保存先設定の取得・保存・解除 Hook 追加 |
-| Hook | `src/hooks/useImageUpload.ts` | 保存先設定に応じたアップロード/削除分岐を追加 |
-| UI | `src/components/settings/ImageStorageSettingsSection.tsx` | 「画像保存先」設定UI追加 |
-| UI | `src/pages/Settings.tsx` | 設定メニューに「画像保存先」を追加 |
+また、現状は token 保存ロジックがクライアント側の通常テーブル操作になっており、「平文tokenをフロントへ返さない」設計は満たしていますが、保存経路としてはより安全にサーバー側関数へ寄せるのが適切です。
 
-既存の表示コンポーネントは原則変更しません。`<img src={url}>` のURL表示方式を維持します。
+## 修正方針
 
-## DB設計
-
-### 新規テーブル
-
-`user_image_storage_settings`
-
-| column | type | 方針 |
-|---|---|---|
-| `id` | uuid | PK |
-| `user_id` | uuid | 認証ユーザーID。`auth.users` へのFKは張らない |
-| `provider` | text | `default` または `gyazo` |
-| `gyazo_token` | text nullable | Gyazo token を保存。フロントへSELECTさせない |
-| `created_at` / `updated_at` | timestamptz | 監査用 |
-
-### RLS
-
-- RLS を有効化
-- `INSERT` / `UPDATE` / `DELETE` は `auth.uid() = user_id`
-- `SELECT` ポリシーは作らない、または平文tokenを返さない設計を優先
-- フロントからの表示用には safe RPC を使う
-
-### Safe RPC
-
-`get_user_image_storage_settings_safe()` を追加します。
-
-返却値:
-
-```ts
-{
-  provider: 'default' | 'gyazo',
-  has_gyazo_token: boolean,
-  gyazo_token_hint: string | null
-}
-```
-
-- `gyazo_token` 平文は返さない
-- 設定行がない場合は `provider = 'default'`, `has_gyazo_token = false` 相当として扱う
-- token hint は AI APIキー管理と同様に末尾数文字のみ（例: `****abcd`）
-
-## 設定UI
-
-設定画面に「画像保存先」セクションを追加します。
-
-### 表示文言
-
-- 保存先ラベル:
-  - `デフォルト`
-  - `Gyazo`
-- UI上に `Supabase Storage` という文言は出しません
-
-### 挙動
-
-- `デフォルト` 選択時:
-  - Gyazo token 入力欄は非表示
-  - 保存すると以後の新規アップロードは現行方式
-- `Gyazo` 選択時:
-  - Gyazo API token 入力欄を表示
-  - token 登録済みなら `****xxxx` のようなヒントを表示
-  - 平文tokenは再表示しない
-  - tokenを空のまま provider だけ Gyazo にすることは避け、保存時に分かりやすくエラー表示
-- token の更新:
-  - 新しい token 入力時だけ上書き
-- Gyazo解除:
-  - token を削除し、保存先を `デフォルト` に戻す操作を用意
-
-## Gyazoアップロード Edge Function
-
-`gyazo-upload`
-
-### 処理
-
-1. `Authorization` ヘッダーでログインユーザーを検証
-2. `multipart/form-data` から画像ファイルを取得
-3. サーバー側で `user_image_storage_settings` から該当ユーザーの `gyazo_token` を取得
-4. token 未設定なら 400/422 系で分かりやすいエラーを返す
-5. Gyazo API へ送信
+Gyazo token の保存・解除を、フロントエンドからの直接 `upsert` ではなく Lovable Cloud の backend function 経由に変更します。
 
 ```text
-POST https://upload.gyazo.com/api/upload
-Authorization: Bearer <user gyazo token>
-form-data:
-  imagedata: <file>
-  access_policy: anyone
+Settings UI
+  -> save-image-storage-settings backend function
+      -> 認証ユーザー確認
+      -> service権限で user_image_storage_settings を upsert
+      -> tokenはレスポンスに含めない
+  -> get_user_image_storage_settings_safe RPC で安全情報のみ再取得
 ```
 
-6. Gyazo レスポンスの `url` を返す
-   - 保存対象は `permalink_url` ではなく画像直URL `url`
-   - 例: `https://i.gyazo.com/xxxx.png`
+## 変更ファイル
 
-### レスポンス例
+| File | Change |
+|---|---|
+| `supabase/functions/save-image-storage-settings/index.ts` | 新規追加。provider / Gyazo token 保存・解除をサーバー側で実行 |
+| `src/hooks/useImageStorageSettings.ts` | 直接 `from('user_image_storage_settings').upsert()` をやめ、backend function 呼び出しに変更 |
+| `supabase/config.toml` | 必要な場合のみ、新規 function の設定ブロックを追加 |
+
+## backend function の仕様
+
+### Request
 
 ```json
 {
-  "url": "https://i.gyazo.com/xxxx.png"
+  "provider": "default" | "gyazo",
+  "gyazo_token": "optional string",
+  "clear_gyazo_token": true | false
 }
 ```
 
-## Gyazo削除 Edge Function
+### 保存ルール
 
-`gyazo-delete`
+- 未ログインなら `401`
+- `provider` が `default` / `gyazo` 以外なら `400`
+- `provider = "gyazo"` かつ既存tokenも新規tokenもない場合は `422`
+- `provider = "gyazo"` で token 入力ありなら保存
+- `provider = "gyazo"` で token 入力なし、既存tokenありなら token は保持したまま provider だけ保存
+- `provider = "default"` の場合は provider を default に戻す
+- 「解除」操作では `clear_gyazo_token: true` として token も削除
+- レスポンスには token 本体を一切含めない
 
-### 処理
+### Response
 
-1. ログインユーザーを検証
-2. body で `url` または `image_id` を受け取る
-3. `https://i.gyazo.com/<image_id>.<ext>` から `image_id` を抽出
-4. サーバー側でユーザーの Gyazo token を取得
-5. Gyazo削除APIを呼ぶ
-6. 成否を返す
-
-削除に失敗しても、既存挙動に近づけるため、フロント側では編集保存自体を不必要に失敗させません。エラーはログと軽い通知に留めます。
-
-## `useImageUpload.ts` の変更
-
-### アップロード分岐
-
-```text
-provider = default
-  -> 現行のデフォルトアップロード処理をそのまま使用
-
-provider = gyazo
-  -> gyazo-upload Function に multipart/form-data で送信
-  -> 返却された Gyazo の画像直URLを blocks.images に保存
+```json
+{
+  "success": true
+}
 ```
 
-### Gyazo token 未設定時
+エラー時も token や内部詳細は返さず、詳細はサーバーログに残します。
 
-- provider が `gyazo` かつ `has_gyazo_token = false` の場合、アップロード前に toast で案内
-- 画像アップロードは実行しない
+## フロントエンド修正
 
-### 削除分岐
+`useImageStorageSettings.ts` の以下を変更します。
 
-```text
-URL が既存の block-images のデフォルトURL
-  -> 現行の remove 処理
+- `saveSettings()`
+  - 現在の `supabase.from('user_image_storage_settings').upsert(...)` を削除
+  - `supabase.functions.invoke('save-image-storage-settings', { body: ... })` に変更
+  - 成功後は既存どおり `get_user_image_storage_settings_safe()` で再取得
 
-URL が https://i.gyazo.com/... 
-  -> gyazo-delete Function 経由で削除
+- `resetToDefault()`
+  - 同じ backend function を呼び、`provider: 'default'`, `clear_gyazo_token: true` を送る
 
-それ以外のURL
-  -> 外部URLとして扱い、削除APIは呼ばない
-```
+UI文言は維持します。
 
-これにより、既存画像と Gyazo 画像が混在しても編集時の削除処理が破綻しないようにします。
+- 「デフォルト」表示のまま
+- 「Supabase Storage」という文言は出さない
+- Gyazo token は入力時のみ送信し、再表示しない
 
-## OCR連携
+## DB変更
 
-- `ocr-image` の入力形式は変更しません
-- 画像URL配列を今までどおり渡します
-- Gyazo は画像直URL `https://i.gyazo.com/...` を保存するため、既存のURLベースOCR呼び出しと互換性を保ちます
+新しいテーブル・カラムは追加しません。
+既存の `user_image_storage_settings` と `get_user_image_storage_settings_safe()` をそのまま使います。
 
-## セキュリティ方針
-
-- Gyazo token は Vite 環境変数やクライアントコードに置かない
-- Gyazo token の平文SELECTはフロントからできない設計にする
-- フロントが受け取るのは `provider`, `has_gyazo_token`, `gyazo_token_hint` のみ
-- Gyazo API 呼び出しは必ず認証済み Edge Function 経由
-- Edge Function 側でも `auth.getUser()` でユーザーを検証し、他ユーザーの token を参照しない
+必要に応じて migration は追加せず、Edge Function / フロントエンド修正のみで対応します。
 
 ## 動作確認観点
 
-1. 既存設定なしのユーザーは保存先が `デフォルト` として動作する
-2. `デフォルト` 選択時、現行のアップロード/削除が壊れていない
-3. `Gyazo` 選択時のみ token 入力欄が表示される
-4. Gyazo token 登録後、画面には平文ではなく末尾ヒントのみ表示される
-5. Gyazo選択 + token未設定では、アップロード前に分かりやすいエラーが出る
-6. Gyazo選択 + token設定済みで、新規画像が `https://i.gyazo.com/...` として `blocks.images` に保存される
-7. 既存のデフォルト画像URLは移行なしで引き続き表示できる
-8. デフォルト画像と Gyazo画像が同じブロック内に混在しても表示できる
-9. 編集でデフォルト画像を削除すると現行 storage remove が呼ばれる
-10. 編集で Gyazo画像を削除すると Gyazo削除Functionが呼ばれる
-11. Gyazo削除失敗時も、ブロック編集保存が不必要に失敗しない
-12. OCRに Gyazo画像直URLを渡しても既存フローが壊れない
+1. Gyazo を選択し token を入力して保存できる
+2. 保存後、設定取得結果が `provider: "gyazo"`, `has_gyazo_token: true` になる
+3. UIには token 本体ではなく `****xxxx` のようなヒントだけが表示される
+4. token 入力なしで Gyazo を再保存しても既存tokenが消えない
+5. 「解除」で provider が「デフォルト」に戻り、Gyazo token が削除される
+6. Gyazo 選択後の新規画像アップロードが `https://i.gyazo.com/...` の直URLを `blocks.images` に保存する
+7. 既存のデフォルト保存画像URLは引き続き表示・削除できる
+8. エラー時に token や内部詳細がレスポンス・UIに露出しない
