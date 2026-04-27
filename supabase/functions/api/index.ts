@@ -429,7 +429,7 @@ app.get("/docs", (c) => {
       },
       {
         method: "GET", path: "/entries/:date",
-        description: "指定日のエントリーを取得",
+        description: "指定日のエントリーを取得。formatted_content 内の写真マーカーはURL文字列へ展開されます。",
         params: { date: "string (YYYY-MM-DD)" },
       },
       {
