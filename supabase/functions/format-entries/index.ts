@@ -816,11 +816,12 @@ JSON形式で回答してください。`;
           deadlineNote = `[期限: ${formatInTimeZone(dueDate, TIMEZONE, 'M/d HH:mm')}]`;
         }
       }
-      const imageNote = block.images && block.images.length > 0 
-        ? ` {{PHOTO:${block.id}:${block.images.length}}}` 
-        : '';
+      const imageNote = buildPhotoMarkers(block.images);
       const content = block.content || '';
-      return `[${time}] ${categoryLabel}${doneNote}${deadlineNote}${imageNote} ${content}`.trim();
+      const header = `[${time}] ${categoryLabel}${doneNote}${deadlineNote}`.trim();
+      return imageNote
+        ? `${header} ${content || '(画像のみ)'}\n\n${imageNote}`.trim()
+        : `${header} ${content}`.trim();
     }).join('\n');
 
     const nightEndDisplay = dbh > 0 ? `${String(dbh - 1).padStart(2, '0')}:59（翌${String(dbh).padStart(2, '0')}:00が翌日の始まり）` : '4:59';
@@ -858,14 +859,14 @@ JSON形式で回答してください。`;
    - 19:00-22:00 → 「夜」「夜に」
    - 22:00-1:00 → 「深夜」「夜遅く」
 11. 具体的な時刻は避け、流れが自然になる表現を使う（例：「その後」「しばらくして」「〜の後」）
-12. 写真マーカー {{PHOTO:xxx:N}} は必ずそのまま出力に含めること。形式を変えないこと
-    - 例: {{PHOTO:abc123:2}} → そのまま {{PHOTO:abc123:2}} として出力
+12. 写真マーカー {{PHOTO:https://...}} は必ずそのまま出力に含めること。URLを書き換えたり、省略したりしないこと
+    - 例: {{PHOTO:https://example.com/photo.jpg}} → そのまま {{PHOTO:https://example.com/photo.jpg}} として出力
     - 「(📷)」「（写真あり）」などに置き換えないこと
-13. 写真マーカーは文章の中に自然に配置すること（改行して別の行にしない）
-    - 良い例: 「ラーメン屋でラーメンを食べた {{PHOTO:abc123:1}}」
-    - 良い例: 「いろいろな風景を見た {{PHOTO:def456:3}}」
-    - 悪い例: 「ラーメンを食べた\n{{PHOTO:abc123:1}}」（別の行に配置）
-    - 写真マーカーはその出来事を説明する文の末尾に配置すること${dayBoundaryDiaryNote}
+13. 写真マーカーは必ず独立行に置き、前後に空行を入れること
+    - 複数写真は1行に1つずつ並べること
+    - 文末にインラインで付けないこと
+    - 良い例: 「ラーメンを食べた\n\n{{PHOTO:https://example.com/ramen.jpg}}\n\nおいしかった」
+    - 悪い例: 「ラーメンを食べた {{PHOTO:https://example.com/ramen.jpg}}」${dayBoundaryDiaryNote}
 
 出力はMarkdown形式で返してください。`;
 
@@ -875,6 +876,9 @@ JSON形式で回答してください。`;
 - セクション見出しは必ず "## " で始める
 - "## 今日の3行まとめ" セクションを出力しない
 - 3行まとめ、要約、まとめだけのセクションを出力しない
+- 写真マーカー {{PHOTO:https://...}} はURLを変えずに必ず残す
+- 写真マーカーは独立行に置き、前後に空行を入れる
+- 複数写真は1行に1つずつ並べ、文末インラインにしない
 - 前置き・注釈・後書き（例:「以下が日記です」）を出力しない
 - 本文は見出し配下にのみ書く
 `;
