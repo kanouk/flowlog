@@ -1107,8 +1107,10 @@ async function getEntryHandler(c: any) {
     if (!data) {
       return c.json({ success: true, data: null, message: "エントリーが見つかりません" });
     }
+
+    const formattedContent = await expandPhotoMarkersForContent(userId, data.formatted_content);
     
-    return c.json({ success: true, data });
+    return c.json({ success: true, data: { ...data, formatted_content: formattedContent } });
   } catch (error: any) {
     return c.json({ success: false, error: error.message }, 500);
   }
