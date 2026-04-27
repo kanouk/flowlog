@@ -1098,7 +1098,7 @@ async function executeTool(userId: string, toolName: string, args: Record<string
       return {
         date: entry.date,
         summary: entry.summary,
-        formatted_content: entry.formatted_content,
+        formatted_content: await expandPhotoMarkersForContent(userId, entry.formatted_content),
         score: entry.score,
         score_details: entry.score_details,
       };
