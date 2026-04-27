@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { TablesInsert } from '@/integrations/supabase/types';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 
@@ -11,8 +10,6 @@ export interface ImageStorageSettingsSafe {
   has_gyazo_token: boolean;
   gyazo_token_hint: string | null;
 }
-
-type ImageStorageSettingsInsert = TablesInsert<'user_image_storage_settings'>;
 
 const DEFAULT_SETTINGS: ImageStorageSettingsSafe = {
   provider: 'default',
@@ -65,16 +62,11 @@ export function useImageStorageSettings() {
 
     setSaving(true);
     try {
-      const payload: ImageStorageSettingsInsert = {
-        user_id: user.id,
+      const { error } = await supabase.functions.invoke('save-image-storage-settings', {
+        body: {
         provider,
-      };
-      if (gyazoToken?.trim()) {
-        payload.gyazo_token = gyazoToken.trim();
-      }
-
-      const { error } = await supabase.from('user_image_storage_settings').upsert(payload, {
-        onConflict: 'user_id',
+          gyazo_token: gyazoToken?.trim() || undefined,
+        },
       });
       if (error) throw error;
 
@@ -94,13 +86,11 @@ export function useImageStorageSettings() {
     if (!user) return false;
     setSaving(true);
     try {
-      const payload: ImageStorageSettingsInsert = {
-        user_id: user.id,
-        provider: 'default',
-        gyazo_token: null,
-      };
-      const { error } = await supabase.from('user_image_storage_settings').upsert(payload, {
-        onConflict: 'user_id',
+      const { error } = await supabase.functions.invoke('save-image-storage-settings', {
+        body: {
+          provider: 'default',
+          clear_gyazo_token: true,
+        },
       });
       if (error) throw error;
       await fetchSettings();
