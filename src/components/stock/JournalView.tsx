@@ -21,8 +21,20 @@ interface JournalViewProps {
   blocks?: Block[]; // blocks for photo display
 }
 
-// Structured photo marker pattern: {{PHOTO:block_id:count}}
-const PHOTO_MARKER_PATTERN = /\{\{PHOTO:([a-zA-Z0-9-]+):(\d+)\}\}/g;
+// Structured photo marker patterns: {{PHOTO:https://...}} and legacy {{PHOTO:block_id:count}}
+const PHOTO_MARKER_PATTERN = /\{\{PHOTO:(https?:\/\/[^}\s]+|[a-zA-Z0-9-]+:\d+)\}\}/g;
+
+function resolvePhotoMarker(value: string, blocksById: Map<string, Block>): string[] | null {
+  if (/^https?:\/\//.test(value)) return [value];
+  const legacyMatch = value.match(/^([a-zA-Z0-9-]+):(\d+)$/);
+  if (!legacyMatch) return null;
+  const block = blocksById.get(legacyMatch[1]);
+  return block?.images && block.images.length > 0 ? block.images : null;
+}
+
+function formatPhotoUrlsForText(urls: string[]): string {
+  return `\n\n${urls.join('\n')}\n\n`;
+}
 
 // PhotoMarker component - displays camera icon that opens photo dialog
 interface PhotoMarkerProps {
@@ -82,12 +94,11 @@ function renderContentWithPhotoMarkers(
       parts.push(<span key={`text-${lastIndex}`}>{text.substring(lastIndex, match.index)}</span>);
     }
     
-    // Get block by ID from the marker
-    const blockId = match[1];
-    const block = blocksById.get(blockId);
+    const markerValue = match[1];
+    const images = resolvePhotoMarker(markerValue, blocksById);
     
-    if (block?.images && block.images.length > 0) {
-      parts.push(<PhotoMarker key={`photo-${blockId}`} images={block.images} />);
+    if (images && images.length > 0) {
+      parts.push(<PhotoMarker key={`photo-${match.index}`} images={images} />);
     }
     // If block not found, just skip the marker (don't show anything)
     
