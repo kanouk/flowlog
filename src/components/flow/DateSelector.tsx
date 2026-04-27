@@ -58,6 +58,14 @@ export function DateSelector({ entries, onSelect, selectedDate }: DateSelectorPr
     onSelect(dateStr);
   };
 
+  const handleCalendarDayClick = (date: Date, modifiers: { disabled?: boolean }) => {
+    if (modifiers.disabled) return;
+    const dateStr = format(date, 'yyyy-MM-dd');
+    if (dateStr === selectedDate) {
+      onSelect(dateStr);
+    }
+  };
+
   // Check if a date has entries (for calendar modifiers)
   const hasEntry = (date: Date): boolean => {
     const dateStr = format(date, 'yyyy-MM-dd');
@@ -82,6 +90,7 @@ export function DateSelector({ entries, onSelect, selectedDate }: DateSelectorPr
           mode="single"
           selected={selectedDateObj}
           onSelect={handleCalendarSelect}
+          onDayClick={handleCalendarDayClick}
           locale={ja}
           disabled={(date) => isFuture(startOfDay(date))}
           modifiers={{

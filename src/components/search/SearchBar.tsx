@@ -3,7 +3,7 @@ import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useSearch } from '@/hooks/useSearch';
 import { SearchResults } from './SearchResults';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -143,31 +143,46 @@ export function SearchBar({ onNavigateToDate }: SearchBarProps) {
         </Button>
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogContent className="sm:max-w-md p-0">
-            <DialogHeader className="p-4 pb-0">
+          <DialogContent
+            showCloseButton={false}
+            className="w-[calc(100vw-1rem)] max-w-md overflow-hidden p-0 gap-0"
+          >
+            <DialogHeader className="border-b p-3">
               <DialogTitle className="sr-only">検索</DialogTitle>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  ref={inputRef}
-                  type="text"
-                  placeholder="ブロック・日記を検索..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  className="pl-9 pr-9"
-                  autoFocus
-                />
-                {query && (
+              <div className="flex items-center gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    ref={inputRef}
+                    type="text"
+                    placeholder="ブロック・日記を検索..."
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    className="pl-9 pr-9"
+                    autoFocus
+                  />
+                  {query && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                      onClick={() => setQuery('')}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                <DialogClose asChild>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                    onClick={() => setQuery('')}
+                    className="h-9 w-9 flex-shrink-0"
+                    aria-label="閉じる"
                   >
                     <X className="h-4 w-4" />
                   </Button>
-                )}
+                </DialogClose>
               </div>
             </DialogHeader>
             <SearchResults
