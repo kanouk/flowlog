@@ -710,6 +710,7 @@ app.get("/openapi.json", (c) => {
       "/entries/{date}": {
         get: {
           summary: "指定日のエントリーを取得",
+          description: "formatted_content 内の写真マーカーはAPI返却時に実URL文字列へ展開されます。",
           parameters: [{ name: "date", in: "path", required: true, schema: { type: "string", format: "date" }, description: "YYYY-MM-DD" }],
           responses: {
             "200": { description: "OK", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean" }, data: { $ref: "#/components/schemas/Entry" } } } } } },
