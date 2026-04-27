@@ -914,6 +914,8 @@ ${blocksText}`;
       text = text.replace(/^## .+\n(?=## |\s*$)/gm, '');
       // Remove summary sections even if a custom prompt or model still emits them.
       text = text.replace(/^##\s*(?:今日の3行まとめ|3行まとめ|まとめ|要約)\s*\n[\s\S]*?(?=^## |\s*$)/gm, '');
+      // Keep photo markers as standalone lines with blank lines around them.
+      text = text.replace(/\s*(\{\{PHOTO:(?:https?:\/\/[^}\s]+|[a-zA-Z0-9-]+:\d+)\}\})\s*/g, '\n\n$1\n\n');
       // Normalize consecutive blank lines
       text = text.replace(/\n{3,}/g, '\n\n');
       return text.trim();
@@ -933,8 +935,7 @@ ${blocksText}`;
       const timeSlots: Record<string, string[]> = { '朝': [], '昼': [], '夕方': [], '夜': [] };
       for (const block of sortedBlks) {
         const content = block.content || '(画像のみ)';
-        const imageNote = block.images?.length ? ` {{PHOTO:${block.id}:${block.images.length}}}` : '';
-        const line = `${content}${imageNote}`;
+        const line = withPhotoMarkers(content, block.images);
         const bucket = getTimeBucketWithBoundary(block.occurred_at, dbh);
         timeSlots[bucket].push(line);
       }
