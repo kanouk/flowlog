@@ -301,6 +301,35 @@ async function searchBlocksHelper(
   return data;
 }
 
+async function expandPhotoMarkersForContent(userId: string, content: string | null): Promise<string | null> {
+  if (!content) return content;
+
+  const legacyIds = Array.from(content.matchAll(/\{\{PHOTO:([a-zA-Z0-9-]+):(\d+)\}\}/g)).map((match) => match[1]);
+  const blocksById = new Map<string, { images?: string[] }>();
+
+  if (legacyIds.length > 0) {
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const { data, error } = await supabase
+      .from("blocks")
+      .select("id, images")
+      .eq("user_id", userId)
+      .in("id", [...new Set(legacyIds)]);
+
+    if (!error && data) {
+      data.forEach((block: any) => blocksById.set(block.id, { images: block.images || [] }));
+    }
+  }
+
+  return content
+    .replace(/\{\{PHOTO:(https?:\/\/[^}\s]+)\}\}/g, (_match, url) => `\n\n${url}\n\n`)
+    .replace(/\{\{PHOTO:([a-zA-Z0-9-]+):(\d+)\}\}/g, (match, blockId) => {
+      const images = blocksById.get(blockId)?.images || [];
+      return images.length > 0 ? `\n\n${images.join('\n')}\n\n` : match;
+    })
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 // ===== ルートハンドラー =====
 
 // ヘルスチェック
