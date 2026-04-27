@@ -593,8 +593,6 @@ function validateDiarySections(content: string): { ok: boolean; reason?: string 
   pushSection();
 
   if (sections.length === 0) return { ok: false, reason: 'no sections found' };
-  const hasSummary = sections.some((s) => s.title === '今日の3行まとめ');
-  if (!hasSummary) return { ok: false, reason: 'missing 3-line summary section' };
   const hasMainSection = sections.some((s) => s.title !== '今日の3行まとめ' && s.body.length > 0);
   if (!hasMainSection) return { ok: false, reason: 'missing main sections' };
   return { ok: true };
@@ -640,17 +638,6 @@ function buildFallbackDiary(sortedBlocks: Block[]): string {
     bodyParts.push(`## ${title}\n${items.join('\n')}`);
   }
 
-  const summaryCandidates = Object.values(sections)
-    .flat()
-    .map((line) => line.replace(/^-+\s*/, '').trim())
-    .filter(Boolean)
-    .slice(0, 3);
-
-  while (summaryCandidates.length < 3) {
-    summaryCandidates.push('一日の記録を整理した。');
-  }
-
-  bodyParts.push(`## 今日の3行まとめ\n${summaryCandidates.slice(0, 3).join('\n')}`);
   return bodyParts.join('\n\n');
 }
 
@@ -846,13 +833,9 @@ JSON形式で回答してください。`;
 5. 具体的な出来事に紐付かない「思ったこと」「感じたこと」「気づき」「内省」がある場合は
    「## 思ったこと」セクションにまとめる
    - 例: 「最近疲れてる気がする」「なんか調子がいい」「○○について考えた」「ふと○○と感じた」
-   - このセクションは時間帯セクションの後、3行まとめの前に配置
+   - このセクションは時間帯セクションの後に配置
    - 該当する内容がない場合は、このセクションは出力しない
-6. 最後に「## 今日の3行まとめ」を追加し、その日の要点を3行でまとめる
-   - 各行は具体的な出来事・行動・感情を含むこと（「充実した一日」「いろいろあった」のような抽象表現は禁止）
-   - ブロックに書かれた固有名詞・場所・人物・食べ物・作品名などを積極的に使う
-   - 良い例: 「朝からカフェで読書、午後は友人とランチでパスタを食べた」
-   - 悪い例: 「いろいろなことがあった一日だった」「充実した時間を過ごした」
+6. 「## 今日の3行まとめ」セクションや要約セクションは出力しない
 7. 元の内容の意味を変えないこと
 8. 日本語で出力すること
 9. 入力には[出来事]のブロックのみが含まれます。自然な日記文に整形してください
@@ -880,6 +863,8 @@ JSON形式で回答してください。`;
 追加の必須ルール（他の指示より優先）:
 - 出力にコードフェンス（\`\`\`, \`\`\`markdown, \`\`\`md）を含めない
 - セクション見出しは必ず "## " で始める
+- "## 今日の3行まとめ" セクションを出力しない
+- 3行まとめ、要約、まとめだけのセクションを出力しない
 - 前置き・注釈・後書き（例:「以下が日記です」）を出力しない
 - 本文は見出し配下にのみ書く
 `;
@@ -913,6 +898,8 @@ ${blocksText}`;
       }
       // Remove empty sections (## heading followed immediately by another ## or end)
       text = text.replace(/^## .+\n(?=## |\s*$)/gm, '');
+      // Remove summary sections even if a custom prompt or model still emits them.
+      text = text.replace(/^##\s*(?:今日の3行まとめ|3行まとめ|まとめ|要約)\s*\n[\s\S]*?(?=^## |\s*$)/gm, '');
       // Normalize consecutive blank lines
       text = text.replace(/\n{3,}/g, '\n\n');
       return text.trim();
@@ -924,14 +911,11 @@ ${blocksText}`;
       if (!sectionMatches || sectionMatches.length === 0) {
         return { ok: false, reason: 'セクション見出しが見つかりません' };
       }
-      if (!content.includes('## 今日の3行まとめ')) {
-        return { ok: false, reason: '「## 今日の3行まとめ」が含まれていません' };
-      }
       return { ok: true };
     }
 
     // Fallback: generate from blocks using fixed template (dbh-aware)
-    function buildFallbackDiary(sortedBlks: Block[], dateStr: string): string {
+    function buildFallbackDiary(sortedBlks: Block[]): string {
       const timeSlots: Record<string, string[]> = { '朝': [], '昼': [], '夕方': [], '夜': [] };
       for (const block of sortedBlks) {
         const content = block.content || '(画像のみ)';
@@ -946,21 +930,7 @@ ${blocksText}`;
           result += `## ${slot}\n${lines.join('\n')}\n\n`;
         }
       }
-      // Build a content-based 3-line summary from actual blocks
-      const summaryLines: string[] = [];
-      for (const block of sortedBlks) {
-        if (summaryLines.length >= 3) break;
-        const text = (block.content || '').trim();
-        if (!text) continue;
-        // Truncate long content to ~40 chars
-        summaryLines.push(text.length > 40 ? text.slice(0, 40) + '…' : text);
-      }
-      // Pad to 3 lines if not enough blocks
-      while (summaryLines.length < 3) {
-        summaryLines.push(summaryLines.length === 0 ? `${dateStr}の記録` : 'お疲れさまでした');
-      }
-      result += `## 今日の3行まとめ\n${summaryLines.join('\n')}`;
-      return result;
+      return result.trim();
     }
 
     try {
@@ -980,7 +950,7 @@ ${blocksText}`;
 1) 先頭から末尾まで純粋なMarkdown本文のみ
 2) コードフェンスを絶対に使わない
 3) 見出しは "## " のみ
-4) 最後に必ず "## 今日の3行まとめ" を含める`;
+4) "## 今日の3行まとめ"、3行まとめ、要約、まとめセクションを含めない`;
 
         const retryResult = await callAIWithConfig(diaryConfig, diarySystemPrompt, retryPrompt);
         tokenUsages.push({ phase: 'Phase 2 (Formatting Retry)', usage: retryResult.usage });
@@ -991,7 +961,7 @@ ${blocksText}`;
 
       if (!validation.ok) {
         console.warn(`Phase 2 validation failed after retry: ${validation.reason}. Using fallback formatter.`);
-        formattedContent = buildFallbackDiary(sortedBlocks, date);
+        formattedContent = buildFallbackDiary(sortedBlocks);
       }
     } catch (error) {
       if (error instanceof Error) {
@@ -1012,14 +982,10 @@ ${blocksText}`;
     }
 
     if (!formattedContent) {
-      formattedContent = buildFallbackDiary(sortedBlocks, date);
+      formattedContent = buildFallbackDiary(sortedBlocks);
     }
 
-    // Extract summary
-    const summaryMatch = formattedContent.match(/##\s*今日の3行まとめ\s*([\s\S]*?)$/);
-    const summary = summaryMatch 
-      ? summaryMatch[1].trim().split('\n').filter((l: string) => l.trim()).slice(0, 3).join(' ')
-      : '';
+    const summary = '';
 
     console.log('Successfully formatted entries');
 

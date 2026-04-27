@@ -65,7 +65,7 @@ const Index = () => {
     {
       icon: Sparkles,
       title: 'AIが日記に',
-      description: '一日の出来事を読みやすい日記に整形\n3行まとめも自動生成',
+      description: '一日の出来事を読みやすい日記に整形\n自然な流れで振り返れる',
     },
     {
       icon: History,
