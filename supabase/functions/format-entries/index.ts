@@ -764,9 +764,9 @@ JSON形式で回答してください。`;
                 const newOccurredAt = createOccurredAtFromTime(date, result.inferred_time, dbh);
                 
                 if (supabase) {
-                  const { error: updateError } = await supabase
-                    .from('blocks')
-                    .update({ occurred_at: newOccurredAt } as any)
+                  const blocksTable: any = (supabase as any).from('blocks');
+                  const { error: updateError } = await blocksTable
+                    .update({ occurred_at: newOccurredAt })
                     .eq('id', block.id);
                   
                   if (!updateError) {

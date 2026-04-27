@@ -458,6 +458,33 @@ export type Database = {
         }
         Relationships: []
       }
+      user_image_storage_settings: {
+        Row: {
+          created_at: string
+          gyazo_token: string | null
+          id: string
+          provider: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          gyazo_token?: string | null
+          id?: string
+          provider?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          gyazo_token?: string | null
+          id?: string
+          provider?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -519,6 +546,14 @@ export type Database = {
           selected_model: string
           selected_provider: string
           updated_at: string
+        }[]
+      }
+      get_user_image_storage_settings_safe: {
+        Args: never
+        Returns: {
+          gyazo_token_hint: string
+          has_gyazo_token: boolean
+          provider: string
         }[]
       }
     }
