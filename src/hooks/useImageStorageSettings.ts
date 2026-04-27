@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesInsert } from '@/integrations/supabase/types';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 
@@ -10,6 +11,8 @@ export interface ImageStorageSettingsSafe {
   has_gyazo_token: boolean;
   gyazo_token_hint: string | null;
 }
+
+type ImageStorageSettingsInsert = TablesInsert<'user_image_storage_settings'>;
 
 const DEFAULT_SETTINGS: ImageStorageSettingsSafe = {
   provider: 'default',
@@ -31,7 +34,7 @@ export function useImageStorageSettings() {
     }
 
     try {
-      const { data, error } = await (supabase.rpc as any)('get_user_image_storage_settings_safe');
+      const { data, error } = await supabase.rpc('get_user_image_storage_settings_safe');
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
       setSettings(row ? {
@@ -62,18 +65,15 @@ export function useImageStorageSettings() {
 
     setSaving(true);
     try {
-      const payload: Record<string, unknown> = {
+      const payload: ImageStorageSettingsInsert = {
         user_id: user.id,
         provider,
       };
       if (gyazoToken?.trim()) {
         payload.gyazo_token = gyazoToken.trim();
       }
-      if (provider === 'default') {
-        payload.gyazo_token = null;
-      }
 
-      const { error } = await (supabase.from as any)('user_image_storage_settings').upsert(payload, {
+      const { error } = await supabase.from('user_image_storage_settings').upsert(payload, {
         onConflict: 'user_id',
       });
       if (error) throw error;
@@ -94,11 +94,12 @@ export function useImageStorageSettings() {
     if (!user) return false;
     setSaving(true);
     try {
-      const { error } = await (supabase.from as any)('user_image_storage_settings').upsert({
+      const payload: ImageStorageSettingsInsert = {
         user_id: user.id,
         provider: 'default',
         gyazo_token: null,
-      }, {
+      };
+      const { error } = await supabase.from('user_image_storage_settings').upsert(payload, {
         onConflict: 'user_id',
       });
       if (error) throw error;
