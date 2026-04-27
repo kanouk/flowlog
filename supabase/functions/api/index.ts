@@ -498,7 +498,7 @@ app.get("/openapi.json", (c) => {
             user_id: { type: "string", format: "uuid" },
             date: { type: "string", format: "date" },
             summary: { type: "string", nullable: true },
-            formatted_content: { type: "string", nullable: true },
+            formatted_content: { type: "string", nullable: true, description: "AI整形済み本文。写真マーカーはAPI返却時に実URL文字列へ展開されます。" },
             score: { type: "integer", nullable: true },
             score_details: { type: "string", nullable: true },
             created_at: { type: "string", format: "date-time" },
