@@ -3,10 +3,6 @@ import { parseISO } from "npm:date-fns@3";
 import { formatInTimeZone, fromZonedTime } from "npm:date-fns-tz@3";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-type UntypedSupabaseClient = ReturnType<typeof createClient> & {
-  from: (table: string) => any;
-};
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -768,7 +764,7 @@ JSON形式で回答してください。`;
                 const newOccurredAt = createOccurredAtFromTime(date, result.inferred_time, dbh);
                 
                 if (supabase) {
-                  const blocksTable = (supabase as UntypedSupabaseClient).from('blocks');
+                  const blocksTable: any = (supabase as any).from('blocks');
                   const { error: updateError } = await blocksTable
                     .update({ occurred_at: newOccurredAt })
                     .eq('id', block.id);
