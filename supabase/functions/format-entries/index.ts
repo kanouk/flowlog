@@ -768,8 +768,8 @@ JSON形式で回答してください。`;
                 const newOccurredAt = createOccurredAtFromTime(date, result.inferred_time, dbh);
                 
                 if (supabase) {
-                  const { error: updateError } = await (supabase as UntypedSupabaseClient)
-                    .from('blocks')
+                  const blocksTable = (supabase as UntypedSupabaseClient).from('blocks');
+                  const { error: updateError } = await blocksTable
                     .update({ occurred_at: newOccurredAt })
                     .eq('id', block.id);
                   
