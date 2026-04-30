@@ -22,8 +22,6 @@ const SCORE_RESPONSE_FORMAT: OpenAIResponseFormat = {
       properties: {
         score: {
           type: 'integer',
-          minimum: 0,
-          maximum: 100,
         },
         deductions: {
           type: 'array',
@@ -1187,7 +1185,9 @@ JSONオブジェクト以外は絶対に出力しないでください。`;
       } catch (scoreError) {
         scoreStatus = 'ai_error';
         scoreMessage = '採点処理中にエラーが発生しました';
-        console.error('Phase 3: Score calculation error:', scoreError);
+        console.error('Phase 3: Score calculation error:', JSON.stringify({
+          message: scoreError instanceof Error ? scoreError.message.slice(0, 300) : 'Unknown error',
+        }));
       }
     }
 
