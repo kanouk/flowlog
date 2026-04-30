@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { parseISO } from "npm:date-fns@3";
 import { formatInTimeZone, fromZonedTime } from "npm:date-fns-tz@3";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { formatScoreDetails, parseScoreResult } from "./score-parser.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,6 +10,40 @@ const corsHeaders = {
 };
 
 const TIMEZONE = 'Asia/Tokyo';
+
+const SCORE_RESPONSE_FORMAT: OpenAIResponseFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'score_evaluation_result',
+    strict: true,
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        score: {
+          type: 'integer',
+          minimum: 0,
+          maximum: 100,
+        },
+        deductions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              rule: { type: 'string' },
+              points: { type: 'integer' },
+              reason: { type: 'string' },
+            },
+            required: ['rule', 'points', 'reason'],
+          },
+        },
+        summary: { type: 'string' },
+      },
+      required: ['score', 'deductions', 'summary'],
+    },
+  },
+};
 
 interface TokenUsage {
   prompt_tokens: number;
@@ -19,6 +54,19 @@ interface TokenUsage {
 interface AIResult {
   text: string;
   usage: TokenUsage | null;
+}
+
+interface OpenAIResponseFormat {
+  type: 'json_schema';
+  json_schema: {
+    name: string;
+    strict: boolean;
+    schema: Record<string, unknown>;
+  };
+}
+
+interface AIOptions {
+  responseFormat?: OpenAIResponseFormat;
 }
 
 interface Block {
@@ -218,7 +266,7 @@ JSON形式で回答してください：
 - inferred_time は "HH:mm" 形式（例: "08:00", "14:30"）`;
 }
 
-async function callOpenAI(apiKey: string, model: string, systemPrompt: string, userPrompt: string): Promise<AIResult> {
+async function callOpenAI(apiKey: string, model: string, systemPrompt: string, userPrompt: string, options: AIOptions = {}): Promise<AIResult> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -231,6 +279,7 @@ async function callOpenAI(apiKey: string, model: string, systemPrompt: string, u
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
+      ...(options.responseFormat ? { response_format: options.responseFormat } : {}),
     }),
   });
 
@@ -357,12 +406,13 @@ async function callAIWithConfig(
   featureConfig: FeatureAIConfig | null,
   systemPrompt: string,
   userPrompt: string,
+  options: AIOptions = {},
 ): Promise<AIResult> {
   // 1. Feature config with assigned model + API key
   if (featureConfig?.provider && featureConfig?.model_name && featureConfig?.api_key) {
     switch (featureConfig.provider) {
       case 'openai':
-        return callOpenAI(featureConfig.api_key, featureConfig.model_name, systemPrompt, userPrompt);
+        return callOpenAI(featureConfig.api_key, featureConfig.model_name, systemPrompt, userPrompt, options);
       case 'anthropic':
         return callAnthropic(featureConfig.api_key, featureConfig.model_name, systemPrompt, userPrompt);
       case 'google':
@@ -1069,9 +1119,17 @@ ${blocksText}`;
 
 必ずJSON形式で回答してください。`;
 
+      const SCORE_OUTPUT_GUARD = `出力制約:
+- JSONオブジェクトのみを返してください
+- Markdown、見出し、箇条書き、説明文、コードフェンスは禁止です
+- 先頭文字は {、末尾文字は } にしてください
+- 必須キーは score, deductions, summary です
+- score は 0〜100 の数値です
+- deductions は配列です。減点なしの場合は [] を返してください`;
+
       const scoreBoundaryNote = dbh > 0 ? `\n\n## 生活日の区切りについて\n${buildDayBoundaryContext(dbh)}\n深夜帯（例: 25時に寝た = 実時刻1:00）はこの生活日内の行動として評価してください。` : '';
 
-      const scoreSystemPrompt = scoreConfig?.system_prompt || SCORE_PROMPT;
+      const scoreSystemPrompt = `${scoreConfig?.system_prompt || SCORE_PROMPT}\n\n${SCORE_OUTPUT_GUARD}`;
 
       const scoreUserPrompt = `## 行動規範
 ${behaviorRules}
@@ -1079,40 +1137,52 @@ ${behaviorRules}
 ## 今日の日記
 ${formattedContent}${scoreBoundaryNote}
 
-上記の日記を行動規範と照らし合わせて、100点からの減点方式でスコアを算出してください。`;
+上記の日記を行動規範と照らし合わせて、100点からの減点方式でスコアを算出してください。
+JSONオブジェクト以外は絶対に出力しないでください。`;
 
       try {
-        const scoreAIResult = await callAIWithConfig(scoreConfig, scoreSystemPrompt, scoreUserPrompt);
+        const scoreAIResult = await callAIWithConfig(scoreConfig, scoreSystemPrompt, scoreUserPrompt, {
+          responseFormat: SCORE_RESPONSE_FORMAT,
+        });
         tokenUsages.push({ phase: 'Phase 3 (Scoring)', usage: scoreAIResult.usage });
         console.log('Phase 3 token usage:', JSON.stringify(scoreAIResult.usage));
-        
-        const scoreJsonMatch = scoreAIResult.text.match(/\{[\s\S]*\}/);
-        if (scoreJsonMatch) {
-          const scoreResult = JSON.parse(scoreJsonMatch[0]);
-          if (typeof scoreResult.score === 'number' || typeof scoreResult.score === 'string') {
-            score = Math.max(0, Math.min(100, Number(scoreResult.score) || 100));
-            
-            const deductions = scoreResult.deductions || [];
-            if (deductions.length > 0) {
-              const deductionLines = deductions.map((d: { rule: string; points: number; reason: string }) => 
-                `・${d.rule}: ${d.points}点\n  → ${d.reason}`
-              ).join('\n');
-              scoreDetails = `減点内訳:\n${deductionLines}\n\n💬 ${scoreResult.summary || ''}`;
-            } else {
-              scoreDetails = scoreResult.summary || 'すべてのルールを守れました！';
-            }
-            
-            scoreStatus = 'success';
-            console.log('Score calculated:', score);
-          } else {
-            scoreStatus = 'ai_error';
-            scoreMessage = '採点処理中にエラーが発生しました';
-            console.error('Phase 3: AI response JSON missing "score" field. Raw:', scoreAIResult.text);
-          }
+
+        let scoreParse = parseScoreResult(scoreAIResult.text);
+
+        if (!scoreParse.ok) {
+          console.warn('Phase 3: Score response parse failed. Retrying with JSON-only prompt:', JSON.stringify({
+            reason: scoreParse.reason,
+            preview: scoreParse.preview,
+          }));
+
+          const retryPrompt = `${scoreUserPrompt}
+
+前回の応答は解析できませんでした。
+次の形式のJSONオブジェクトのみを返してください。説明文やMarkdownは一切含めないでください。
+{"score":85,"deductions":[{"rule":"ルール名","points":-15,"reason":"理由"}],"summary":"短い要約"}`;
+
+          const retryResult = await callAIWithConfig(scoreConfig, scoreSystemPrompt, retryPrompt, {
+            responseFormat: SCORE_RESPONSE_FORMAT,
+          });
+          tokenUsages.push({ phase: 'Phase 3 (Scoring Retry)', usage: retryResult.usage });
+          console.log('Phase 3 retry token usage:', JSON.stringify(retryResult.usage));
+          scoreParse = parseScoreResult(retryResult.text);
+        }
+
+        if (scoreParse.ok) {
+          score = scoreParse.value.score;
+          scoreDetails = formatScoreDetails(scoreParse.value);
+          scoreStatus = 'success';
+          console.log('Score calculated:', JSON.stringify({
+            score,
+          }));
         } else {
           scoreStatus = 'ai_error';
           scoreMessage = '採点処理中にエラーが発生しました';
-          console.error('Phase 3: No JSON found in AI response. Raw:', scoreAIResult.text);
+          console.error('Phase 3: Score response parse failed after retry:', JSON.stringify({
+            reason: scoreParse.reason,
+            preview: scoreParse.preview,
+          }));
         }
       } catch (scoreError) {
         scoreStatus = 'ai_error';

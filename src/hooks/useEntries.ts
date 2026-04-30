@@ -113,6 +113,8 @@ export interface FormatEntryResponse {
   // Score feature
   score?: number;
   score_details?: string;
+  score_status?: string;
+  score_message?: string;
 }
 
 export function useEntries() {
@@ -555,6 +557,24 @@ export function useEntries() {
 
       if (error) throw error;
 
+      const scoreStatus = data?.score_status as string | undefined;
+      const scoreMessage = data?.score_message as string | undefined;
+      const scoreDebugPayload = {
+        entryId,
+        date,
+        dayBoundaryHour,
+        blockCount: blocks.length,
+        categoryCounts: blocks.reduce<Record<string, number>>((acc, block) => {
+          acc[block.category] = (acc[block.category] ?? 0) + 1;
+          return acc;
+        }, {}),
+        scoreStatus,
+        scoreMessage,
+        score: data?.score,
+        hasScoreDetails: data?.score_details !== undefined,
+      };
+      console.info('[FlowLog score debug] format-entries response', JSON.stringify(scoreDebugPayload));
+
       const updateData: {
         formatted_content: string;
         summary: string;
@@ -579,6 +599,15 @@ export function useEntries() {
         .eq('id', entryId);
 
       if (updateError) throw updateError;
+
+      if (scoreStatus && scoreStatus !== 'success') {
+        console.warn('[FlowLog score debug] scoring skipped or failed', JSON.stringify({
+          entryId,
+          date,
+          scoreStatus,
+          scoreMessage,
+        }));
+      }
 
       // 時刻更新があった場合のみトースト表示
       if (data.time_updates && data.time_updates.length > 0) {
