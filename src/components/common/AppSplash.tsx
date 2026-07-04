@@ -20,7 +20,7 @@ export function AppSplash({
       <div className="relative flex flex-col items-center gap-4">
         <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl border border-white/50 bg-card/80 shadow-xl backdrop-blur-xl">
           <div className="absolute inset-0 rounded-3xl ring-1 ring-primary/20 animate-pulse-soft" />
-          <img src={logoImage} alt="FlowLog" className="relative h-10 w-10" />
+          <img src={logoImage} alt="FlowLog" decoding="async" className="relative h-10 w-10" />
         </div>
       </div>
     </div>

@@ -23,7 +23,7 @@ import { useImageAttachments } from '@/hooks/useImageAttachments';
 import { getTodayKey } from '@/lib/dateUtils';
 import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 import { toast } from 'sonner';
-import { BlockCategory, CATEGORY_CONFIG } from '@/lib/categoryUtils';
+import { CATEGORY_CONFIG } from '@/lib/categoryUtils';
 import {
   buildScheduleDateTime,
   formatScheduleDateDisplay,
@@ -31,6 +31,12 @@ import {
 } from '@/lib/entryFormUtils';
 
 type QuickAddCategory = 'event' | 'task' | 'schedule' | 'thought' | 'read_later';
+
+interface ScheduleSubmitData {
+  starts_at: string | null;
+  ends_at: string | null;
+  is_all_day: boolean;
+}
 
 interface QuickAddModalProps {
   open: boolean;
@@ -163,7 +169,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
         }
       }
 
-      let scheduleData = undefined;
+      let scheduleData: ScheduleSubmitData | undefined;
       if (category === 'schedule') {
         const startsAt = buildScheduleDateTime(startDate, startTime, isAllDay);
         const endsAt = buildScheduleDateTime(endDate, endTime, isAllDay);
@@ -194,7 +200,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
             mode: 'toNow',
             images: [],
             category: 'task',
-            tag: tag as import('@/lib/categoryUtils').BlockTag | null,
+            tag,
             priority,
             dayBoundaryHour,
           });
@@ -215,7 +221,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
         mode: 'toNow',
         images: uploadedUrls,
         category,
-        tag: tag as import('@/lib/categoryUtils').BlockTag | null,
+        tag,
         starts_at: scheduleData?.starts_at || null,
         ends_at: scheduleData?.ends_at || null,
         is_all_day: scheduleData?.is_all_day || false,
@@ -410,6 +416,8 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
                   <img
                     src={url}
                     alt=""
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover rounded-md border border-border shadow-sm"
                   />
                   <button

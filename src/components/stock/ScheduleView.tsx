@@ -7,6 +7,7 @@ import { CATEGORY_CONFIG } from '@/lib/categoryUtils';
 import { TagFilterDropdown } from './TagFilterDropdown';
 import { QuickAddModal } from './QuickAddModal';
 import { useTargetBlockHighlight } from '@/hooks/useTargetBlockHighlight';
+import { BlockListSkeleton } from '@/components/common/BlockListSkeleton';
 
 interface ScheduleViewProps {
   targetBlockId?: string | null;
@@ -307,11 +308,7 @@ export function ScheduleView({ targetBlockId, onBlockScrolled, onSearchCleared }
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
-      </div>
-    );
+    return <BlockListSkeleton rows={5} />;
   }
 
   return (

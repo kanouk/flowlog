@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Loader2, CheckSquare, Plus, SlidersHorizontal, X, Clock, AlertTriangle } from 'lucide-react';
-import { icons } from 'lucide-react';
+import { CheckSquare, Plus, SlidersHorizontal, X, Clock, AlertTriangle } from 'lucide-react';
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
 import { TaskCheckbox } from '@/components/ui/task-checkbox';
@@ -17,6 +16,8 @@ import { PRIORITY_CONFIG, TaskPriority } from '@/lib/taskPriority';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useTargetBlockHighlight } from '@/hooks/useTargetBlockHighlight';
+import { getIconComponent } from '@/lib/iconUtils';
+import { BlockListSkeleton } from '@/components/common/BlockListSkeleton';
 
 type TaskFilter = 'all' | 'incomplete';
 type TagFilter = 'all' | BlockTag | string;
@@ -26,18 +27,6 @@ interface TasksViewProps {
   targetBlockId?: string | null;
   onBlockScrolled?: () => void;
   onSearchCleared?: () => void;
-}
-
-function kebabToPascal(str: string): string {
-  return str
-    .split('-')
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-    .join('');
-}
-
-function getIconComponent(iconName: string) {
-  const pascalName = kebabToPascal(iconName);
-  return (icons as Record<string, React.ComponentType<{ className?: string }>>)[pascalName];
 }
 
 export function TasksView({ targetBlockId, onBlockScrolled, onSearchCleared }: TasksViewProps) {
@@ -208,15 +197,19 @@ export function TasksView({ targetBlockId, onBlockScrolled, onSearchCleared }: T
     return null;
   };
 
-  const incompleteCount = blocks.filter(b => !b.is_done).length;
-  const completedCount = blocks.filter(b => b.is_done).length;
+  const { incompleteCount, completedCount } = useMemo(() => {
+    return blocks.reduce(
+      (counts, block) => {
+        if (block.is_done) counts.completedCount += 1;
+        else counts.incompleteCount += 1;
+        return counts;
+      },
+      { incompleteCount: 0, completedCount: 0 },
+    );
+  }, [blocks]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
-      </div>
-    );
+    return <BlockListSkeleton rows={5} />;
   }
 
   return (
@@ -408,6 +401,8 @@ export function TasksView({ targetBlockId, onBlockScrolled, onSearchCleared }: T
                             key={i}
                             src={url}
                             alt=""
+                            loading="lazy"
+                            decoding="async"
                             className="w-full aspect-square object-cover rounded-md border border-border"
                           />
                         ))}

@@ -638,6 +638,8 @@ export function BlockEditModal({
                     <img
                       src={url}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover rounded-md border border-border"
                     />
                     <button
@@ -655,6 +657,8 @@ export function BlockEditModal({
                     <img
                       src={url}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover rounded-md border border-border ring-2 ring-primary/30"
                     />
                     <button

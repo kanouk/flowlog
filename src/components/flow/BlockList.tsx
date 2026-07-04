@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Trash2, Pencil, FileInput, GripVertical, CalendarClock, ScanText, Loader2, ChevronDown, ChevronUp, Copy, RefreshCw } from 'lucide-react';
-import { icons } from 'lucide-react';
 import { Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -25,6 +24,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { BlockEditModal } from './BlockEditModal';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getIconComponent } from '@/lib/iconUtils';
 interface BlockListProps {
   blocks: Block[];
   onDelete?: (blockId: string) => void;
@@ -52,19 +52,6 @@ function highlightText(text: string, query: string | null | undefined): React.Re
       </mark>
     ) : part
   );
-}
-
-// アイコン名をPascalCaseに変換
-function kebabToPascal(str: string): string {
-  return str.split('-').map(part => 
-    part.charAt(0).toUpperCase() + part.slice(1)
-  ).join('');
-}
-
-// アイコンコンポーネントを取得
-function getIconComponent(iconName: string) {
-  const pascalName = kebabToPascal(iconName);
-  return (icons as Record<string, React.ComponentType<{ className?: string }>>)[pascalName];
 }
 
 // カテゴリバッジコンポーネント（表示専用）
@@ -237,10 +224,6 @@ export function BlockList({
     });
   };
 
-  const copyExtractedText = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success('コピーしました');
-  };
   const handleEditDelete = () => {
     if (!editingBlock || !onDelete) return;
     onDelete(editingBlock.id);
@@ -342,6 +325,8 @@ export function BlockList({
                                 key={i}
                                 src={url}
                                 alt=""
+                                loading="lazy"
+                                decoding="async"
                                 className="w-full aspect-square object-cover rounded-md cursor-pointer hover:opacity-80 transition-opacity border border-border"
                                 onClick={() => setModalImage(url)}
                               />
@@ -504,6 +489,7 @@ export function BlockList({
             <img
               src={modalImage}
               alt=""
+              decoding="async"
               className="w-full h-auto max-h-[80vh] object-contain rounded"
             />
           )}

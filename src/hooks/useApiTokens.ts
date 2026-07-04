@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 interface ApiToken {
   id: string;
@@ -12,7 +12,6 @@ interface ApiToken {
 export function useApiTokens() {
   const [tokens, setTokens] = useState<ApiToken[]>([]);
   const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
 
   const fetchTokens = useCallback(async () => {
     try {
@@ -30,15 +29,11 @@ export function useApiTokens() {
       setTokens(data || []);
     } catch (error) {
       console.error('Failed to fetch tokens:', error);
-      toast({
-        variant: 'destructive',
-        title: 'エラー',
-        description: 'トークンの取得に失敗しました',
-      });
+      toast.error('エラー', { description: 'トークンの取得に失敗しました' });
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     fetchTokens();
@@ -76,22 +71,17 @@ export function useApiTokens() {
 
       await fetchTokens();
 
-      toast({
-        title: 'トークンを生成しました',
+      toast.success('トークンを生成しました', {
         description: 'このトークンは一度だけ表示されます。必ずコピーしてください。',
       });
 
       return rawToken;
     } catch (error) {
       console.error('Failed to generate token:', error);
-      toast({
-        variant: 'destructive',
-        title: 'エラー',
-        description: 'トークンの生成に失敗しました',
-      });
+      toast.error('エラー', { description: 'トークンの生成に失敗しました' });
       return null;
     }
-  }, [fetchTokens, toast]);
+  }, [fetchTokens]);
 
   const deleteToken = useCallback(async (tokenId: string) => {
     try {
@@ -103,18 +93,12 @@ export function useApiTokens() {
       if (error) throw error;
 
       setTokens(prev => prev.filter(t => t.id !== tokenId));
-      toast({
-        title: 'トークンを削除しました',
-      });
+      toast.success('トークンを削除しました');
     } catch (error) {
       console.error('Failed to delete token:', error);
-      toast({
-        variant: 'destructive',
-        title: 'エラー',
-        description: 'トークンの削除に失敗しました',
-      });
+      toast.error('エラー', { description: 'トークンの削除に失敗しました' });
     }
-  }, [toast]);
+  }, []);
 
   return {
     tokens,

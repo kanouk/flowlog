@@ -1,7 +1,6 @@
 import { format, addDays, subDays, isToday as isTodayFn, isFuture } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, CalendarDays, Sun } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useState } from 'react';
@@ -21,7 +20,6 @@ export function DateNavigation({ selectedDate, onDateChange, datesWithEntries = 
   const isToday = selectedDate === today;
   
   const selectedDateObj = new Date(selectedDate);
-  const todayObj = new Date(today);
 
   const handlePrevDay = () => {
     const prevDate = subDays(selectedDateObj, 1);

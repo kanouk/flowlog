@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
-import { icons } from 'lucide-react';
 import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { CustomTag, TAG_COLORS, CreateCustomTagInput } from '@/hooks/useCustomTags';
 import { TagEditModal } from '@/components/settings/TagEditModal';
 import { cn } from '@/lib/utils';
 import { SelectableControl } from '@/components/ui/selectable-control';
+import { getIconComponent } from '@/lib/iconUtils';
 
 interface TagChipSelectorProps {
   value: string | null;
@@ -18,21 +18,6 @@ interface TagChipSelectorProps {
 }
 
 const RECENT_TAGS_KEY = 'flowlog_recent_tags';
-
-function kebabToPascal(str: string): string {
-  return str.split('-').map((part) =>
-    part.charAt(0).toUpperCase() + part.slice(1)
-  ).join('');
-}
-
-function getIconComponent(iconName: string) {
-  const pascalName = kebabToPascal(iconName);
-  return (icons as Record<string, React.ComponentType<{ className?: string }>>)[pascalName];
-}
-
-function isBaseTag(value: string | null): value is BlockTag {
-  return value !== null && TAGS.includes(value as BlockTag);
-}
 
 function getRecentTagIds(): string[] {
   try {

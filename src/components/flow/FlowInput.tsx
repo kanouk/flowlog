@@ -36,6 +36,17 @@ import {
   getDefaultScheduleState,
 } from '@/lib/entryFormUtils';
 
+interface ScheduleSubmitData {
+  starts_at: string | null;
+  ends_at: string | null;
+  is_all_day: boolean;
+}
+
+interface DueSubmitData {
+  due_at: string | null;
+  due_all_day: boolean;
+}
+
 interface FlowInputProps {
   onSubmit: (
     content: string,
@@ -43,17 +54,10 @@ interface FlowInputProps {
     images: string[],
     category: BlockCategory,
     tag: string | null,
-    scheduleData?: {
-      starts_at: string | null;
-      ends_at: string | null;
-      is_all_day: boolean;
-    },
+    scheduleData?: ScheduleSubmitData,
     priority?: number,
     batchMode?: boolean,
-    dueData?: {
-      due_at: string | null;
-      due_all_day: boolean;
-    }
+    dueData?: DueSubmitData
   ) => boolean | Promise<boolean>;
   disabled?: boolean;
   selectedDate: string;
@@ -432,7 +436,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     if (!hasContent && !hasImages && category !== 'schedule') return;
     if (disabled) return;
 
-    let scheduleData = undefined;
+    let scheduleData: ScheduleSubmitData | undefined;
     if (category === 'schedule') {
       const startsAt = buildScheduleDateTime(startDate, startTime, isAllDay);
       const endsAt = buildScheduleDateTime(endDate, endTime, isAllDay);
@@ -450,7 +454,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     }
 
     // Task deadline
-    let dueData = undefined;
+    let dueData: DueSubmitData | undefined;
     if (category === 'task' && dueDate) {
       const dueAtStr = buildScheduleDateTime(dueDate, dueTime, dueAllDay);
       dueData = {
@@ -653,6 +657,8 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                   <img
                     src={url}
                     alt=""
+                    loading="lazy"
+                    decoding="async"
                     className="h-full w-full rounded-md border border-border object-cover shadow-sm"
                   />
                   <button

@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, Tag as TagIcon, Loader2 } from 'lucide-react';
-import { icons } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCustomTags, CustomTag, CreateCustomTagInput, TAG_COLORS } from '@/hooks/useCustomTags';
-import { TAG_CONFIG, TAGS, BlockTag } from '@/lib/categoryUtils';
+import { TAG_CONFIG, TAGS } from '@/lib/categoryUtils';
 import { TagEditModal } from './TagEditModal';
+import { getIconComponent } from '@/lib/iconUtils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,19 +15,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-
-// アイコン名をPascalCaseに変換
-function kebabToPascal(str: string): string {
-  return str.split('-').map(part => 
-    part.charAt(0).toUpperCase() + part.slice(1)
-  ).join('');
-}
-
-// アイコンコンポーネントを取得
-function getIconComponent(iconName: string) {
-  const pascalName = kebabToPascal(iconName);
-  return (icons as Record<string, React.ComponentType<{ className?: string }>>)[pascalName];
-}
 
 export function TagManagementSection() {
   const { customTags, loading, createCustomTag, updateCustomTag, deleteCustomTag } = useCustomTags();

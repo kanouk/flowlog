@@ -18,7 +18,13 @@ export const triggerHaptic = (type: 'light' | 'medium' | 'success' = 'success') 
 // Completion sound using Web Audio API (light "pop" sound)
 export const playCompletionSound = () => {
   try {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    type AudioContextConstructor = new () => AudioContext;
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: AudioContextConstructor }).webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const audioContext = new AudioContextClass();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
     
@@ -37,7 +43,7 @@ export const playCompletionSound = () => {
     oscillator.type = 'sine';
     oscillator.start(audioContext.currentTime);
     oscillator.stop(audioContext.currentTime + 0.15);
-  } catch (e) {
+  } catch {
     // Ignore if Audio API is not supported
   }
 };

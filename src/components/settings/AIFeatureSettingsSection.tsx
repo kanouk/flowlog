@@ -21,7 +21,6 @@ import {
   Settings2, ChevronDown, Loader2, Check, RotateCcw, AlertTriangle,
   FileText, Clock, Trophy, Bookmark, ImageIcon
 } from 'lucide-react';
-import { toast } from 'sonner';
 
 const FEATURE_ICONS: Record<FeatureKey, React.ElementType> = {
   diary_format: FileText,
@@ -227,7 +226,7 @@ function FeatureCard({
 }
 
 export function AIFeatureSettingsSection() {
-  const { settings, loading, saving, getSettingForFeature, upsertSetting, deleteSetting } = useAIFeatureSettings();
+  const { loading, saving, getSettingForFeature, upsertSetting, deleteSetting } = useAIFeatureSettings();
   const { activeModels, loading: modelsLoading } = useAIModels();
 
   if (loading || modelsLoading) {

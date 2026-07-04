@@ -3,11 +3,7 @@ import { parseISO } from "npm:date-fns@3";
 import { formatInTimeZone, fromZonedTime } from "npm:date-fns-tz@3";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { formatScoreDetails, parseScoreResult } from "./score-parser.ts";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders } from "../_shared/cors.ts";
 
 const TIMEZONE = 'Asia/Tokyo';
 
@@ -424,7 +420,7 @@ async function callAIWithConfig(
 
 // Fetch feature AI config via direct server-side queries (no RPC, no key exposure)
 async function getFeatureConfig(
-  serviceClient: any,
+  serviceClient: ReturnType<typeof createClient>,
   userId: string,
   featureKey: string,
 ): Promise<FeatureAIConfig | null> {
@@ -815,8 +811,8 @@ JSON形式で回答してください。`;
                 const newOccurredAt = createOccurredAtFromTime(date, result.inferred_time, dbh);
                 
                 if (supabase) {
-                  const blocksTable: any = (supabase as any).from('blocks');
-                  const { error: updateError } = await blocksTable
+                  const { error: updateError } = await supabase
+                    .from('blocks')
                     .update({ occurred_at: newOccurredAt })
                     .eq('id', block.id);
                   
@@ -862,9 +858,9 @@ JSON形式で回答してください。`;
         }
       }
       let deadlineNote = '';
-      if ((block as any).due_at) {
-        const dueDate = parseISO((block as any).due_at);
-        if ((block as any).due_all_day) {
+      if (block.due_at) {
+        const dueDate = parseISO(block.due_at);
+        if (block.due_all_day) {
           deadlineNote = `[期限: ${formatInTimeZone(dueDate, TIMEZONE, 'M/d')} 終日]`;
         } else {
           deadlineNote = `[期限: ${formatInTimeZone(dueDate, TIMEZONE, 'M/d HH:mm')}]`;

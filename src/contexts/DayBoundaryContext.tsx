@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -39,7 +39,7 @@ export function DayBoundaryProvider({ children }: { children: ReactNode }) {
           .maybeSingle();
 
         if (!cancelled) {
-          setDayBoundaryHour((data as Record<string, unknown>)?.day_boundary_hour as number ?? 0);
+          setDayBoundaryHour(data?.day_boundary_hour ?? 0);
         }
       } catch (error) {
         console.error('Error fetching day_boundary_hour:', error);
@@ -64,17 +64,15 @@ export function DayBoundaryProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (existing) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await supabase
           .from('user_ai_settings')
-          .update({ day_boundary_hour: hour } as any)
+          .update({ day_boundary_hour: hour })
           .eq('user_id', user.id);
         if (error) throw error;
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await supabase
           .from('user_ai_settings')
-          .insert({ user_id: user.id, day_boundary_hour: hour } as any);
+          .insert({ user_id: user.id, day_boundary_hour: hour });
         if (error) throw error;
       }
 
@@ -86,8 +84,13 @@ export function DayBoundaryProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
+  const value = useMemo(
+    () => ({ dayBoundaryHour, loading, setDayBoundaryHour, saveDayBoundaryHour }),
+    [dayBoundaryHour, loading, saveDayBoundaryHour],
+  );
+
   return (
-    <DayBoundaryContext.Provider value={{ dayBoundaryHour, loading, setDayBoundaryHour, saveDayBoundaryHour }}>
+    <DayBoundaryContext.Provider value={value}>
       {children}
     </DayBoundaryContext.Provider>
   );

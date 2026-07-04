@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
+import { queryKeys } from '@/lib/queryKeys';
 
 export type TagColor =
   | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink' | 'gray'
@@ -81,49 +83,43 @@ export type AvailableIcon = typeof AVAILABLE_ICONS[number];
 
 export function useCustomTags() {
   const { user } = useAuth();
-  const [customTags, setCustomTags] = useState<CustomTag[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const queryClient = useQueryClient();
+  const customTagsKey = user ? queryKeys.customTags(user.id) : ['customTags', 'anonymous'] as const;
 
-  // Fetch all custom tags for the user
-  const fetchCustomTags = useCallback(async () => {
-    if (!user) {
-      setCustomTags([]);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
+  const {
+    data: customTags = [],
+    isLoading: loading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: customTagsKey,
+    enabled: !!user,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      if (!user) return [];
       const { data, error: fetchError } = await supabase
         .from('custom_tags')
-        .select('*')
+        .select('id, user_id, name, icon, color, sort_order, created_at, updated_at')
         .eq('user_id', user.id)
         .order('sort_order', { ascending: true });
 
       if (fetchError) throw fetchError;
+      return (data || []) as CustomTag[];
+    },
+  });
 
-      setCustomTags((data || []) as CustomTag[]);
-      setError(null);
-    } catch (err) {
-      console.error('Error fetching custom tags:', err);
-      setError(err as Error);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (error) {
+      console.error('Error fetching custom tags:', error);
     }
-  }, [user]);
+  }, [error]);
 
-  // Create a new custom tag
-  const createCustomTag = useCallback(async (input: CreateCustomTagInput): Promise<CustomTag | null> => {
-    if (!user) {
-      toast.error('ログインが必要です');
-      return null;
-    }
+  const createMutation = useMutation({
+    mutationFn: async (input: CreateCustomTagInput): Promise<CustomTag> => {
+      if (!user) throw new Error('ログインが必要です');
 
-    try {
-      // Get current max sort_order
-      const maxOrder = customTags.length > 0 
-        ? Math.max(...customTags.map(t => t.sort_order)) 
+      const maxOrder = customTags.length > 0
+        ? Math.max(...customTags.map(t => t.sort_order))
         : -1;
 
       const { data, error: insertError } = await supabase
@@ -138,69 +134,40 @@ export function useCustomTags() {
         .select()
         .single();
 
-      if (insertError) {
-        if (insertError.code === '23505') {
-          toast.error('同じ名前のタグが既に存在します');
-        } else {
-          throw insertError;
-        }
-        return null;
-      }
-
-      const newTag = data as CustomTag;
-      setCustomTags(prev => [...prev, newTag]);
+      if (insertError) throw insertError;
+      return data as CustomTag;
+    },
+    onSuccess: (newTag) => {
+      queryClient.setQueryData<CustomTag[]>(customTagsKey, (current = []) => [...current, newTag]);
       toast.success('タグを作成しました');
-      return newTag;
-    } catch (err) {
-      console.error('Error creating custom tag:', err);
-      toast.error('タグの作成に失敗しました');
-      return null;
-    }
-  }, [user, customTags]);
+    },
+  });
 
-  // Update an existing custom tag
-  const updateCustomTag = useCallback(async (id: string, input: UpdateCustomTagInput): Promise<boolean> => {
-    if (!user) {
-      toast.error('ログインが必要です');
-      return false;
-    }
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: UpdateCustomTagInput }) => {
+      if (!user) throw new Error('ログインが必要です');
 
-    try {
       const { error: updateError } = await supabase
         .from('custom_tags')
         .update(input)
         .eq('id', id)
         .eq('user_id', user.id);
 
-      if (updateError) {
-        if (updateError.code === '23505') {
-          toast.error('同じ名前のタグが既に存在します');
-        } else {
-          throw updateError;
-        }
-        return false;
-      }
-
-      setCustomTags(prev => prev.map(tag => 
-        tag.id === id ? { ...tag, ...input, updated_at: new Date().toISOString() } : tag
-      ));
+      if (updateError) throw updateError;
+      return { id, input };
+    },
+    onSuccess: ({ id, input }) => {
+      queryClient.setQueryData<CustomTag[]>(customTagsKey, (current = []) =>
+        current.map(tag => tag.id === id ? { ...tag, ...input, updated_at: new Date().toISOString() } : tag),
+      );
       toast.success('タグを更新しました');
-      return true;
-    } catch (err) {
-      console.error('Error updating custom tag:', err);
-      toast.error('タグの更新に失敗しました');
-      return false;
-    }
-  }, [user]);
+    },
+  });
 
-  // Delete a custom tag
-  const deleteCustomTag = useCallback(async (id: string): Promise<boolean> => {
-    if (!user) {
-      toast.error('ログインが必要です');
-      return false;
-    }
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      if (!user) throw new Error('ログインが必要です');
 
-    try {
       const { error: deleteError } = await supabase
         .from('custom_tags')
         .delete()
@@ -208,32 +175,73 @@ export function useCustomTags() {
         .eq('user_id', user.id);
 
       if (deleteError) throw deleteError;
-
-      setCustomTags(prev => prev.filter(tag => tag.id !== id));
+      return id;
+    },
+    onSuccess: (id) => {
+      queryClient.setQueryData<CustomTag[]>(customTagsKey, (current = []) => current.filter(tag => tag.id !== id));
       toast.success('タグを削除しました');
+    },
+  });
+
+  const createCustomTag = useCallback(async (input: CreateCustomTagInput): Promise<CustomTag | null> => {
+    if (!user) {
+      toast.error('ログインが必要です');
+      return null;
+    }
+
+    try {
+      return await createMutation.mutateAsync(input);
+    } catch (err) {
+      console.error('Error creating custom tag:', err);
+      const code = typeof err === 'object' && err !== null && 'code' in err ? String(err.code) : undefined;
+      toast.error(code === '23505' ? '同じ名前のタグが既に存在します' : 'タグの作成に失敗しました');
+      return null;
+    }
+  }, [createMutation, user]);
+
+  const updateCustomTag = useCallback(async (id: string, input: UpdateCustomTagInput): Promise<boolean> => {
+    if (!user) {
+      toast.error('ログインが必要です');
+      return false;
+    }
+
+    try {
+      await updateMutation.mutateAsync({ id, input });
+      return true;
+    } catch (err) {
+      console.error('Error updating custom tag:', err);
+      const code = typeof err === 'object' && err !== null && 'code' in err ? String(err.code) : undefined;
+      toast.error(code === '23505' ? '同じ名前のタグが既に存在します' : 'タグの更新に失敗しました');
+      return false;
+    }
+  }, [updateMutation, user]);
+
+  const deleteCustomTag = useCallback(async (id: string): Promise<boolean> => {
+    if (!user) {
+      toast.error('ログインが必要です');
+      return false;
+    }
+
+    try {
+      await deleteMutation.mutateAsync(id);
       return true;
     } catch (err) {
       console.error('Error deleting custom tag:', err);
       toast.error('タグの削除に失敗しました');
       return false;
     }
-  }, [user]);
+  }, [deleteMutation, user]);
 
   // Get a custom tag by ID
   const getCustomTagById = useCallback((id: string): CustomTag | undefined => {
     return customTags.find(tag => tag.id === id);
   }, [customTags]);
 
-  // Initial fetch
-  useEffect(() => {
-    fetchCustomTags();
-  }, [fetchCustomTags]);
-
   return {
     customTags,
     loading,
     error,
-    fetchCustomTags,
+    fetchCustomTags: refetch,
     createCustomTag,
     updateCustomTag,
     deleteCustomTag,

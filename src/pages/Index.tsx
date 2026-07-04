@@ -79,7 +79,7 @@ const Index = () => {
       {/* Header */}
       <header className="p-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <img src={logoImage} alt="FlowLog" className="h-7 w-7" />
+          <img src={logoImage} alt="FlowLog" decoding="async" className="h-7 w-7" />
           <h1 className="text-2xl font-semibold text-gradient">FlowLog</h1>
         </div>
         <Button 

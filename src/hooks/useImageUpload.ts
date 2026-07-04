@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import imageCompression from 'browser-image-compression';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
@@ -7,6 +8,23 @@ import { useImageStorageSettings } from './useImageStorageSettings';
 const BUCKET_NAME = 'block-images';
 const MAX_IMAGES = 5;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+async function compressImageFile(file: File): Promise<File> {
+  if (file.type === 'image/gif') {
+    return file;
+  }
+
+  try {
+    return await imageCompression(file, {
+      maxSizeMB: 1,
+      maxWidthOrHeight: 2048,
+      useWebWorker: true,
+    });
+  } catch (error) {
+    console.warn('Image compression failed; uploading original file:', error);
+    return file;
+  }
+}
 
 export function useImageUpload() {
   const { user } = useAuth();
@@ -26,7 +44,9 @@ export function useImageUpload() {
     const urls: string[] = [];
 
     for (const file of files) {
-      if (file.size > MAX_FILE_SIZE) {
+      const uploadFile = await compressImageFile(file);
+
+      if (uploadFile.size > MAX_FILE_SIZE) {
         toast.error(`ファイルサイズは10MB以下にしてください: ${file.name}`);
         continue;
       }
@@ -38,7 +58,7 @@ export function useImageUpload() {
         }
 
         const formData = new FormData();
-        formData.append('image', file);
+        formData.append('image', uploadFile, uploadFile.name || file.name);
 
         const { data, error } = await supabase.functions.invoke('gyazo-upload', {
           body: formData,
@@ -54,12 +74,12 @@ export function useImageUpload() {
         continue;
       }
 
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const ext = (uploadFile.name || file.name).split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
       const { data, error } = await supabase.storage
         .from(BUCKET_NAME)
-        .upload(fileName, file, {
+        .upload(fileName, uploadFile, {
           cacheControl: '3600',
           upsert: false,
         });

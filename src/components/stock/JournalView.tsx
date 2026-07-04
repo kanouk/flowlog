@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { Loader2, BookOpen, CalendarDays, ArrowLeft, Trophy, Sunrise, Sun, Sunset, Moon, Sparkles, Copy, Check, Camera, FileText } from 'lucide-react';
+import { BookOpen, CalendarDays, ArrowLeft, Trophy, Sunrise, Sun, Sunset, Moon, Sparkles, Copy, Check, Camera, FileText } from 'lucide-react';
 import { useEntries, Entry, Block } from '@/hooks/useEntries';
 import { getTodayKey } from '@/lib/dateUtils';
 import { useDayBoundary } from '@/contexts/DayBoundaryContext';
@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { parseDiarySections } from '@/lib/diaryParser';
+import { BlockListSkeleton } from '@/components/common/BlockListSkeleton';
 
 interface JournalViewProps {
   entries: Entry[];
@@ -66,6 +67,8 @@ function PhotoMarker({ images }: PhotoMarkerProps) {
               <img
                 src={url}
                 alt={`写真 ${i + 1}`}
+                loading="lazy"
+                decoding="async"
                 className={cn(
                   "object-cover",
                   images.length === 1 ? "max-h-80 w-full max-w-md" : "h-32 w-32 sm:h-40 sm:w-40"
@@ -91,6 +94,7 @@ function PhotoMarker({ images }: PhotoMarkerProps) {
               key={i}
               src={url}
               alt={`写真 ${i + 1}`}
+              decoding="async"
               className="w-full rounded-lg object-contain max-h-[70vh]"
             />
           ))}
@@ -358,9 +362,7 @@ export function JournalView({ entries, selectedDate, onDateSelect, blocks: exter
     return (
       <>
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          </div>
+          <BlockListSkeleton rows={3} />
         ) : !entry?.formatted_content ? (
           <div className="text-center py-12">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-500/10 mb-4">
