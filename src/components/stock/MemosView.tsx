@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Loader2, FileText, Plus } from 'lucide-react';
+import { FileText, Plus } from 'lucide-react';
 import { useEntries, Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
 import { formatTimeWithDayBoundary, formatDisplayDateJST, parseTimestamp } from '@/lib/dateUtils';
@@ -9,9 +9,10 @@ import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { TagFilterDropdown } from './TagFilterDropdown';
 import { BlockEditModal } from '@/components/flow/BlockEditModal';
 import { QuickAddModal } from './QuickAddModal';
-import { icons } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTargetBlockHighlight } from '@/hooks/useTargetBlockHighlight';
+import { getIconComponent } from '@/lib/iconUtils';
+import { BlockListSkeleton } from '@/components/common/BlockListSkeleton';
 
 type TagFilter = 'all' | BlockTag | string;
 
@@ -19,18 +20,6 @@ interface MemosViewProps {
   targetBlockId?: string | null;
   onBlockScrolled?: () => void;
   onSearchCleared?: () => void;
-}
-
-function kebabToPascal(str: string): string {
-  return str
-    .split('-')
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-    .join('');
-}
-
-function getIconComponent(iconName: string) {
-  const pascalName = kebabToPascal(iconName);
-  return (icons as Record<string, React.ComponentType<{ className?: string }>>)[pascalName];
 }
 
 export function MemosView({ targetBlockId, onBlockScrolled, onSearchCleared }: MemosViewProps) {
@@ -134,11 +123,7 @@ export function MemosView({ targetBlockId, onBlockScrolled, onSearchCleared }: M
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
-      </div>
-    );
+    return <BlockListSkeleton rows={5} />;
   }
 
   return (
@@ -221,6 +206,8 @@ export function MemosView({ targetBlockId, onBlockScrolled, onSearchCleared }: M
                             key={i}
                             src={url}
                             alt=""
+                            loading="lazy"
+                            decoding="async"
                             className="w-full aspect-square object-cover rounded-md border border-border"
                           />
                         ))}

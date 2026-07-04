@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 import {
@@ -10,13 +11,14 @@ import {
   getOccurredAtDayKey,
   isFutureDate,
 } from '@/lib/dateUtils';
-import type { BlockCategory, BlockTag } from '@/lib/categoryUtils';
+import type { BlockCategory } from '@/lib/categoryUtils';
 
 export interface UrlMetadata {
   url: string;
   title: string;
   summary: string;
   fetched_at: string;
+  source?: string;
   error?: boolean;
   error_message?: string;
 }
@@ -30,7 +32,7 @@ export interface Block {
   occurred_at: string;
   created_at: string;
   category: BlockCategory;
-  tag: BlockTag | null;
+  tag: string | null;
   is_done: boolean;
   done_at: string | null;
   url_metadata: UrlMetadata | null;
@@ -66,7 +68,7 @@ export interface BlockUpdatePayload {
   content?: string;
   occurred_at?: string;
   category?: BlockCategory;
-  tag?: BlockTag | null;
+  tag?: string | null;
   is_done?: boolean;
   done_at?: string | null;
   images?: string[];
@@ -285,7 +287,7 @@ export function useEntries() {
     mode: AddBlockMode; 
     images?: string[];
     category?: BlockCategory;
-    tag?: BlockTag | null;
+    tag?: string | null;
     starts_at?: string | null;
     ends_at?: string | null;
     is_all_day?: boolean;
@@ -671,8 +673,7 @@ export function useEntries() {
         // DBに保存
         await supabase
           .from('blocks')
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .update({ url_metadata: metadata as any })
+          .update({ url_metadata: metadata as unknown as Json })
           .eq('id', blockId);
 
         return metadata;

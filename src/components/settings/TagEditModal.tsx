@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { icons } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { getIconComponent } from '@/lib/iconUtils';
 import { 
   CustomTag, 
   CreateCustomTagInput, 
@@ -17,19 +17,6 @@ interface TagEditModalProps {
   onOpenChange: (open: boolean) => void;
   tag?: CustomTag; // undefined for create, defined for edit
   onSave: (input: CreateCustomTagInput) => Promise<boolean>;
-}
-
-// アイコン名をPascalCaseに変換
-function kebabToPascal(str: string): string {
-  return str.split('-').map(part => 
-    part.charAt(0).toUpperCase() + part.slice(1)
-  ).join('');
-}
-
-// アイコンコンポーネントを取得
-function getIconComponent(iconName: string) {
-  const pascalName = kebabToPascal(iconName);
-  return (icons as Record<string, React.ComponentType<{ className?: string }>>)[pascalName];
 }
 
 export function TagEditModal({ open, onOpenChange, tag, onSave }: TagEditModalProps) {

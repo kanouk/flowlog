@@ -1,11 +1,41 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-};
+import { corsHeaders } from "../_shared/cors.ts";
 
 const RAINDROP_API = 'https://api.raindrop.io/rest/v1';
+
+interface RaindropItem {
+  link?: string;
+  title?: string;
+  excerpt?: string;
+  created?: string;
+  lastUpdate?: string;
+  cover?: string;
+  tags?: string[];
+}
+
+interface RaindropResponse {
+  items?: RaindropItem[];
+}
+
+interface RaindropUrlMetadata {
+  url: string;
+  title: string;
+  summary: string;
+  fetched_at: string;
+  source: 'raindrop';
+  cover?: string;
+  raindrop_tags?: string[];
+}
+
+interface BlockInsert {
+  user_id: string;
+  entry_id: string;
+  content: string;
+  category: 'read_later';
+  url_metadata: RaindropUrlMetadata;
+  occurred_at: string;
+  is_done: boolean;
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -102,7 +132,7 @@ Deno.serve(async (req) => {
     }
 
     // Fetch raindrops from API
-    let allRaindrops: any[] = [];
+    const allRaindrops: RaindropItem[] = [];
     let page = 0;
     const perPage = 50;
     let hasMore = true;
@@ -123,13 +153,13 @@ Deno.serve(async (req) => {
         throw new Error(`Raindrop API error [${resp.status}]: ${errText}`);
       }
 
-      const data = await resp.json();
+      const data = await resp.json() as RaindropResponse;
       const items = data.items || [];
 
       if (mode === 'diff' && lastSyncedAt) {
         // Filter items newer than last sync
         const syncDate = new Date(lastSyncedAt);
-        const newItems = items.filter((item: any) => new Date(item.lastUpdate || item.created) > syncDate);
+        const newItems = items.filter((item) => new Date(item.lastUpdate || item.created || 0) > syncDate);
         allRaindrops.push(...newItems);
         // If we got items older than sync date, stop
         if (newItems.length < items.length) {
@@ -150,7 +180,7 @@ Deno.serve(async (req) => {
 
     // Filter out already imported URLs and insert new ones
     let importedCount = 0;
-    const blocksToInsert: any[] = [];
+    const blocksToInsert: BlockInsert[] = [];
 
     for (const item of allRaindrops) {
       const url = item.link;
@@ -158,7 +188,7 @@ Deno.serve(async (req) => {
 
       existingUrls.add(url); // Prevent duplicates within this batch
 
-      const urlMetadata: Record<string, any> = {
+      const urlMetadata: RaindropUrlMetadata = {
         url,
         title: item.title || '',
         summary: item.excerpt || '',

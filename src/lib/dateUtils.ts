@@ -157,7 +157,7 @@ export function formatDisplayDateJST(isoString: string, dayBoundaryHour: number 
   }
   
   const dayKey = getOccurredAtDayKey(isoString, dayBoundaryHour);
-  const [y, m, d] = dayKey.split('-').map(Number);
+  const [, m, d] = dayKey.split('-').map(Number);
   return `${m}月${d}日`;
 }
 

@@ -1,9 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
+import { corsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
+import { waitUntil } from "../_shared/edge-runtime.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  ...baseCorsHeaders,
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, mcp-session-id",
 };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -115,11 +116,14 @@ async function authenticateUser(authHeader: string | undefined): Promise<string 
     return null;
   }
   
-  // 最終使用日時を更新
-  await supabase
-    .from("user_api_tokens")
-    .update({ last_used_at: new Date().toISOString() })
-    .eq("token_hash", tokenHash);
+  // 最終使用日時をバックグラウンド更新
+  waitUntil(
+    supabase
+      .from("user_api_tokens")
+      .update({ last_used_at: new Date().toISOString() })
+      .eq("token_hash", tokenHash)
+      .then(() => undefined),
+  );
   
   return tokenData.user_id;
 }
@@ -355,7 +359,7 @@ async function expandPhotoMarkersForContent(userId: string, content: string | nu
       .in("id", [...new Set(legacyIds)]);
 
     if (!error && data) {
-      data.forEach((block: any) => blocksById.set(block.id, { images: block.images || [] }));
+      data.forEach((block: { id: string; images?: string[] | null }) => blocksById.set(block.id, { images: block.images || [] }));
     }
   }
 

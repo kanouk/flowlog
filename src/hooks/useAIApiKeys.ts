@@ -26,6 +26,12 @@ export interface AIApiKeyUpdate {
   api_key?: string;
 }
 
+function getErrorCode(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code: unknown }).code)
+    : undefined;
+}
+
 export function useAIApiKeys() {
   const { user } = useAuth();
   const [keys, setKeys] = useState<AIApiKeySafe[]>([]);
@@ -39,7 +45,7 @@ export function useAIApiKeys() {
       return;
     }
     try {
-      const { data, error } = await (supabase.rpc as any)('get_user_ai_api_keys_safe');
+      const { data, error } = await supabase.rpc('get_user_ai_api_keys_safe');
       if (error) throw error;
       setKeys((data as unknown as AIApiKeySafe[]) || []);
     } catch (error) {
@@ -58,7 +64,7 @@ export function useAIApiKeys() {
     if (!user) return false;
     setSaving(true);
     try {
-      const { error } = await (supabase.from as any)('user_ai_api_keys').insert({
+      const { error } = await supabase.from('user_ai_api_keys').insert({
         user_id: user.id,
         provider: input.provider,
         name: input.name,
@@ -68,9 +74,9 @@ export function useAIApiKeys() {
       await fetchKeys();
       toast.success('APIキーを登録しました');
       return true;
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error creating API key:', error);
-      if (error?.code === '23505') {
+      if (getErrorCode(error) === '23505') {
         toast.error('同じプロバイダー・名前のキーが既に存在します');
       } else {
         toast.error('APIキーの登録に失敗しました');
@@ -89,7 +95,7 @@ export function useAIApiKeys() {
       if (updates.name !== undefined) updateData.name = updates.name;
       if (updates.api_key !== undefined) updateData.api_key = updates.api_key;
 
-      const { error } = await (supabase.from as any)('user_ai_api_keys')
+      const { error } = await supabase.from('user_ai_api_keys')
         .update(updateData)
         .eq('id', id)
         .eq('user_id', user.id);
@@ -110,7 +116,7 @@ export function useAIApiKeys() {
     if (!user) return false;
     setSaving(true);
     try {
-      const { error } = await (supabase.from as any)('user_ai_api_keys')
+      const { error } = await supabase.from('user_ai_api_keys')
         .delete()
         .eq('id', id)
         .eq('user_id', user.id);

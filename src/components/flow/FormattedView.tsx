@@ -49,6 +49,8 @@ function PhotoMarker({ images }: { images: string[] }) {
               <img
                 src={url}
                 alt={`写真 ${i + 1}`}
+                loading="lazy"
+                decoding="async"
                 className={images.length === 1 ? 'max-h-80 w-full max-w-md object-cover' : 'h-32 w-32 object-cover sm:h-40 sm:w-40'}
               />
             </span>
@@ -58,7 +60,7 @@ function PhotoMarker({ images }: { images: string[] }) {
       <DialogContent className="max-w-2xl p-4">
         <div className={`grid gap-2 ${images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
           {images.map((url, i) => (
-            <img key={url} src={url} alt={`写真 ${i + 1}`} className="w-full rounded-lg object-contain max-h-[70vh]" />
+            <img key={url} src={url} alt={`写真 ${i + 1}`} decoding="async" className="w-full rounded-lg object-contain max-h-[70vh]" />
           ))}
         </div>
       </DialogContent>
@@ -247,6 +249,8 @@ export function FormattedView({ entry, blocks, onUpdate }: FormattedViewProps) {
                             key={i}
                             src={url}
                             alt=""
+                            loading="lazy"
+                            decoding="async"
                             className="w-full aspect-square object-cover rounded-md border border-border"
                           />
                         ))}

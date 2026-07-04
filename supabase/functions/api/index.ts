@@ -1,5 +1,7 @@
-import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
+import { Hono, type Context } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
+import { corsHeaders } from "../_shared/cors.ts";
+import { waitUntil } from "../_shared/edge-runtime.ts";
 
 // ベースパスを設定（Edge Functionのパス）
 const app = new Hono().basePath("/api");
@@ -7,14 +9,17 @@ const app = new Hono().basePath("/api");
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 // ===== CORS =====
 app.use("*", async (c, next) => {
   if (c.req.method === "OPTIONS") {
     return new Response(null, {
       headers: {
-        "Access-Control-Allow-Origin": "*",
+        ...corsHeaders,
         "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
       },
     });
   }
@@ -49,11 +54,14 @@ async function authenticateUser(authHeader: string | undefined): Promise<string 
     return null;
   }
   
-  // 最終使用日時を更新
-  await supabase
-    .from("user_api_tokens")
-    .update({ last_used_at: new Date().toISOString() })
-    .eq("token_hash", tokenHash);
+  // 最終使用日時をバックグラウンド更新
+  waitUntil(
+    supabase
+      .from("user_api_tokens")
+      .update({ last_used_at: new Date().toISOString() })
+      .eq("token_hash", tokenHash)
+      .then(() => undefined),
+  );
   
   return tokenData.user_id;
 }
@@ -68,7 +76,7 @@ app.use("/search", authMiddleware);
 app.use("/entries/*", authMiddleware);
 app.use("/blocks/*", authMiddleware);
 
-async function authMiddleware(c: any, next: () => Promise<void>) {
+async function authMiddleware(c: Context, next: () => Promise<void>) {
   const userId = await authenticateUser(c.req.header("Authorization"));
   if (!userId) {
     return c.json({ 
@@ -102,7 +110,7 @@ app.get("/entries/:date", authMiddlewareInline, getEntryHandler);
 app.patch("/blocks/:id", authMiddlewareInline, updateBlock);
 app.delete("/blocks/:id", authMiddlewareInline, deleteBlock);
 
-async function authMiddlewareInline(c: any, next: () => Promise<void>) {
+async function authMiddlewareInline(c: Context, next: () => Promise<void>) {
   const userId = await authenticateUser(c.req.header("Authorization"));
   if (!userId) {
     return c.json({ 
@@ -237,7 +245,7 @@ async function addBlockHelper(
     entry = newEntry;
   }
   
-  const insertData: Record<string, any> = {
+  const insertData: Record<string, unknown> = {
       user_id: userId,
       entry_id: entry.id,
       category: block.category,
@@ -316,7 +324,7 @@ async function expandPhotoMarkersForContent(userId: string, content: string | nu
       .in("id", [...new Set(legacyIds)]);
 
     if (!error && data) {
-      data.forEach((block: any) => blocksById.set(block.id, { images: block.images || [] }));
+      data.forEach((block: { id: string; images?: string[] | null }) => blocksById.set(block.id, { images: block.images || [] }));
     }
   }
 
@@ -739,7 +747,7 @@ app.get("/openapi.json", (c) => {
 });
 
 // Events
-async function listEvents(c: any) {
+async function listEvents(c: Context) {
   try {
     const userId = c.get("userId");
     const { date, start_date, end_date, tag, limit } = c.req.query();
@@ -753,12 +761,12 @@ async function listEvents(c: any) {
     });
     
     return c.json({ success: true, data });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
-async function addEvent(c: any) {
+async function addEvent(c: Context) {
   try {
     const userId = c.get("userId");
     const body = await c.req.json();
@@ -778,13 +786,13 @@ async function addEvent(c: any) {
       success: true, 
       data: { id: block.id, message: "出来事を追加しました" } 
     });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
 // Tasks
-async function listTasks(c: any) {
+async function listTasks(c: Context) {
   try {
     const userId = c.get("userId");
     const { include_completed, tag, limit } = c.req.query();
@@ -796,12 +804,12 @@ async function listTasks(c: any) {
     });
     
     return c.json({ success: true, data });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
-async function addTask(c: any) {
+async function addTask(c: Context) {
   try {
     const userId = c.get("userId");
     const body = await c.req.json();
@@ -823,12 +831,12 @@ async function addTask(c: any) {
       success: true, 
       data: { id: block.id, message: "タスクを追加しました" } 
     });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
-async function completeTask(c: any) {
+async function completeTask(c: Context) {
   try {
     const userId = c.get("userId");
     const taskId = c.req.param("id");
@@ -855,12 +863,12 @@ async function completeTask(c: any) {
       success: true, 
       message: isDone ? "タスクを完了にしました" : "タスクを未完了に戻しました" 
     });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
-async function updateTaskPriority(c: any) {
+async function updateTaskPriority(c: Context) {
   try {
     const userId = c.get("userId");
     const taskId = c.req.param("id");
@@ -884,13 +892,13 @@ async function updateTaskPriority(c: any) {
     }
     
     return c.json({ success: true, message: "優先度を更新しました" });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
 // Schedules
-async function listSchedules(c: any) {
+async function listSchedules(c: Context) {
   try {
     const userId = c.get("userId");
     const { include_past, start_date, end_date, limit } = c.req.query();
@@ -903,12 +911,12 @@ async function listSchedules(c: any) {
     });
     
     return c.json({ success: true, data });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
-async function addSchedule(c: any) {
+async function addSchedule(c: Context) {
   try {
     const userId = c.get("userId");
     const body = await c.req.json();
@@ -935,13 +943,13 @@ async function addSchedule(c: any) {
       success: true, 
       data: { id: block.id, message: "予定を追加しました" } 
     });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
 // Memos
-async function listMemos(c: any) {
+async function listMemos(c: Context) {
   try {
     const userId = c.get("userId");
     const { date, start_date, end_date, tag, limit } = c.req.query();
@@ -955,12 +963,12 @@ async function listMemos(c: any) {
     });
     
     return c.json({ success: true, data });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
-async function addMemo(c: any) {
+async function addMemo(c: Context) {
   try {
     const userId = c.get("userId");
     const body = await c.req.json();
@@ -979,13 +987,13 @@ async function addMemo(c: any) {
       success: true, 
       data: { id: block.id, message: "メモを追加しました" } 
     });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
 // Read Later
-async function listReadLater(c: any) {
+async function listReadLater(c: Context) {
   try {
     const userId = c.get("userId");
     const { filter, tag, limit } = c.req.query();
@@ -997,12 +1005,12 @@ async function listReadLater(c: any) {
     });
     
     return c.json({ success: true, data });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
-async function addReadLater(c: any) {
+async function addReadLater(c: Context) {
   try {
     const userId = c.get("userId");
     const body = await c.req.json();
@@ -1025,12 +1033,12 @@ async function addReadLater(c: any) {
       success: true, 
       data: { id: block.id, message: "あとでリストに追加しました" } 
     });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
-async function markAsReadHandler(c: any) {
+async function markAsReadHandler(c: Context) {
   try {
     const userId = c.get("userId");
     const blockId = c.req.param("id");
@@ -1057,13 +1065,13 @@ async function markAsReadHandler(c: any) {
       success: true, 
       message: isRead ? "既読にしました" : "未読に戻しました" 
     });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
 // Search
-async function search(c: any) {
+async function search(c: Context) {
   try {
     const userId = c.get("userId");
     const { query: searchQuery, category, tag, limit } = c.req.query();
@@ -1080,13 +1088,13 @@ async function search(c: any) {
     });
     
     return c.json({ success: true, data });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
 // Entry
-async function getEntryHandler(c: any) {
+async function getEntryHandler(c: Context) {
   try {
     const userId = c.get("userId");
     const date = c.req.param("date");
@@ -1111,13 +1119,13 @@ async function getEntryHandler(c: any) {
     const formattedContent = await expandPhotoMarkersForContent(userId, data.formatted_content);
     
     return c.json({ success: true, data: { ...data, formatted_content: formattedContent } });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
 // Block Update (generic)
-async function updateBlock(c: any) {
+async function updateBlock(c: Context) {
   try {
     const userId = c.get("userId");
     const blockId = c.req.param("id");
@@ -1126,7 +1134,7 @@ async function updateBlock(c: any) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     // 許可するフィールドのみ更新
-    const updates: Record<string, any> = {};
+    const updates: Record<string, unknown> = {};
     if (body.content !== undefined) updates.content = body.content;
     if (body.tag !== undefined) updates.tag = body.tag;
     if (body.occurred_at !== undefined) updates.occurred_at = body.occurred_at;
@@ -1156,13 +1164,13 @@ async function updateBlock(c: any) {
     }
     
     return c.json({ success: true, message: "ブロックを更新しました" });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 
 // Block Delete
-async function deleteBlock(c: any) {
+async function deleteBlock(c: Context) {
   try {
     const userId = c.get("userId");
     const blockId = c.req.param("id");
@@ -1180,8 +1188,8 @@ async function deleteBlock(c: any) {
     }
     
     return c.json({ success: true, message: "ブロックを削除しました" });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 }
 

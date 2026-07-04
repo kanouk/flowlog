@@ -1,5 +1,4 @@
 import { ChevronDown, Tag } from 'lucide-react';
-import { icons } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,24 +12,13 @@ import {
 import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { CustomTag, TAG_COLORS } from '@/hooks/useCustomTags';
 import { cn } from '@/lib/utils';
+import { getIconComponent } from '@/lib/iconUtils';
 
 interface TagFilterDropdownProps {
   value: string | null; // 'all' | BlockTag | customTagId
   onChange: (value: string | null) => void;
   customTags?: CustomTag[];
   className?: string;
-}
-
-function kebabToPascal(str: string): string {
-  return str
-    .split('-')
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-    .join('');
-}
-
-function getIconComponent(iconName: string) {
-  const pascalName = kebabToPascal(iconName);
-  return (icons as Record<string, React.ComponentType<{ className?: string }>>)[pascalName] || Tag;
 }
 
 function isBaseTag(value: string | null): value is BlockTag {

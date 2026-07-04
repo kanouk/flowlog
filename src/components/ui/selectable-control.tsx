@@ -38,7 +38,7 @@ const SelectableControl = React.forwardRef<HTMLButtonElement, SelectableControlP
       ref={ref}
       type={type}
       data-state={selected ? "on" : "off"}
-      aria-pressed={selected}
+      aria-pressed={selected ?? undefined}
       className={cn(selectableControlVariants({ appearance, size, selected }), className)}
       {...props}
     />

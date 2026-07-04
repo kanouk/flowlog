@@ -5,7 +5,7 @@ import { useExternalSync } from '@/hooks/useExternalSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, CloudRain, Check, Trash2, RefreshCw } from 'lucide-react';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 export function RaindropIntegrationSection() {
   const { user } = useAuth();
@@ -51,7 +51,7 @@ export function RaindropIntegrationSection() {
 
       setHasToken(true);
       setToken('');
-      toast({ title: 'トークンを保存しました', description: '初期同期を開始します...' });
+      toast.success('トークンを保存しました', { description: '初期同期を開始します...' });
 
       // Trigger initial full sync
       const result = await syncRaindrop('full');
@@ -59,10 +59,8 @@ export function RaindropIntegrationSection() {
         setLastSynced(new Date().toISOString());
       }
     } catch (err) {
-      toast({
-        title: '保存エラー',
+      toast.error('保存エラー', {
         description: err instanceof Error ? err.message : '保存に失敗しました',
-        variant: 'destructive',
       });
     } finally {
       setSaving(false);
@@ -78,12 +76,12 @@ export function RaindropIntegrationSection() {
       .eq('service', 'raindrop');
 
     if (error) {
-      toast({ title: '削除エラー', variant: 'destructive' });
+      toast.error('削除エラー');
       return;
     }
     setHasToken(false);
     setLastSynced(null);
-    toast({ title: 'Raindrop連携を解除しました' });
+    toast.success('Raindrop連携を解除しました');
   };
 
   const handleManualSync = async () => {

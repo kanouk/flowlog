@@ -3,11 +3,13 @@ import { Loader2 } from 'lucide-react';
 import { FlowInput } from '@/components/flow/FlowInput';
 import { BlockList } from '@/components/flow/BlockList';
 import { DateNavigation } from '@/components/flow/DateNavigation';
+import { BlockListSkeleton } from '@/components/common/BlockListSkeleton';
+import { useDelayedFlag } from '@/components/common/useDelayedFlag';
 import { TimeQuestion, getTimeFromTimeframe, Timeframe } from '@/components/flow/TimeQuestion';
 import { useEntries, Block, Entry, AddBlockMode, BlockUpdatePayload, TimeQuestion as TimeQuestionType } from '@/hooks/useEntries';
 import { toast } from 'sonner';
 import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDisplayDateJST, calculateMiddleOccurredAt, createOccurredAt } from '@/lib/dateUtils';
-import { BlockCategory, BlockTag } from '@/lib/categoryUtils';
+import { BlockCategory } from '@/lib/categoryUtils';
 import { arrayMove } from '@dnd-kit/sortable';
 import { useTargetBlockHighlight } from '@/hooks/useTargetBlockHighlight';
 import { useDayBoundary } from '@/contexts/DayBoundaryContext';
@@ -42,6 +44,8 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
   const today = getTodayKey(dayBoundaryHour);
   const isToday = selectedDate === today;
   const dateSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const loadRequestIdRef = useRef(0);
+  const hasLoadedOnceRef = useRef(false);
 
   const { 
     formatting, 
@@ -56,19 +60,37 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
 
   const [entry, setEntry] = useState<Entry | null>(null);
   const [blocks, setBlocks] = useState<Block[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [pendingQuestions, setPendingQuestions] = useState<TimeQuestionType[]>([]);
+  const showInitialSkeleton = useDelayedFlag(initialLoading, 150);
 
   const loadData = useCallback(async () => {
-    setLoading(true);
+    const requestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestId;
+    const isInitialLoad = !hasLoadedOnceRef.current;
+
+    if (isInitialLoad) {
+      setInitialLoading(true);
+    } else {
+      setRefreshing(true);
+    }
+
     try {
-      const entryData = await getEntry(selectedDate);
+      const [entryData, blocksData] = await Promise.all([
+        getEntry(selectedDate),
+        getBlocksByDate(selectedDate, dayBoundaryHour),
+      ]);
+      if (loadRequestIdRef.current !== requestId) return;
+
       setEntry(entryData);
-      
-      const blocksData = await getBlocksByDate(selectedDate, dayBoundaryHour);
       setBlocks(blocksData);
     } finally {
-      setLoading(false);
+      if (loadRequestIdRef.current === requestId) {
+        hasLoadedOnceRef.current = true;
+        setInitialLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [selectedDate, getEntry, getBlocksByDate, dayBoundaryHour]);
 
@@ -80,7 +102,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
 
   useTargetBlockHighlight({
     targetBlockId,
-    enabled: !loading && blocks.length > 0,
+    enabled: !initialLoading && blocks.length > 0,
     onTargetHandled: onBlockScrolled,
     onHighlightCleared: onSearchCleared,
   });
@@ -219,7 +241,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     mode: AddBlockMode, 
     images: string[] = [], 
     category: BlockCategory = 'event', 
-    tag: BlockTag | null = null,
+    tag: string | null = null,
     scheduleData?: {
       starts_at: string | null;
       ends_at: string | null;
@@ -471,10 +493,15 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     }
   };
 
-  if (loading) {
+  if (initialLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="space-y-6">
+        <DateNavigation
+          selectedDate={selectedDate}
+          onDateChange={onDateChange}
+          datesWithEntries={datesWithEntries}
+        />
+        {showInitialSkeleton ? <BlockListSkeleton /> : null}
       </div>
     );
   }
@@ -520,10 +547,10 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
           </span>
         </div>
         
-        {formatting && (
+        {(refreshing || formatting) && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" />
-            日記生成中...
+            {refreshing ? '更新中...' : '日記生成中...'}
           </div>
         )}
       </div>

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 const SYNC_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -28,8 +28,7 @@ export function useExternalSync() {
       lastSyncRef.current = Date.now();
 
       if (data?.imported > 0) {
-        toast({
-          title: 'Raindrop同期完了',
+        toast.success('Raindrop同期完了', {
           description: `${data.imported}件のブックマークをインポートしました`,
         });
       }
@@ -38,10 +37,8 @@ export function useExternalSync() {
     } catch (err) {
       console.error('Raindrop sync error:', err);
       if (mode === 'full') {
-        toast({
-          title: '同期エラー',
+        toast.error('同期エラー', {
           description: err instanceof Error ? err.message : '同期に失敗しました',
-          variant: 'destructive',
         });
       }
       return null;

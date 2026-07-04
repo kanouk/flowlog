@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
 import { Plus } from 'lucide-react';
-import { icons } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +13,7 @@ import {
 import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { CustomTag, TAG_COLORS, CreateCustomTagInput } from '@/hooks/useCustomTags';
 import { TagEditModal } from '@/components/settings/TagEditModal';
+import { getIconComponent } from '@/lib/iconUtils';
 
 interface TagDropdownProps {
   value: string | null;
@@ -25,17 +25,6 @@ interface TagDropdownProps {
 
 const RECENT_TAGS_KEY = 'flowlog_recent_tags';
 const MAX_VISIBLE_TAGS = 5;
-
-function kebabToPascal(str: string): string {
-  return str.split('-').map(part => 
-    part.charAt(0).toUpperCase() + part.slice(1)
-  ).join('');
-}
-
-function getIconComponent(iconName: string) {
-  const pascalName = kebabToPascal(iconName);
-  return (icons as Record<string, React.ComponentType<{ className?: string }>>)[pascalName];
-}
 
 function isBaseTag(value: string | null): value is BlockTag {
   return value !== null && TAGS.includes(value as BlockTag);

@@ -28,7 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { useAIModels, AIModelSafe, AIModelProvider, AIModelInsert } from '@/hooks/useAIModels';
+import { useAIModels, AIModelSafe, AIModelProvider } from '@/hooks/useAIModels';
 import { useAIApiKeys, AIApiKeySafe, AIApiKeyProvider } from '@/hooks/useAIApiKeys';
 import {
   Bot, Plus, Pencil, Trash2, Loader2, CheckCircle, XCircle, Zap,

@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
 import { Loader2, Bookmark, ExternalLink, Sparkles, RefreshCw, FileText, Circle, CheckCircle2, AlertCircle, Plus, CloudDownload } from 'lucide-react';
-import { icons } from 'lucide-react';
 import { useEntries, Block, UrlMetadata } from '@/hooks/useEntries';
 import { formatTimeWithDayBoundary, formatDisplayDateJST, formatTimeJST, formatDateJST, parseTimestamp } from '@/lib/dateUtils';
 import { useDayBoundary } from '@/contexts/DayBoundaryContext';
@@ -12,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useTargetBlockHighlight } from '@/hooks/useTargetBlockHighlight';
 import { useExternalSync } from '@/hooks/useExternalSync';
+import { getIconComponent } from '@/lib/iconUtils';
+import { BlockListSkeleton } from '@/components/common/BlockListSkeleton';
 
 type TagFilter = 'all' | BlockTag | string;
 type ReadFilter = 'all' | 'unread' | 'read';
@@ -20,18 +21,6 @@ interface ReadLaterViewProps {
   targetBlockId?: string | null;
   onBlockScrolled?: () => void;
   onSearchCleared?: () => void;
-}
-
-function kebabToPascal(str: string): string {
-  return str
-    .split('-')
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-    .join('');
-}
-
-function getIconComponent(iconName: string) {
-  const pascalName = kebabToPascal(iconName);
-  return (icons as Record<string, React.ComponentType<{ className?: string }>>)[pascalName];
 }
 
 /**
@@ -75,7 +64,7 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
   const { dayBoundaryHour } = useDayBoundary();
   const { getBlocksByCategory, summarizeUrl, updateBlock } = useEntries();
   const { customTags } = useCustomTags();
-  const { syncRaindrop, syncing: raindropSyncing, hasRaindropToken } = useExternalSync();
+  const { syncRaindrop, hasRaindropToken } = useExternalSync();
   
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
@@ -244,11 +233,7 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
   const readCount = blocks.filter(b => b.is_done).length;
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-green-500" />
-      </div>
-    );
+    return <BlockListSkeleton rows={5} />;
   }
 
   return (
@@ -475,6 +460,8 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
                             key={i}
                             src={url}
                             alt=""
+                            loading="lazy"
+                            decoding="async"
                             className="w-full aspect-square object-cover rounded-md border border-border"
                           />
                         ))}
@@ -486,7 +473,7 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
                       <span>{formatDisplayDateJST(block.occurred_at, dayBoundaryHour)}</span>
                       <span>•</span>
                       <span>{formatTimeWithDayBoundary(block.occurred_at, dayBoundaryHour)}</span>
-                      {block.url_metadata && (block.url_metadata as any).source === 'raindrop' && (
+                      {block.url_metadata?.source === 'raindrop' && (
                         <>
                           <span>•</span>
                           <span className="inline-flex items-center gap-1 text-blue-500/70 dark:text-blue-400/70">

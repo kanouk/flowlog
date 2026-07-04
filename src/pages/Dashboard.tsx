@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useEntries, Entry } from '@/hooks/useEntries';
@@ -157,7 +157,7 @@ function DashboardContent() {
             onClick={handleLogoClick}
             className="flex items-center gap-2 hover:opacity-80 transition-opacity"
           >
-            <img src={logoImage} alt="FlowLog" className="h-7 w-7" />
+            <img src={logoImage} alt="FlowLog" decoding="async" className="h-7 w-7" />
             <h1 className="text-xl font-semibold text-gradient hidden sm:block">FlowLog</h1>
           </button>
 

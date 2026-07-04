@@ -11,8 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDateJST, formatDisplayDateJST, calculateMiddleOccurredAt } from '@/lib/dateUtils';
-import { BlockCategory, BlockTag } from '@/lib/categoryUtils';
+import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDisplayDateJST, calculateMiddleOccurredAt } from '@/lib/dateUtils';
+import { BlockCategory } from '@/lib/categoryUtils';
 import { arrayMove } from '@dnd-kit/sortable';
 import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 
@@ -79,7 +79,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     mode: AddBlockMode, 
     images: string[] = [], 
     category: BlockCategory = 'event', 
-    tag: BlockTag | null = null,
+    tag: string | null = null,
     scheduleData?: {
       starts_at: string | null;
       ends_at: string | null;
