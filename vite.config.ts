@@ -25,15 +25,6 @@ export default defineConfig(() => ({
   },
   build: {
     rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (!id.includes("node_modules")) return;
-          if (id.includes("react-router-dom")) return "router";
-          if (id.includes("react") || id.includes("react-dom")) return "vendor";
-          if (id.includes("@supabase/supabase-js")) return "supabase";
-          if (id.includes("recharts")) return "charts";
-        },
-      },
       plugins: [
         visualizer({
           filename: "stats.html",
