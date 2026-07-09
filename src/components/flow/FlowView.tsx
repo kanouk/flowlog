@@ -45,7 +45,9 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
   const isToday = selectedDate === today;
   const dateSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const loadRequestIdRef = useRef(0);
-  const hasLoadedOnceRef = useRef(false);
+  // 現在表示中のデータがどの日付のものか。selectedDate と異なる間は
+  // 古い日付のブロックを見せず、スケルトン表示に切り替える
+  const loadedDateRef = useRef<string | null>(null);
 
   const { 
     formatting, 
@@ -68,7 +70,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
   const loadData = useCallback(async () => {
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
-    const isInitialLoad = !hasLoadedOnceRef.current;
+    const isInitialLoad = loadedDateRef.current !== selectedDate;
 
     if (isInitialLoad) {
       setInitialLoading(true);
@@ -87,7 +89,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       setBlocks(blocksData);
     } finally {
       if (loadRequestIdRef.current === requestId) {
-        hasLoadedOnceRef.current = true;
+        loadedDateRef.current = selectedDate;
         setInitialLoading(false);
         setRefreshing(false);
       }
@@ -100,9 +102,14 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     setPendingQuestions([]);
   }, [loadData, selectedDate]);
 
+  // 表示中のブロックが selectedDate のものになるまでは古い日付のデータを見せない
+  // （ref の更新は selectedDate 変更による再レンダー時に評価される）
+  const isDateStale = loadedDateRef.current !== selectedDate;
+  const showLoadingState = initialLoading || isDateStale;
+
   useTargetBlockHighlight({
     targetBlockId,
-    enabled: !initialLoading && blocks.length > 0,
+    enabled: !showLoadingState && blocks.length > 0,
     onTargetHandled: onBlockScrolled,
     onHighlightCleared: onSearchCleared,
   });
@@ -493,77 +500,70 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     }
   };
 
-  if (initialLoading) {
-    return (
-      <div className="space-y-6">
-        <DateNavigation
-          selectedDate={selectedDate}
-          onDateChange={onDateChange}
-          datesWithEntries={datesWithEntries}
-        />
-        {showInitialSkeleton ? <BlockListSkeleton /> : null}
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6" onTouchStart={handleDateSwipeStart} onTouchEnd={handleDateSwipeEnd}>
-      <DateNavigation 
+      <DateNavigation
         selectedDate={selectedDate}
         onDateChange={onDateChange}
         datesWithEntries={datesWithEntries}
       />
 
-      <FlowInput 
+      <FlowInput
         onSubmit={handleAddBlock}
         selectedDate={selectedDate}
         isToday={isToday}
       />
 
-      {pendingQuestions.length > 0 && (
-        <div className="space-y-2">
-          {pendingQuestions.map(q => (
-            <TimeQuestion
-              key={q.block_id}
-              blockId={q.block_id}
-              contentPreview={q.content_preview}
-              question={q.question}
-              onAnswer={handleTimeAnswer}
-              onAnswerExactTime={handleExactTimeAnswer}
-              onDismiss={handleTimeDismiss}
-            />
-          ))}
-        </div>
-      )}
-      
-      <div className="flex items-center justify-between pb-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          <div className="w-1 h-5 rounded-full bg-primary/60" />
-          <h3 className="text-base font-medium text-foreground">
-            {isToday ? '今日のログ' : 'この日のログ'}
-          </h3>
-          <span className="text-xs text-muted-foreground">
-            {blocks.length > 0 ? `${blocks.length}件` : ''}
-          </span>
-        </div>
-        
-        {(refreshing || formatting) && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            {refreshing ? '更新中...' : '日記生成中...'}
+      {showLoadingState ? (
+        showInitialSkeleton ? <BlockListSkeleton /> : null
+      ) : (
+        <>
+          {pendingQuestions.length > 0 && (
+            <div className="space-y-2">
+              {pendingQuestions.map(q => (
+                <TimeQuestion
+                  key={q.block_id}
+                  blockId={q.block_id}
+                  contentPreview={q.content_preview}
+                  question={q.question}
+                  onAnswer={handleTimeAnswer}
+                  onAnswerExactTime={handleExactTimeAnswer}
+                  onDismiss={handleTimeDismiss}
+                />
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pb-3 border-b border-border">
+            <div className="flex items-center gap-2">
+              <div className="w-1 h-5 rounded-full bg-primary/60" />
+              <h3 className="text-base font-medium text-foreground">
+                {isToday ? '今日のログ' : 'この日のログ'}
+              </h3>
+              <span className="text-xs text-muted-foreground">
+                {blocks.length > 0 ? `${blocks.length}件` : ''}
+              </span>
+            </div>
+
+            {(refreshing || formatting) && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                {refreshing ? '更新中...' : '日記生成中...'}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-      
-      <BlockList 
-        blocks={blocks}
-        onDelete={handleDeleteBlock}
-        onUpdate={handleUpdateBlock}
-        onDragEnd={handleDragEnd}
-        selectedDate={selectedDate}
-        highlightQuery={searchQuery}
-        dayBoundaryHour={dayBoundaryHour}
-      />
+
+          <BlockList
+            blocks={blocks}
+            onDelete={handleDeleteBlock}
+            onUpdate={handleUpdateBlock}
+            onDragEnd={handleDragEnd}
+            selectedDate={selectedDate}
+            highlightQuery={searchQuery}
+            dayBoundaryHour={dayBoundaryHour}
+          />
+        </>
+      )}
     </div>
   );
 }

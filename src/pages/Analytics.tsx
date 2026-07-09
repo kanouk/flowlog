@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAuth } from '@/hooks/useAuth';
+import { AppSplash } from '@/components/common/AppSplash';
 import { useAnalytics, type PeriodDays } from '@/hooks/useAnalytics';
 import { format, parseISO } from 'date-fns';
 import {
@@ -43,8 +45,17 @@ function formatDateAxis(dateStr: string) {
 
 export default function Analytics() {
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [days, setDays] = useState<PeriodDays>(30);
   const { scoreData, categoryData, dailyActivity, streakInfo, completionStats, isLoading } = useAnalytics(days);
+
+  if (authLoading) {
+    return <AppSplash />;
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
 
   return (
     <div className="min-h-screen bg-background">
