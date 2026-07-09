@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, PenLine, Sparkles, Layers, History, CalendarDays, FileText, CheckSquare, Bookmark } from 'lucide-react';
@@ -10,14 +9,12 @@ const Index = () => {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
 
-  useEffect(() => {
-    if (!loading && user) {
-      navigate('/dashboard');
-    }
-  }, [user, loading, navigate]);
-
   if (loading) {
     return <AppSplash />;
+  }
+
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   const categories = [
