@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "test": "TZ=Asia/Tokyo vitest run",
     "test:watch": "TZ=Asia/Tokyo vitest",
+    "migrate:image-references": "node scripts/migrate-image-references.mjs",
     "analyze": "vite build",
     "preview": "vite preview"
   },

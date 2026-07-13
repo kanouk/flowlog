@@ -75,6 +75,7 @@ app.use("/read-later/*", authMiddleware);
 app.use("/search", authMiddleware);
 app.use("/entries/*", authMiddleware);
 app.use("/blocks/*", authMiddleware);
+app.use("/image-reference-migrations", authMiddleware);
 
 async function authMiddleware(c: Context, next: () => Promise<void>) {
   const userId = await authenticateUser(c.req.header("Authorization"));
@@ -109,6 +110,7 @@ app.get("/search", authMiddlewareInline, search);
 app.get("/entries/:date", authMiddlewareInline, getEntryHandler);
 app.patch("/blocks/:id", authMiddlewareInline, updateBlock);
 app.delete("/blocks/:id", authMiddlewareInline, deleteBlock);
+app.post("/image-reference-migrations", authMiddlewareInline, migrateImageReferences);
 
 async function authMiddlewareInline(c: Context, next: () => Promise<void>) {
   const userId = await authenticateUser(c.req.header("Authorization"));
@@ -1164,6 +1166,189 @@ async function updateBlock(c: Context) {
     }
     
     return c.json({ success: true, message: "ブロックを更新しました" });
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
+  }
+}
+
+type ImageReferenceMapping = {
+  flowlog_block_id: string;
+  flowlog_image_index: number;
+  source_url: string;
+  image_url: string;
+};
+
+function isHttpUrl(value: unknown): value is string {
+  return typeof value === "string" && /^https?:\/\/[^\s]+$/.test(value);
+}
+
+function replaceEntryPhotoReferences(
+  content: string | null,
+  mappings: ImageReferenceMapping[],
+  finalImagesByBlock: Map<string, string[]>,
+): string | null {
+  if (!content) return content;
+  let updated = content;
+
+  for (const mapping of mappings) {
+    updated = updated.replaceAll(`{{PHOTO:${mapping.source_url}}}`, `{{PHOTO:${mapping.image_url}}}`);
+  }
+
+  for (const blockId of new Set(mappings.map((mapping) => mapping.flowlog_block_id))) {
+    const marker = new RegExp(`\\{\\{PHOTO:${blockId.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}:\\d+\\}\\}`, "g");
+    const replacement = (finalImagesByBlock.get(blockId) || [])
+      .filter(isHttpUrl)
+      .map((url) => `{{PHOTO:${url}}}`)
+      .join("\n");
+    if (replacement) updated = updated.replace(marker, replacement);
+  }
+
+  return updated;
+}
+
+// Safely migrate known image slots. The complete batch is validated before any write,
+// and a repeated request is a no-op when every slot already contains image_url.
+async function migrateImageReferences(c: Context) {
+  try {
+    const userId = c.get("userId");
+    const body = await c.req.json();
+    const mappings = body.mappings as ImageReferenceMapping[];
+    const startDate = body.start_date;
+    const endDate = body.end_date;
+    const dryRun = body.dry_run !== false;
+
+    if (!Array.isArray(mappings) || mappings.length === 0 || mappings.length > 500) {
+      return c.json({ success: false, error: "mappings must contain 1 to 500 items" }, 400);
+    }
+    if (typeof startDate !== "string" || typeof endDate !== "string" || startDate > endDate) {
+      return c.json({ success: false, error: "valid start_date and end_date are required" }, 400);
+    }
+
+    const slotKeys = new Set<string>();
+    for (const mapping of mappings) {
+      const slotKey = `${mapping.flowlog_block_id}:${mapping.flowlog_image_index}`;
+      if (!/^[0-9a-f-]{36}$/i.test(mapping.flowlog_block_id) ||
+          !Number.isInteger(mapping.flowlog_image_index) || mapping.flowlog_image_index < 1 || mapping.flowlog_image_index > 5 ||
+          !isHttpUrl(mapping.source_url) || !isHttpUrl(mapping.image_url) || mapping.source_url === mapping.image_url ||
+          slotKeys.has(slotKey)) {
+        return c.json({ success: false, error: `invalid or duplicate mapping: ${slotKey}` }, 400);
+      }
+      slotKeys.add(slotKey);
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const blockIds = [...new Set(mappings.map((mapping) => mapping.flowlog_block_id))];
+    const { data: blocks, error: blockError } = await supabase
+      .from("blocks")
+      .select("id, entry_id, images, entries!inner(id, date, formatted_content)")
+      .eq("user_id", userId)
+      .in("id", blockIds);
+    if (blockError) throw new Error(`Failed to fetch migration blocks: ${blockError.message}`);
+
+    const blocksById = new Map((blocks || []).map((block: Record<string, unknown>) => [block.id as string, block]));
+    const errors: Array<Record<string, unknown>> = [];
+    const finalImagesByBlock = new Map<string, string[]>();
+    let alreadyMigratedImages = 0;
+
+    for (const blockId of blockIds) {
+      const block = blocksById.get(blockId);
+      if (!block) {
+        errors.push({ block_id: blockId, reason: "block_not_found" });
+        continue;
+      }
+      const entryValue = block.entries as Record<string, unknown> | Record<string, unknown>[];
+      const entry = Array.isArray(entryValue) ? entryValue[0] : entryValue;
+      const entryDate = entry?.date as string | undefined;
+      if (!entryDate || entryDate < startDate || entryDate > endDate) {
+        errors.push({ block_id: blockId, reason: "outside_date_range", entry_date: entryDate });
+        continue;
+      }
+      const images = [...((block.images as string[] | null) || [])];
+      for (const mapping of mappings.filter((item) => item.flowlog_block_id === blockId)) {
+        const index = mapping.flowlog_image_index - 1;
+        const current = images[index];
+        if (current === mapping.image_url) {
+          alreadyMigratedImages += 1;
+        } else if (current === mapping.source_url) {
+          images[index] = mapping.image_url;
+        } else {
+          errors.push({
+            block_id: blockId,
+            image_index: mapping.flowlog_image_index,
+            reason: "source_url_mismatch",
+            expected: mapping.source_url,
+            actual: current ?? null,
+          });
+        }
+      }
+      finalImagesByBlock.set(blockId, images);
+    }
+
+    if (errors.length > 0) {
+      return c.json({ success: false, error: "migration validation failed", mismatches: errors }, 409);
+    }
+
+    const blockBackups: Array<Record<string, unknown>> = [];
+    const entryPlans = new Map<string, { id: string; before: string | null; after: string | null; mappings: ImageReferenceMapping[] }>();
+    let updatedImages = 0;
+
+    for (const blockId of blockIds) {
+      const block = blocksById.get(blockId)!;
+      const before = [...((block.images as string[] | null) || [])];
+      const after = finalImagesByBlock.get(blockId)!;
+      const blockMappings = mappings.filter((mapping) => mapping.flowlog_block_id === blockId);
+      const changed = before.some((url, index) => url !== after[index]);
+      updatedImages += blockMappings.filter((mapping) => before[mapping.flowlog_image_index - 1] === mapping.source_url).length;
+      blockBackups.push({ id: blockId, entry_id: block.entry_id, images: before, after_images: after, changed });
+
+      const entryValue = block.entries as Record<string, unknown> | Record<string, unknown>[];
+      const entry = Array.isArray(entryValue) ? entryValue[0] : entryValue;
+      const entryId = entry.id as string;
+      const existing = entryPlans.get(entryId);
+      if (existing) {
+        existing.mappings.push(...blockMappings);
+      } else {
+        entryPlans.set(entryId, {
+          id: entryId,
+          before: (entry.formatted_content as string | null) ?? null,
+          after: null,
+          mappings: [...blockMappings],
+        });
+      }
+    }
+
+    for (const plan of entryPlans.values()) {
+      plan.after = replaceEntryPhotoReferences(plan.before, plan.mappings, finalImagesByBlock);
+    }
+
+    if (!dryRun) {
+      for (const backup of blockBackups) {
+        if (!backup.changed) continue;
+        const { error } = await supabase.from("blocks").update({ images: backup.after_images }).eq("id", backup.id).eq("user_id", userId);
+        if (error) throw new Error(`Failed to update block ${backup.id}: ${error.message}`);
+      }
+      for (const plan of entryPlans.values()) {
+        if (plan.before === plan.after) continue;
+        const { error } = await supabase.from("entries").update({ formatted_content: plan.after }).eq("id", plan.id).eq("user_id", userId);
+        if (error) throw new Error(`Failed to update entry ${plan.id}: ${error.message}`);
+      }
+    }
+
+    const entryBackups = [...entryPlans.values()].map(({ id, before, after }) => ({ id, formatted_content: before, after_formatted_content: after, changed: before !== after }));
+    return c.json({
+      success: true,
+      dry_run: dryRun,
+      counts: {
+        mappings: mappings.length,
+        blocks: blockIds.length,
+        updated_blocks: blockBackups.filter((item) => item.changed).length,
+        updated_images: updatedImages,
+        already_migrated_images: alreadyMigratedImages,
+        entries: entryBackups.length,
+        updated_entries: entryBackups.filter((item) => item.changed).length,
+      },
+      backups: { blocks: blockBackups, entries: entryBackups },
+    });
   } catch (error) {
     return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
