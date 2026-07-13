@@ -14,6 +14,7 @@ dist-ssr
 .env
 *.tsbuildinfo
 stats.html
+.migration-backups/
 
 # Editor directories and files
 .vscode/*

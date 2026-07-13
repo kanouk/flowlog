@@ -41,7 +41,13 @@ const response = await fetch(`${apiBase}/image-reference-migrations`, {
     mappings,
   }),
 });
-const result = await response.json();
+const responseText = await response.text();
+let result;
+try {
+  result = JSON.parse(responseText);
+} catch {
+  throw new Error(`Migration API returned ${response.status}: ${responseText.slice(0, 500)}`);
+}
 if (!response.ok || !result.success) {
   console.error(JSON.stringify(result, null, 2));
   process.exitCode = 1;
