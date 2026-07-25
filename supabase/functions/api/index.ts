@@ -112,6 +112,7 @@ app.patch("/blocks/:id", authMiddlewareInline, updateBlock);
 app.delete("/blocks/:id", authMiddlewareInline, deleteBlock);
 app.post("/image-reference-migrations", authMiddlewareInline, migrateImageReferences);
 app.post("/capture", authMiddlewareInline, captureHandler);
+app.post("/capture-image", authMiddlewareInline, captureImageHandler);
 
 async function authMiddlewareInline(c: Context, next: () => Promise<void>) {
   const userId = await authenticateUser(c.req.header("Authorization"));
@@ -220,6 +221,7 @@ async function addBlockHelper(
     due_at?: string;
     due_all_day?: boolean;
     source?: string;
+    images?: string[];
   }
 ) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -264,6 +266,7 @@ async function addBlockHelper(
   if (block.due_at !== undefined) insertData.due_at = block.due_at;
   if (block.due_all_day !== undefined) insertData.due_all_day = block.due_all_day;
   if (block.source !== undefined) insertData.source = block.source;
+  if (block.images !== undefined) insertData.images = block.images;
 
   const { data, error } = await supabase
     .from("blocks")
@@ -383,6 +386,11 @@ app.get("/docs", (c) => {
         method: "POST", path: "/capture",
         description: "捕獲口。形式判別のみ行い、URLを含むテキストは「あとで」、それ以外は出来事として保存する。意味の分類はしない",
         body: { text: "string (required)", source: "string? (mac-cli / raycast / share / watch-voice / alexa など)", occurred_at: "string? (ISO8601)" },
+      },
+      {
+        method: "POST", path: "/capture-image",
+        description: "写真の捕獲口。画像ストレージ設定（Gyazo / Supabase Storage）に従ってアップロードし、画像つき出来事としてフローに保存する。multipart/form-data（image / comment? / source?）または image/* 生ボディ（?source=）を受ける",
+        body: { image: "file (required)", comment: "string?", source: "string?" },
       },
       {
         method: "POST", path: "/events",
@@ -602,6 +610,19 @@ app.get("/openapi.json", (c) => {
             content: { "application/json": { schema: { type: "object", required: ["text"], properties: { text: { type: "string" }, source: { type: "string" }, occurred_at: { type: "string", format: "date-time" } } } } },
           },
           responses: { "200": { description: "Created", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean", example: true }, data: { type: "object", properties: { id: { type: "string", format: "uuid" }, routed_to: { type: "string", enum: ["read_later", "event"] }, message: { type: "string" } } } } } } } } },
+        },
+      },
+      "/capture-image": {
+        post: {
+          summary: "写真の捕獲口（画像ストレージ設定に従いアップロード→画像つき出来事）",
+          requestBody: {
+            required: true,
+            content: {
+              "multipart/form-data": { schema: { type: "object", required: ["image"], properties: { image: { type: "string", format: "binary" }, comment: { type: "string" }, source: { type: "string" } } } },
+              "image/*": { schema: { type: "string", format: "binary" } },
+            },
+          },
+          responses: { "200": { description: "Created", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean", example: true }, data: { type: "object", properties: { id: { type: "string", format: "uuid" }, routed_to: { type: "string", enum: ["event"] }, image_url: { type: "string", format: "uri" }, message: { type: "string" } } } } } } } } },
         },
       },
       "/events": {
@@ -839,6 +860,106 @@ async function captureHandler(c: Context) {
   } catch (error) {
     return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
+}
+
+// 写真キャプチャ（画像を受けてGyazoへ上げ、画像つきイベントとしてフローに落とす）
+async function captureImageHandler(c: Context) {
+  try {
+    const userId = c.get("userId");
+    const contentType = c.req.header("Content-Type") || "";
+
+    let imageBlob: Blob | null = null;
+    let fileName = "capture.jpg";
+    let comment = "";
+    let source: string | undefined;
+
+    if (contentType.startsWith("multipart/form-data")) {
+      const form = await c.req.formData();
+      const file = form.get("image") ?? form.get("file");
+      if (file instanceof File) {
+        imageBlob = file;
+        fileName = file.name || fileName;
+      }
+      comment = typeof form.get("comment") === "string" ? (form.get("comment") as string).trim() : "";
+      source = normalizeSource(form.get("source"));
+    } else if (contentType.startsWith("image/")) {
+      const bytes = await c.req.arrayBuffer();
+      if (bytes.byteLength > 0) {
+        imageBlob = new Blob([bytes], { type: contentType });
+        const ext = contentType.split("/")[1]?.split(";")[0] || "jpg";
+        fileName = `capture.${ext}`;
+      }
+      source = normalizeSource(c.req.query("source"));
+    }
+
+    if (!imageBlob || imageBlob.size === 0) {
+      return c.json({ success: false, error: "画像がありません。multipart/form-data の image フィールドか、image/* の生ボディで送ってください" }, 400);
+    }
+
+    const imageUrl = await uploadImageForUser(userId, imageBlob, fileName);
+
+    const block = await addBlockHelper(userId, {
+      category: "event",
+      content: comment,
+      source,
+      images: [imageUrl],
+    });
+
+    return c.json({
+      success: true,
+      data: { id: block.id, routed_to: "event", image_url: imageUrl, message: "写真をフローに追加しました" },
+    });
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
+  }
+}
+
+// 画像ストレージ抽象化: user_image_storage_settings の provider に従って保存先を選ぶ。
+// フロントエンドの useImageUpload.ts と同じ振る舞い（gyazo → Gyazo、それ以外 → Supabase Storage）。
+const IMAGE_BUCKET = "block-images";
+
+async function uploadImageForUser(userId: string, imageBlob: Blob, fileName: string): Promise<string> {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const { data: setting } = await supabase
+    .from("user_image_storage_settings")
+    .select("provider, gyazo_token")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (setting?.provider === "gyazo" && setting?.gyazo_token) {
+    const gyazoForm = new FormData();
+    gyazoForm.append("imagedata", imageBlob, fileName);
+    gyazoForm.append("access_policy", "anyone");
+
+    const gyazoResponse = await fetch("https://upload.gyazo.com/api/upload", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${setting.gyazo_token}` },
+      body: gyazoForm,
+    });
+
+    let gyazoData: { url?: string } = {};
+    try {
+      gyazoData = JSON.parse(await gyazoResponse.text());
+    } catch {
+      // fall through to error below
+    }
+    if (!gyazoResponse.ok || !gyazoData.url) {
+      throw new Error("Gyazoへのアップロードに失敗しました");
+    }
+    return gyazoData.url;
+  }
+
+  const ext = fileName.split(".").pop()?.toLowerCase() || "jpg";
+  const path = `${userId}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
+  const { data, error } = await supabase.storage
+    .from(IMAGE_BUCKET)
+    .upload(path, imageBlob, { cacheControl: "3600", upsert: false, contentType: imageBlob.type || undefined });
+
+  if (error || !data?.path) {
+    throw new Error(`Supabase Storageへのアップロードに失敗しました: ${error?.message ?? "unknown"}`);
+  }
+  const { data: urlData } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(data.path);
+  return urlData.publicUrl;
 }
 
 async function addEvent(c: Context) {
