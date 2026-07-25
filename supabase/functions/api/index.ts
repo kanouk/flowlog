@@ -111,6 +111,7 @@ app.get("/entries/:date", authMiddlewareInline, getEntryHandler);
 app.patch("/blocks/:id", authMiddlewareInline, updateBlock);
 app.delete("/blocks/:id", authMiddlewareInline, deleteBlock);
 app.post("/image-reference-migrations", authMiddlewareInline, migrateImageReferences);
+app.post("/capture", authMiddlewareInline, captureHandler);
 
 async function authMiddlewareInline(c: Context, next: () => Promise<void>) {
   const userId = await authenticateUser(c.req.header("Authorization"));
@@ -218,6 +219,7 @@ async function addBlockHelper(
     priority?: number;
     due_at?: string;
     due_all_day?: boolean;
+    source?: string;
   }
 ) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -261,6 +263,7 @@ async function addBlockHelper(
     };
   if (block.due_at !== undefined) insertData.due_at = block.due_at;
   if (block.due_all_day !== undefined) insertData.due_all_day = block.due_all_day;
+  if (block.source !== undefined) insertData.source = block.source;
 
   const { data, error } = await supabase
     .from("blocks")
@@ -340,6 +343,10 @@ async function expandPhotoMarkersForContent(userId: string, content: string | nu
     .trim();
 }
 
+function normalizeSource(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 // ===== ルートハンドラー =====
 
 // ヘルスチェック
@@ -373,9 +380,14 @@ app.get("/docs", (c) => {
         query: { date: "string? (YYYY-MM-DD)", start_date: "string?", end_date: "string?", tag: "string?", limit: "number? (default 50)" },
       },
       {
+        method: "POST", path: "/capture",
+        description: "捕獲口。形式判別のみ行い、URLを含むテキストは「あとで」、それ以外は出来事として保存する。意味の分類はしない",
+        body: { text: "string (required)", source: "string? (mac-cli / raycast / share / watch-voice / alexa など)", occurred_at: "string? (ISO8601)" },
+      },
+      {
         method: "POST", path: "/events",
         description: "出来事を追加",
-        body: { content: "string (required)", occurred_at: "string? (ISO8601)", tag: "string?" },
+        body: { content: "string (required)", occurred_at: "string? (ISO8601)", tag: "string?", source: "string?" },
       },
       {
         method: "GET", path: "/tasks",
@@ -385,7 +397,7 @@ app.get("/docs", (c) => {
       {
         method: "POST", path: "/tasks",
         description: "タスクを追加",
-        body: { content: "string (required)", tag: "string?", priority: "number? (0-3)", due_at: "string? (ISO8601)", due_all_day: "boolean?" },
+        body: { content: "string (required)", tag: "string?", priority: "number? (0-3)", due_at: "string? (ISO8601)", due_all_day: "boolean?", source: "string?" },
       },
       {
         method: "PATCH", path: "/tasks/:id/complete",
@@ -405,7 +417,7 @@ app.get("/docs", (c) => {
       {
         method: "POST", path: "/schedules",
         description: "予定を追加",
-        body: { title: "string (required)", starts_at: "string (required, ISO8601)", ends_at: "string?", is_all_day: "boolean?", details: "string?", tag: "string?" },
+        body: { title: "string (required)", starts_at: "string (required, ISO8601)", ends_at: "string?", is_all_day: "boolean?", details: "string?", tag: "string?", source: "string?" },
       },
       {
         method: "GET", path: "/memos",
@@ -415,7 +427,7 @@ app.get("/docs", (c) => {
       {
         method: "POST", path: "/memos",
         description: "メモを追加",
-        body: { content: "string (required)", tag: "string?" },
+        body: { content: "string (required)", tag: "string?", source: "string?" },
       },
       {
         method: "GET", path: "/read-later",
@@ -425,7 +437,7 @@ app.get("/docs", (c) => {
       {
         method: "POST", path: "/read-later",
         description: "あとでに追加",
-        body: { url: "string (required)", comment: "string?", tag: "string?" },
+        body: { url: "string (required)", comment: "string?", tag: "string?", source: "string?" },
       },
       {
         method: "PATCH", path: "/read-later/:id/read",
@@ -486,6 +498,7 @@ app.get("/openapi.json", (c) => {
             category: { type: "string", enum: ["event", "task", "schedule", "thought", "read_later"] },
             content: { type: "string", nullable: true },
             tag: { type: "string", nullable: true },
+            source: { type: "string", nullable: true, description: "入力経路（mac-cli / raycast / share / watch-voice / alexa など）" },
             priority: { type: "integer", nullable: true, minimum: 0, maximum: 3 },
             is_done: { type: "boolean" },
             done_at: { type: "string", format: "date-time", nullable: true },
@@ -581,6 +594,16 @@ app.get("/openapi.json", (c) => {
           responses: { "200": { description: "OK" } },
         },
       },
+      "/capture": {
+        post: {
+          summary: "捕獲口（形式判別のみ。URL入りは「あとで」、それ以外は出来事へ）",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["text"], properties: { text: { type: "string" }, source: { type: "string" }, occurred_at: { type: "string", format: "date-time" } } } } },
+          },
+          responses: { "200": { description: "Created", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean", example: true }, data: { type: "object", properties: { id: { type: "string", format: "uuid" }, routed_to: { type: "string", enum: ["read_later", "event"] }, message: { type: "string" } } } } } } } } },
+        },
+      },
       "/events": {
         get: {
           summary: "出来事一覧を取得",
@@ -597,7 +620,7 @@ app.get("/openapi.json", (c) => {
           summary: "出来事を追加",
           requestBody: {
             required: true,
-            content: { "application/json": { schema: { type: "object", required: ["content"], properties: { content: { type: "string" }, occurred_at: { type: "string", format: "date-time" }, tag: { type: "string" } } } } },
+            content: { "application/json": { schema: { type: "object", required: ["content"], properties: { content: { type: "string" }, occurred_at: { type: "string", format: "date-time" }, tag: { type: "string" }, source: { type: "string" } } } } },
           },
           responses: { "200": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessCreateResponse" } } } } },
         },
@@ -616,7 +639,7 @@ app.get("/openapi.json", (c) => {
           summary: "タスクを追加",
           requestBody: {
             required: true,
-            content: { "application/json": { schema: { type: "object", required: ["content"], properties: { content: { type: "string" }, tag: { type: "string" }, priority: { type: "integer", minimum: 0, maximum: 3 }, due_at: { type: "string", format: "date-time" }, due_all_day: { type: "boolean" } } } } },
+            content: { "application/json": { schema: { type: "object", required: ["content"], properties: { content: { type: "string" }, tag: { type: "string" }, priority: { type: "integer", minimum: 0, maximum: 3 }, due_at: { type: "string", format: "date-time" }, due_all_day: { type: "boolean" }, source: { type: "string" } } } } },
           },
           responses: { "200": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessCreateResponse" } } } } },
         },
@@ -652,7 +675,7 @@ app.get("/openapi.json", (c) => {
           summary: "予定を追加",
           requestBody: {
             required: true,
-            content: { "application/json": { schema: { type: "object", required: ["title", "starts_at"], properties: { title: { type: "string" }, starts_at: { type: "string", format: "date-time" }, ends_at: { type: "string", format: "date-time" }, is_all_day: { type: "boolean" }, details: { type: "string" }, tag: { type: "string" } } } } },
+            content: { "application/json": { schema: { type: "object", required: ["title", "starts_at"], properties: { title: { type: "string" }, starts_at: { type: "string", format: "date-time" }, ends_at: { type: "string", format: "date-time" }, is_all_day: { type: "boolean" }, details: { type: "string" }, tag: { type: "string" }, source: { type: "string" } } } } },
           },
           responses: { "200": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessCreateResponse" } } } } },
         },
@@ -673,7 +696,7 @@ app.get("/openapi.json", (c) => {
           summary: "メモを追加",
           requestBody: {
             required: true,
-            content: { "application/json": { schema: { type: "object", required: ["content"], properties: { content: { type: "string" }, tag: { type: "string" } } } } },
+            content: { "application/json": { schema: { type: "object", required: ["content"], properties: { content: { type: "string" }, tag: { type: "string" }, source: { type: "string" } } } } },
           },
           responses: { "200": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessCreateResponse" } } } } },
         },
@@ -692,7 +715,7 @@ app.get("/openapi.json", (c) => {
           summary: "あとで読むに追加",
           requestBody: {
             required: true,
-            content: { "application/json": { schema: { type: "object", required: ["url"], properties: { url: { type: "string", format: "uri" }, comment: { type: "string" }, tag: { type: "string" } } } } },
+            content: { "application/json": { schema: { type: "object", required: ["url"], properties: { url: { type: "string", format: "uri" }, comment: { type: "string" }, tag: { type: "string" }, source: { type: "string" } } } } },
           },
           responses: { "200": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessCreateResponse" } } } } },
         },
@@ -768,20 +791,71 @@ async function listEvents(c: Context) {
   }
 }
 
+// Capture（形式判別のみの捕獲口。意味の分類は03:00レビューが行う）
+const CAPTURE_URL_RE = /https?:\/\/[^\s]+/;
+
+async function captureHandler(c: Context) {
+  try {
+    const userId = c.get("userId");
+    const body = await c.req.json();
+    const text = typeof body.text === "string" ? body.text.trim() : "";
+
+    if (!text) {
+      return c.json({ success: false, error: "text is required" }, 400);
+    }
+
+    const source = normalizeSource(body.source);
+    const urlMatch = text.match(CAPTURE_URL_RE);
+
+    let block;
+    let routedTo: string;
+    let message: string;
+
+    if (urlMatch) {
+      const url = urlMatch[0];
+      const comment = text.replace(url, "").trim();
+      block = await addBlockHelper(userId, {
+        category: "read_later",
+        content: comment ? `${url}\n\n${comment}` : url,
+        source,
+      });
+      routedTo = "read_later";
+      message = "あとでリストに追加しました";
+    } else {
+      block = await addBlockHelper(userId, {
+        category: "event",
+        content: text,
+        occurred_at: body.occurred_at,
+        source,
+      });
+      routedTo = "event";
+      message = "出来事を追加しました";
+    }
+
+    return c.json({
+      success: true,
+      data: { id: block.id, routed_to: routedTo, message },
+    });
+  } catch (error) {
+    return c.json({ success: false, error: getErrorMessage(error) }, 500);
+  }
+}
+
 async function addEvent(c: Context) {
   try {
     const userId = c.get("userId");
     const body = await c.req.json();
-    
+
     if (!body.content) {
       return c.json({ success: false, error: "content is required" }, 400);
     }
-    
+
     const block = await addBlockHelper(userId, {
       category: "event",
       content: body.content,
       occurred_at: body.occurred_at,
       tag: body.tag,
+      source: normalizeSource(body.source),
     });
     
     return c.json({ 
@@ -827,6 +901,7 @@ async function addTask(c: Context) {
       priority: body.priority,
       due_at: body.due_at,
       due_all_day: body.due_all_day,
+      source: normalizeSource(body.source),
     });
     
     return c.json({ 
@@ -939,6 +1014,7 @@ async function addSchedule(c: Context) {
       ends_at: body.ends_at,
       is_all_day: body.is_all_day,
       tag: body.tag,
+      source: normalizeSource(body.source),
     });
     
     return c.json({ 
@@ -983,6 +1059,7 @@ async function addMemo(c: Context) {
       category: "thought",
       content: body.content,
       tag: body.tag,
+      source: normalizeSource(body.source),
     });
     
     return c.json({ 
@@ -1029,6 +1106,7 @@ async function addReadLater(c: Context) {
       category: "read_later",
       content,
       tag: body.tag,
+      source: normalizeSource(body.source),
     });
     
     return c.json({ 
