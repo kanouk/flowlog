@@ -7,19 +7,32 @@
 
 ## ステップ（この順に人間が確認する）
 
-- [ ] 1. `POST /capture` を FlowLog API に追加
-  - [x] blocks に `source TEXT` カラム追加（migration作成済み: `20260725034837_add_source_to_blocks.sql`。**DB適用は未**）
-  - [x] `addBlockHelper` に source 対応
-  - [x] `/capture` ハンドラ: 形式判別のみ（URL→read_later、テキスト→event）
-  - [x] 既存 POST（events/tasks/schedules/memos/read-later）でも optional `source` を受ける
-  - [x] /docs と /openapi.json を更新
-  - [x] deno check（新規エラーなし。59行目の型エラーは既存）
-  - [ ] デプロイ → curl で動作確認（ローカルCLIアカウントに権限なく403でブロック中）
-- [ ] 2. Mac CLI `flow`（curlラッパー）＋ Raycast スクリプトコマンド
-- [ ] 3. HTTP Shortcuts 設定ファイル生成（共有ターゲット「FlowLogへ」＋ホームボタン「ひとこと」）
-- [ ] 4. Google Tasks 中継（Supabase pg_cron、数分おき、`POST /tasks` 直行 source=watch-voice）
-- [ ] 5. IFTTT applet（Alexa やることリスト → Webhook → `/tasks`、source=alexa）
-- [ ] 6. 03:00 レビュー拡張（イベントの意味づけ→FlowLogへ書き戻し、read-laterナレッジ化、朝の1行レポート。AGENTS.md追記）
+- [x] 1. `POST /capture` を FlowLog API に追加（2026-07-25完了）
+  - PR #4 → マージ → Lovableチャットでmigration適用＋関数デプロイ（この儀式は毎回必要）
+  - curl検証済み: テキスト→event / URL→read_later / source記録、テストデータ削除済み
+- [x] 2. Mac CLI `flow`＋Raycastスクリプトコマンド（2026-07-25完了）
+  - `~/scripts/flow`（ターミナル用、/opt/homebrew/bin/flow にsymlink、source=mac-cli）
+  - `~/scripts/flowlog-capture.sh`（Raycast「FlowLogへ」、source=raycast、mode silent）
+  - トークンは `10_sensitive/api-keys/FlowLog.md` から実行時に読む（コピーを作らない）
+- [x] 3. HTTP Shortcuts 設定ファイル生成（2026-07-25完了）
+  - 実エクスポート形式（version 91）に合わせたJSONを生成しインポート成功
+  - 共有ターゲット「FlowLogへ」（source=share、share_title+share_text）＋「ひとこと」（source=phone-text、launcherShortcut）
+  - Raycast側も2本目「FlowLogタスクへ」（source=raycast、/tasks直行）を追加
+- [x] 4. Google Tasks 中継（2026-07-25完了）
+  - 設計変更: Supabase pg_cronではなくMacのlaunchd 5分おき（Macは常時稼働、Lovable経由のシークレット儀式を回避）
+  - `09_imports/google-tasks/relay_tasks.py`（OAuthはGoogle Health連携のクライアント共用、redirect 8765）
+  - `com.kanouk.flowlog-tasks-relay.plist` ロード済み。E2E検証済み（Tasks→FlowLog source=watch-voice→Tasks削除）
+  - 既存の実タスク4件はユーザーがdone化して退避。Google Tasksは以後この配管専用
+- [~] 5. IFTTT applet → **スキップ**（時計・スマホ・Macで動線を網羅、Alexaマイク不要と判断。手順書は会話ログに残存）
+- [x] 6. 03:00 レビュー拡張（2026-07-25完了）
+  - `09_imports/flowlog/scripts/capture_triage.py`（prepare→AI記入→apply、mark-read、summary）。E2E検証済み
+  - AGENTS.mdに3段落追記: 夜間仕分け（task/schedule/memo/keep/drop書き戻し）、read-laterナレッジ化（新規のみ・1晩5件・朝の必須経路外）、朝の1行レポート
+  - 未読read-laterバックログ約173件は夜間処理の対象外とし、本人と別途整理
+
+## 追加候補
+
+- [ ] 7. 写真キャプチャ（共有シート→FlowLog）。現状の共有ターゲットはテキストのみ。
+      /capture-image をapiに追加し、サーバー側でGyazoアップロード→imagesつきevent化する案
 
 ## 設計メモ
 
