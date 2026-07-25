@@ -31,6 +31,7 @@ export type Database = {
           is_done: boolean
           occurred_at: string
           priority: number | null
+          source: string | null
           starts_at: string | null
           tag: string | null
           url_metadata: Json | null
@@ -52,6 +53,7 @@ export type Database = {
           is_done?: boolean
           occurred_at?: string
           priority?: number | null
+          source?: string | null
           starts_at?: string | null
           tag?: string | null
           url_metadata?: Json | null
@@ -73,6 +75,7 @@ export type Database = {
           is_done?: boolean
           occurred_at?: string
           priority?: number | null
+          source?: string | null
           starts_at?: string | null
           tag?: string | null
           url_metadata?: Json | null
