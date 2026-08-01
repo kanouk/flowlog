@@ -34,7 +34,6 @@ export type Database = {
           source: string | null
           starts_at: string | null
           tag: string | null
-          time_confirmed_at: string | null
           url_metadata: Json | null
           user_id: string
         }
@@ -57,7 +56,6 @@ export type Database = {
           source?: string | null
           starts_at?: string | null
           tag?: string | null
-          time_confirmed_at?: string | null
           url_metadata?: Json | null
           user_id: string
         }
@@ -80,7 +78,6 @@ export type Database = {
           source?: string | null
           starts_at?: string | null
           tag?: string | null
-          time_confirmed_at?: string | null
           url_metadata?: Json | null
           user_id?: string
         }
