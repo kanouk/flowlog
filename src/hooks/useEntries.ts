@@ -30,6 +30,8 @@ export interface Block {
   content: string | null;
   images: string[];
   occurred_at: string;
+  // ユーザーが時刻を確定した日時（回答・手動変更・質問却下でセット。時刻推測の質問対象外になる）
+  time_confirmed_at: string | null;
   created_at: string;
   category: BlockCategory;
   tag: string | null;
@@ -67,6 +69,7 @@ export type AddBlockMode = 'toSelectedDate' | 'toNow';
 export interface BlockUpdatePayload {
   content?: string;
   occurred_at?: string;
+  time_confirmed_at?: string | null;
   category?: BlockCategory;
   tag?: string | null;
   is_done?: boolean;
@@ -401,7 +404,7 @@ export function useEntries() {
       
       const oldEntryId = currentBlock?.entry_id;
       
-      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at' | 'images' | 'starts_at' | 'ends_at' | 'is_all_day' | 'priority' | 'extracted_text' | 'due_at' | 'due_all_day'>> = {};
+      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at' | 'images' | 'starts_at' | 'ends_at' | 'is_all_day' | 'priority' | 'extracted_text' | 'due_at' | 'due_all_day' | 'time_confirmed_at'>> = {};
       
       if (updates.content !== undefined) {
         updateData.content = updates.content;
@@ -446,13 +449,21 @@ export function useEntries() {
       if (updates.due_all_day !== undefined) {
         updateData.due_all_day = updates.due_all_day;
       }
+      if (updates.time_confirmed_at !== undefined) {
+        updateData.time_confirmed_at = updates.time_confirmed_at;
+      }
       if (updates.occurred_at) {
         const newDayKey = getOccurredAtDayKey(updates.occurred_at, dayBoundaryHour);
         const entry = await getOrCreateEntryForDate(newDayKey);
         if (!entry) throw new Error('Failed to get/create entry');
-        
+
         updateData.occurred_at = updates.occurred_at;
         updateData.entry_id = entry.id;
+        // occurred_at の更新経路はすべてユーザー操作（質問回答・編集モーダル・D&D）のため
+        // 時刻確定として扱い、以降の時刻推測で質問・自動変更の対象外にする
+        if (updates.time_confirmed_at === undefined) {
+          updateData.time_confirmed_at = new Date().toISOString();
+        }
       }
 
       const { data, error } = await supabase
@@ -541,10 +552,11 @@ export function useEntries() {
     try {
       const { data, error } = await supabase.functions.invoke('format-entries', {
         body: {
-          blocks: blocks.map(b => ({ 
+          blocks: blocks.map(b => ({
             id: b.id,
-            content: b.content, 
+            content: b.content,
             occurred_at: b.occurred_at,
+            time_confirmed_at: b.time_confirmed_at,
             images: b.images,
             category: b.category,
             is_done: b.is_done,

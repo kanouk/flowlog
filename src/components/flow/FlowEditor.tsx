@@ -94,6 +94,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       content,
       images: [],
       occurred_at: new Date().toISOString(),
+      time_confirmed_at: null,
       created_at: new Date().toISOString(),
       category,
       tag,

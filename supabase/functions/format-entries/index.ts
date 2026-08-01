@@ -67,6 +67,8 @@ interface Block {
   id: string;
   content: string | null;
   occurred_at: string;
+  // ユーザーが時刻を確定済み（回答・手動変更・質問却下）。質問生成・自動時刻変更の対象外
+  time_confirmed_at?: string | null;
   images?: string[];
   category?: string;
   is_done?: boolean;
@@ -256,6 +258,7 @@ JSON形式で回答してください：
 ## 注意事項
 - confidence は "high"（明確な手がかりあり）、"medium"（推測可能）、"none"（手がかりなし）
 - confidence が "none" の場合、inferred_time は null、question を設定
+- 「（ユーザー確認済み・変更不要）」と付いたブロックは時刻が確定済み。inferred_time は null、confidence は "high" とし、question は設定しない
 - 現在の occurred_at より大幅に異なる推測のみ報告（±30分以内なら変更不要）
 - inferred_time は "HH:mm" 形式（例: "08:00", "14:30"）`;
 }
@@ -762,7 +765,8 @@ serve(async (req) => {
       const timeDisplay = dbh > 0 && lifeTime !== currentTime
         ? `生活日時刻: ${lifeTime} (実時刻: ${currentTime})`
         : `現在時刻: ${currentTime}`;
-      return `[${index}] ${timeDisplay}, 内容: ${block.content || '(画像のみ)'}`;
+      const confirmedNote = block.time_confirmed_at ? '（ユーザー確認済み・変更不要）' : '';
+      return `[${index}] ${timeDisplay}${confirmedNote}, 内容: ${block.content || '(画像のみ)'}`;
     }).join('\n');
 
     const timeSystemPrompt = timeConfig?.system_prompt || buildTimeAnalysisPrompt(dbh);
@@ -792,11 +796,14 @@ JSON形式で回答してください。`;
             const block = blocks[blockIndex];
             
             if (!block) continue;
-            
+
+            // 時刻確定済みブロックは質問も自動時刻変更も行わない
+            if (block.time_confirmed_at) continue;
+
             if (result.confidence === 'none' && result.question) {
               questions.push({
                 block_id: block.id,
-                content_preview: (block.content || '').substring(0, 50),
+                content_preview: block.content ? block.content.substring(0, 50) : '（画像のみ）',
                 question: result.question,
               });
             } else if (result.inferred_time && (result.confidence === 'high' || result.confidence === 'medium')) {

@@ -145,10 +145,16 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
         
         // 質問がある場合、質問リストに追加
         if (result?.needs_clarification && result.questions) {
+          // 時刻確定済みのブロックへの質問は表示しない（サーバー側でも除外されるが保険）
+          const confirmedIds = new Set(
+            blocksData.filter(b => b.time_confirmed_at).map(b => b.id)
+          );
           setPendingQuestions(prev => {
             // 重複を避ける
             const existingIds = new Set(prev.map(q => q.block_id));
-            const newQuestions = result.questions!.filter(q => !existingIds.has(q.block_id));
+            const newQuestions = result.questions!.filter(
+              q => !existingIds.has(q.block_id) && !confirmedIds.has(q.block_id)
+            );
             return [...prev, ...newQuestions];
           });
         }
@@ -169,7 +175,9 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     
     if (updated) {
       setBlocks(prev => sortBlocksDesc(
-        prev.map(b => b.id === blockId ? { ...b, occurred_at: newOccurredAt } : b)
+        prev.map(b => b.id === blockId
+          ? { ...b, occurred_at: newOccurredAt, time_confirmed_at: updated.time_confirmed_at }
+          : b)
       ));
       setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
       triggerAutoFormat(selectedDate);
@@ -183,7 +191,9 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
 
     if (updated) {
       setBlocks(prev => sortBlocksDesc(
-        prev.map(b => b.id === blockId ? { ...b, occurred_at: newOccurredAt } : b)
+        prev.map(b => b.id === blockId
+          ? { ...b, occurred_at: newOccurredAt, time_confirmed_at: updated.time_confirmed_at }
+          : b)
       ));
       setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
       triggerAutoFormat(selectedDate);
@@ -192,10 +202,19 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
 
   /**
    * 時刻質問を無視
+   * 「わからない」「×」は時刻確定として永続化し、以降の整形で同じ質問を再生成させない
    */
-  const handleTimeDismiss = useCallback((blockId: string) => {
+  const handleTimeDismiss = useCallback(async (blockId: string) => {
     setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
-  }, []);
+
+    const dismissedAt = new Date().toISOString();
+    const updated = await updateBlock(blockId, { time_confirmed_at: dismissedAt }, dayBoundaryHour);
+    if (updated) {
+      setBlocks(prev => prev.map(b =>
+        b.id === blockId ? { ...b, time_confirmed_at: updated.time_confirmed_at } : b
+      ));
+    }
+  }, [updateBlock, dayBoundaryHour]);
 
   const handlePrevDay = useCallback(() => {
     const prevDate = subDays(new Date(selectedDate), 1);
@@ -277,6 +296,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
           content: line,
           images: [],
           occurred_at: new Date().toISOString(),
+          time_confirmed_at: null,
           created_at: new Date().toISOString(),
           category: 'task',
           tag,
@@ -327,6 +347,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       content,
       images: [],
       occurred_at: new Date().toISOString(),
+      time_confirmed_at: null,
       created_at: new Date().toISOString(),
       category,
       tag,
