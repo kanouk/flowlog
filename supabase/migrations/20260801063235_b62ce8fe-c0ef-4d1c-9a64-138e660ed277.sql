@@ -1,0 +1,1 @@
+ALTER TABLE public.blocks ADD COLUMN IF NOT EXISTS time_confirmed_at TIMESTAMP WITH TIME ZONE;
