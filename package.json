@@ -9,6 +9,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "test": "TZ=Asia/Tokyo vitest run",
+    "test:api": "deno test --node-modules-dir=false --allow-env --allow-net --allow-read --allow-write --allow-sys supabase/functions/api/native-images.test.ts scripts/photo-diary-canary.test.ts",
     "test:watch": "TZ=Asia/Tokyo vitest",
     "migrate:image-references": "node scripts/migrate-image-references.mjs",
     "analyze": "vite build",

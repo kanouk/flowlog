@@ -2,9 +2,10 @@ import { Hono, type Context } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
 import { corsHeaders } from "../_shared/cors.ts";
 import { waitUntil } from "../_shared/edge-runtime.ts";
+import { expectedBlockSchema, imageArraySchema, isExpectedBlock, validateEvent, validateImages } from "./native-images.ts";
 
 // ベースパスを設定（Edge Functionのパス）
-const app = new Hono().basePath("/api");
+export const app = new Hono().basePath("/api");
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -56,11 +57,11 @@ async function authenticateUser(authHeader: string | undefined): Promise<string 
   
   // 最終使用日時をバックグラウンド更新
   waitUntil(
-    supabase
+    Promise.resolve(supabase
       .from("user_api_tokens")
       .update({ last_used_at: new Date().toISOString() })
       .eq("token_hash", tokenHash)
-      .then(() => undefined),
+      .then(() => undefined)),
   );
   
   return tokenData.user_id;
@@ -361,7 +362,7 @@ app.get("/health", (c) => {
 app.get("/docs", (c) => {
   const docs = {
     name: "FlowLog REST API",
-    version: "1.0",
+    version: "1.1",
     base_url: `${supabaseUrl}/functions/v1/api`,
     authentication: {
       type: "Bearer Token",
@@ -395,7 +396,7 @@ app.get("/docs", (c) => {
       {
         method: "POST", path: "/events",
         description: "出来事を追加",
-        body: { content: "string (required)", occurred_at: "string? (ISO8601)", tag: "string?", source: "string?" },
+        body: { content: "string (required)", occurred_at: "string? (ISO8601)", tag: "string?", source: "string?", images: "string[]? (max 5 unique HTTPS URLs; native attachments)", idempotency: "Idempotency-Key header recommended; same request replays; different request returns 409" },
       },
       {
         method: "GET", path: "/tasks",
@@ -465,7 +466,7 @@ app.get("/docs", (c) => {
       {
         method: "PATCH", path: "/blocks/:id",
         description: "ブロックを更新",
-        body: { content: "string?", tag: "string?", occurred_at: "string?", priority: "number?", is_done: "boolean?", starts_at: "string?", ends_at: "string?", is_all_day: "boolean?", due_at: "string?", due_all_day: "boolean?" },
+        body: { content: "string?", tag: "string?", occurred_at: "string?", priority: "number?", is_done: "boolean?", starts_at: "string?", ends_at: "string?", is_all_day: "boolean?", due_at: "string?", due_all_day: "boolean?", images: "string[]? (replace native attachments; max 5)", expected: "{content, images, occurred_at, entry_id, revision} (required with images; atomic conflict check, 409 on mismatch)" },
       },
       {
         method: "DELETE", path: "/blocks/:id",
@@ -484,7 +485,7 @@ app.get("/openapi.json", (c) => {
     info: {
       title: "FlowLog API",
       description: "FlowLog REST API – 出来事・タスク・予定・メモ・あとで読むの管理",
-      version: "1.0.0",
+      version: "1.1.0",
     },
     servers: [{ url: baseUrl }],
     security: [{ bearerAuth: [] }],
@@ -519,6 +520,7 @@ app.get("/openapi.json", (c) => {
             images: { type: "array", items: { type: "string" }, nullable: true },
             url_metadata: { type: "object", nullable: true },
             extracted_text: { type: "string", nullable: true },
+            revision: { type: "integer", minimum: 1 },
             created_at: { type: "string", format: "date-time" },
           },
         },
@@ -528,6 +530,8 @@ app.get("/openapi.json", (c) => {
             id: { type: "string", format: "uuid" },
             user_id: { type: "string", format: "uuid" },
             date: { type: "string", format: "date" },
+            blocks: { type: "array", items: { $ref: "#/components/schemas/Block" } },
+            stored_formatted_content: { type: "string", nullable: true },
             summary: { type: "string", nullable: true },
             formatted_content: { type: "string", nullable: true, description: "AI整形済み本文。写真マーカーはAPI返却時に実URL文字列へ展開されます。" },
             score: { type: "integer", nullable: true },
@@ -555,6 +559,9 @@ app.get("/openapi.json", (c) => {
               },
             },
           },
+        },
+        SuccessBlockUpdateResponse: {
+          type: "object", properties: { success: { type: "boolean" }, data: { $ref: "#/components/schemas/Block" }, message: { type: "string" } },
         },
         SuccessMessageResponse: {
           type: "object",
@@ -639,11 +646,19 @@ app.get("/openapi.json", (c) => {
         },
         post: {
           summary: "出来事を追加",
+          description: "画像はネイティブ添付として保存する。images または Idempotency-Key を指定する新経路では、occurred_at（タイムゾーン必須）をJSTと所有者のday_boundary_hour（未設定0時）で生活日に所属させる。両方省略する従来のテキスト経路は従来の所属日判定と応答を維持。日記整形・画像取得・OCRは呼ばない。画像省略は従来どおり添付なし。例の所属日は境界5時の場合。",
+          parameters: [{ name: "Idempotency-Key", in: "header", required: false, schema: { type: "string", pattern: "^[A-Za-z0-9._:-]{1,128}$" }, description: "再送時は同じキーと同じ本文を送る。同一所有者内で永続保持。別内容は409。省略時は毎回新規登録。応答は初回の保存スナップショット（replayedのみtrue）。" }],
           requestBody: {
             required: true,
-            content: { "application/json": { schema: { type: "object", required: ["content"], properties: { content: { type: "string" }, occurred_at: { type: "string", format: "date-time" }, tag: { type: "string" }, source: { type: "string" } } } } },
+            content: { "application/json": { example: { content: "架空の日記。", occurred_at: "2026-09-21T02:00:00+09:00", tag: "private", source: "photo-diary", images: ["https://i.gyazo.com/0123456789abcdef0123456789abcdef.jpg"] }, schema: { type: "object", required: ["content"], properties: { content: { type: "string" }, occurred_at: { type: "string", format: "date-time" }, tag: { type: "string" }, source: { type: "string" }, images: imageArraySchema } } } },
           },
-          responses: { "200": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessCreateResponse" } } } } },
+          responses: {
+            "200": { description: "Created or replayed", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean" }, data: { allOf: [{ $ref: "#/components/schemas/Block" }, { type: "object", properties: { date: { type: "string", format: "date" }, message: { type: "string" }, replayed: { type: "boolean" } } }] } } }, example: { success: true, data: { id: "33333333-3333-4333-8333-333333333333", entry_id: "22222222-2222-4222-8222-222222222222", content: "架空の日記。", occurred_at: "2026-09-20T17:00:00Z", date: "2026-09-20", images: ["https://i.gyazo.com/0123456789abcdef0123456789abcdef.jpg"], revision: 1, replayed: false, message: "出来事を追加しました" } } } } },
+            "400": { description: "Invalid JSON, content, timestamp, images or Idempotency-Key", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { success: false, error: "Duplicate image URLs are not allowed" } } } },
+            "401": { description: "Invalid or missing bearer token" },
+            "409": { description: "Idempotency-Key already used with a different request; no write" },
+            "500": { description: "Storage failure; retry the identical request with the same key" },
+          },
         },
       },
       "/tasks": {
@@ -764,7 +779,7 @@ app.get("/openapi.json", (c) => {
       "/entries/{date}": {
         get: {
           summary: "指定日のエントリーを取得",
-          description: "formatted_content 内の写真マーカーはAPI返却時に実URL文字列へ展開されます。",
+          description: "date は所属生活日。blocks に保存済み本文・画像URL・日時・entry_id・revisionを返す。stored_formatted_content はDB保存値そのまま。formatted_content の既存マーカー展開は維持する。",
           parameters: [{ name: "date", in: "path", required: true, schema: { type: "string", format: "date" }, description: "YYYY-MM-DD" }],
           responses: {
             "200": { description: "OK", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean" }, data: { $ref: "#/components/schemas/Entry" } } } } } },
@@ -774,12 +789,13 @@ app.get("/openapi.json", (c) => {
       "/blocks/{id}": {
         patch: {
           summary: "ブロックを更新",
+          description: "images を指定すると添付全体を置換。[] は全解除。expected（直前のGET /entries/{date}から転記）が必須。更新と照合は1つのUPDATEで実行し、不一致・他所有者・削除済みは409。images省略は既存画像を保持。imagesだけなら本文・タグ・日時・所属日・日記整形済み本文・他ブロックは変更しない。revisionのみ増加。",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
           requestBody: {
             required: true,
-            content: { "application/json": { schema: { type: "object", properties: { content: { type: "string" }, tag: { type: "string" }, occurred_at: { type: "string", format: "date-time" }, priority: { type: "integer" }, is_done: { type: "boolean" }, starts_at: { type: "string", format: "date-time" }, ends_at: { type: "string", format: "date-time" }, is_all_day: { type: "boolean" }, due_at: { type: "string", format: "date-time" }, due_all_day: { type: "boolean" } } } } },
+            content: { "application/json": { example: { images: ["https://i.gyazo.com/0123456789abcdef0123456789abcdef.jpg"], expected: { content: "架空の日記。", images: [], occurred_at: "2026-09-20T17:00:00Z", entry_id: "22222222-2222-4222-8222-222222222222", revision: 1 } }, schema: { type: "object", properties: { content: { type: "string" }, tag: { type: "string" }, occurred_at: { type: "string", format: "date-time" }, priority: { type: "integer" }, is_done: { type: "boolean" }, starts_at: { type: "string", format: "date-time" }, ends_at: { type: "string", format: "date-time" }, is_all_day: { type: "boolean" }, due_at: { type: "string", format: "date-time" }, due_all_day: { type: "boolean" }, images: imageArraySchema, expected: expectedBlockSchema } } } },
           },
-          responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessMessageResponse" } } } } },
+          responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessBlockUpdateResponse" }, example: { success: true, data: { id: "33333333-3333-4333-8333-333333333333", entry_id: "22222222-2222-4222-8222-222222222222", content: "架空の日記。", images: ["https://i.gyazo.com/0123456789abcdef0123456789abcdef.jpg"], occurred_at: "2026-09-20T17:00:00Z", revision: 2 }, message: "ブロックを更新しました" } } } }, "400": { description: "Invalid JSON, fields, images or expected snapshot" }, "401": { description: "Invalid or missing bearer token" }, "500": { description: "Storage failure" }, "404": { description: "Block not found (without expected)" }, "409": { description: "Block changed or unavailable; no write performed" } },
         },
         delete: {
           summary: "ブロックを削除",
@@ -965,23 +981,42 @@ async function uploadImageForUser(userId: string, imageBlob: Blob, fileName: str
 async function addEvent(c: Context) {
   try {
     const userId = c.get("userId");
-    const body = await c.req.json();
+    let body;
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "Invalid JSON" }, 400); }
+    if (!body || typeof body !== "object" || Array.isArray(body)) return c.json({ success: false, error: "JSON object required" }, 400);
 
-    if (!body.content) {
-      return c.json({ success: false, error: "content is required" }, 400);
+    const key = c.req.header("Idempotency-Key");
+    const validation = validateEvent(body, key);
+    if (validation) return c.json({ success: false, error: validation }, 400);
+
+    // Preserve the published text-only path and its response shape. The new
+    // native-photo/idempotent path owns life-day calculation transactionally.
+    if (body.images === undefined && key === undefined) {
+      const block = await addBlockHelper(userId, {
+        category: "event", content: body.content, occurred_at: body.occurred_at,
+        tag: body.tag, source: normalizeSource(body.source),
+      });
+      return c.json({success: true, data: {id: block.id, message: "出来事を追加しました"}});
     }
 
-    const block = await addBlockHelper(userId, {
-      category: "event",
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const payload = {
       content: body.content,
-      occurred_at: body.occurred_at,
-      tag: body.tag,
-      source: normalizeSource(body.source),
+      ...(body.occurred_at !== undefined ? { occurred_at: body.occurred_at } : {}),
+      ...(body.tag !== undefined ? { tag: body.tag } : {}),
+      ...(normalizeSource(body.source) ? { source: normalizeSource(body.source) } : {}),
+      ...(body.images !== undefined ? { images: body.images } : {}),
+    };
+    const { data, error } = await supabase.rpc("create_event_api", {
+      p_user_id: userId, p_request: payload, p_key: key ?? null,
     });
-    
-    return c.json({ 
-      success: true, 
-      data: { id: block.id, message: "出来事を追加しました" } 
+    if (error) {
+      const status = error.code === "PT409" ? 409 : error.code === "23514" || error.code === "22007" ? 400 : 500;
+      return c.json({ success: false, error: status === 500 ? "Failed to create event" : error.message }, status);
+    }
+    return c.json({
+      success: true,
+      data: { ...data.block, date: data.date, replayed: data.replayed, message: "出来事を追加しました" },
     });
   } catch (error) {
     return c.json({ success: false, error: getErrorMessage(error) }, 500);
@@ -1317,9 +1352,13 @@ async function getEntryHandler(c: Context) {
       return c.json({ success: true, data: null, message: "エントリーが見つかりません" });
     }
 
+    const { data: blocks, error: blocksError } = await supabase.from("blocks").select("*")
+      .eq("user_id", userId).eq("entry_id", data.id)
+      .order("occurred_at", { ascending: true }).order("id", { ascending: true });
+    if (blocksError) throw new Error("Failed to fetch entry blocks");
     const formattedContent = await expandPhotoMarkersForContent(userId, data.formatted_content);
     
-    return c.json({ success: true, data: { ...data, formatted_content: formattedContent } });
+    return c.json({ success: true, data: { ...data, formatted_content: formattedContent, stored_formatted_content: data.formatted_content, blocks } });
   } catch (error) {
     return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
@@ -1330,7 +1369,20 @@ async function updateBlock(c: Context) {
   try {
     const userId = c.get("userId");
     const blockId = c.req.param("id");
-    const body = await c.req.json();
+    let body;
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "Invalid JSON" }, 400); }
+    if (!body || typeof body !== "object" || Array.isArray(body)) return c.json({ success: false, error: "JSON object required" }, 400);
+
+    if (body.images !== undefined) {
+      const error = validateImages(body.images);
+      if (error) return c.json({ success: false, error }, 400);
+      if (!isExpectedBlock(body.expected)) {
+        return c.json({ success: false, error: "expected snapshot is required when replacing images" }, 400);
+      }
+    }
+    if (body.expected !== undefined && !isExpectedBlock(body.expected)) {
+      return c.json({ success: false, error: "Invalid expected snapshot" }, 400);
+    }
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
@@ -1349,22 +1401,34 @@ async function updateBlock(c: Context) {
     if (body.is_all_day !== undefined) updates.is_all_day = body.is_all_day;
     if (body.due_at !== undefined) updates.due_at = body.due_at;
     if (body.due_all_day !== undefined) updates.due_all_day = body.due_all_day;
+    if (body.images !== undefined) updates.images = body.images;
     
     if (Object.keys(updates).length === 0) {
       return c.json({ success: false, error: "No valid fields to update" }, 400);
     }
     
-    const { error } = await supabase
-      .from("blocks")
-      .update(updates)
-      .eq("id", blockId)
-      .eq("user_id", userId);
-    
+    // Expected values stay in the request body (long diary text must not be
+    // exposed in query URLs or hit proxy URL-length limits). SQL does one CAS.
+    const { data, error } = body.expected !== undefined
+      ? await supabase.rpc("update_block_api", {
+          p_user_id: userId, p_block_id: blockId,
+          p_expected: body.expected, p_updates: updates,
+        })
+      : await supabase.from("blocks").update(updates)
+          .eq("id", blockId).eq("user_id", userId).select("*").maybeSingle();
+
     if (error) {
+      if (error.code === "23514") return c.json({success: false, error: error.message}, 400);
       throw new Error(`Failed to update block: ${error.message}`);
     }
+
+    if (!data) {
+      return body.expected !== undefined
+        ? c.json({ success: false, error: "Block changed or unavailable; read it again before retrying" }, 409)
+        : c.json({ success: false, error: "Block not found" }, 404);
+    }
     
-    return c.json({ success: true, message: "ブロックを更新しました" });
+    return c.json({ success: true, data, message: "ブロックを更新しました" });
   } catch (error) {
     return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
