@@ -19,7 +19,7 @@ const other = "99999999-9999-4999-8999-999999999999";
 const photo = "https://i.gyazo.com/0123456789abcdef0123456789abcdef.jpg";
 const oldPhoto = "https://i.gyazo.com/fedcba9876543210fedcba9876543210.jpg";
 
-async function database() {
+async function database(cloudMigrationGuard = false) {
   const db = new PGlite();
   await db.exec(`
     CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;
@@ -59,6 +59,36 @@ async function database() {
     GRANT USAGE ON SCHEMA public, auth TO service_role;
     GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
   `);
+  // Reproduce the two reported Cloud preflight constraints at each DDL step.
+  // This is a local guard, not a claim that the real Cloud checker has passed.
+  if (cloudMigrationGuard) {
+    await db.exec(`
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
+    CREATE FUNCTION test_cloud_migration_guard() RETURNS event_trigger
+    LANGUAGE plpgsql AS $$
+    DECLARE command record; target oid;
+    BEGIN
+      target := to_regclass('public.event_api_receipts');
+      IF target IS NULL THEN RETURN; END IF;
+      FOR command IN SELECT * FROM pg_event_trigger_ddl_commands() LOOP
+        IF command.classid = 'pg_class'::regclass AND command.objid = target THEN
+          IF EXISTS (
+            SELECT 1 FROM pg_constraint c JOIN pg_class parent ON parent.oid=c.confrelid
+            JOIN pg_namespace n ON n.oid=parent.relnamespace
+            WHERE c.conrelid=target AND c.contype='f' AND n.nspname='auth'
+          ) THEN RAISE EXCEPTION 'Cloud guard: direct auth foreign key'; END IF;
+          IF (SELECT relrowsecurity FROM pg_class WHERE oid=target) AND EXISTS (
+            SELECT 1 FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE']) privilege
+            WHERE NOT has_table_privilege('service_role', target, privilege)
+          ) THEN RAISE EXCEPTION 'Cloud guard: grant service privileges before RLS'; END IF;
+        END IF;
+      END LOOP;
+    END;
+    $$;
+    CREATE EVENT TRIGGER test_cloud_migration_guard ON ddl_command_end
+      EXECUTE FUNCTION test_cloud_migration_guard();
+  `);
+  }
   await db.exec(
     await Deno.readTextFile(
       new URL(
@@ -732,6 +762,49 @@ Deno.test("durable idempotency: concurrent duplicate, lost response, changed pay
     assert.equal(a.data.id, b.data.id);
     assert.equal(a.data.occurred_at, b.data.occurred_at);
   });
+});
+
+Deno.test("Cloud migration constraints, client privilege revocation and profile account cleanup", async () => {
+  const db = await database(true);
+  try {
+    const constraint = await db.query<{ parent: string }>(`
+      SELECT confrelid::regclass::text AS parent FROM pg_constraint
+      WHERE conrelid='public.event_api_receipts'::regclass AND contype='f'
+    `);
+    assert.deepEqual(constraint.rows, [{ parent: "profiles" }]);
+    const state = await db.query<{ rls: boolean }>(
+      "SELECT relrowsecurity rls FROM pg_class WHERE oid='public.event_api_receipts'::regclass",
+    );
+    assert.equal(state.rows[0].rls, true);
+    for (const role of ["anon", "authenticated"]) {
+      for (const privilege of ["SELECT", "INSERT", "UPDATE", "DELETE"]) {
+        const access = await db.query<{ allowed: boolean }>(
+          "SELECT has_table_privilege($1,'public.event_api_receipts',$2) allowed",
+          [role, privilege],
+        );
+        assert.equal(access.rows[0].allowed, false);
+      }
+    }
+    await db.query(
+      "SELECT create_event_api($1,$2::jsonb,'account-cleanup-key')",
+      [owner, JSON.stringify({ content: "架空の所有者の日記" })],
+    );
+    await db.query(
+      "SELECT create_event_api($1,$2::jsonb,'account-cleanup-key')",
+      [other, JSON.stringify({ content: "架空の別所有者の日記" })],
+    );
+    await db.query("DELETE FROM auth.users WHERE id=$1", [owner]);
+    const receipts = await db.query<{ user_id: string }>(
+      "SELECT user_id FROM event_api_receipts",
+    );
+    assert.deepEqual(receipts.rows, [{ user_id: other }]);
+    const profiles = await db.query<{ user_id: string }>(
+      "SELECT user_id FROM profiles",
+    );
+    assert.deepEqual(profiles.rows, [{ user_id: other }]);
+  } finally {
+    await db.close();
+  }
 });
 
 Deno.test("database RPC and receipts are inaccessible to anon/authenticated roles", async () => {
