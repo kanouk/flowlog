@@ -31,6 +31,7 @@ export type Database = {
           is_done: boolean
           occurred_at: string
           priority: number | null
+          revision: number
           source: string | null
           starts_at: string | null
           tag: string | null
@@ -54,6 +55,7 @@ export type Database = {
           is_done?: boolean
           occurred_at?: string
           priority?: number | null
+          revision?: number
           source?: string | null
           starts_at?: string | null
           tag?: string | null
@@ -77,6 +79,7 @@ export type Database = {
           is_done?: boolean
           occurred_at?: string
           priority?: number | null
+          revision?: number
           source?: string | null
           starts_at?: string | null
           tag?: string | null
@@ -162,6 +165,38 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      event_api_receipts: {
+        Row: {
+          created_at: string
+          key: string
+          request: Json
+          response: Json | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          key: string
+          request: Json
+          response?: Json | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          key?: string
+          request?: Json
+          response?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_api_receipts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       oauth_authorization_codes: {
         Row: {
@@ -496,6 +531,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_event_api: {
+        Args: { p_key?: string; p_request: Json; p_user_id: string }
+        Returns: Json
+      }
       get_feature_ai_config: {
         Args: { p_feature_key: string; p_user_id: string }
         Returns: {
@@ -561,6 +600,15 @@ export type Database = {
           has_gyazo_token: boolean
           provider: string
         }[]
+      }
+      update_block_api: {
+        Args: {
+          p_block_id: string
+          p_expected: Json
+          p_updates: Json
+          p_user_id: string
+        }
+        Returns: Json
       }
     }
     Enums: {
