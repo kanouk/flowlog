@@ -2,7 +2,7 @@
 
 - [x] Confirm requested main merge commit and read deployment documentation.
 - [x] Check new migration application history.
-- [ ] Apply only the new migration once — blocked: main SQL references auth.users from event_api_receipts and enables RLS before required grants, contrary to mandatory Cloud schema rules; corrected main migration is needed.
+- [ ] Apply only the new migration once — source SQL corrected to reference public.profiles(user_id) and set service-only privileges before enabling RLS. Actual Cloud preflight and application remain pending.
 - [ ] Deploy only api and its imported dependencies — waits for migration success.
 - [ ] Independently fetch and verify production OpenAPI 1.1.0 — waits for api deployment.
 - [ ] Production PostgREST write tests in isolated dedicated environment/account — no dedicated environment/account established.

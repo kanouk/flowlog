@@ -15,16 +15,20 @@ REVOKE ALL ON FUNCTION public.bump_block_revision() FROM PUBLIC, anon, authentic
 -- Durable receipts intentionally survive deletion of the created block. No TTL:
 -- an old retry must never silently become a new post. Stored responses are private.
 CREATE TABLE public.event_api_receipts (
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  -- Cloud migrations must reference the application profile, not auth tables.
+  -- profiles.user_id is unique and its existing auth FK cascades account deletion.
+  user_id uuid NOT NULL REFERENCES public.profiles(user_id) ON DELETE CASCADE,
   key text NOT NULL CHECK (length(key) BETWEEN 1 AND 128),
   request jsonb NOT NULL,
   response jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, key)
 );
-ALTER TABLE public.event_api_receipts ENABLE ROW LEVEL SECURITY;
+-- Set privileges before enabling RLS, as required by the Cloud migration gate.
+-- Keep the receipt table service-only even if default privileges grant client roles.
 REVOKE ALL ON public.event_api_receipts FROM PUBLIC, anon, authenticated;
 GRANT ALL ON public.event_api_receipts TO service_role;
+ALTER TABLE public.event_api_receipts ENABLE ROW LEVEL SECURITY;
 
 -- Only the API's service client may call this; p_user_id comes from the hashed
 -- bearer token lookup, never from client JSON. SECURITY INVOKER deliberately.
