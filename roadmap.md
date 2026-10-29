@@ -12,7 +12,7 @@
 
 - [x] Implement durable owner/life-day jobs, debouncing, leases, stale-output rejection, bounded retries, history and server-only worker.
 - [x] Move browser generation/persistence to server status polling and owner-scoped manual job requests; update API to 1.2.0.
-- [ ] Deploy the new migration/functions/frontend through Lovable with the global generation gate OFF.
+- [ ] Confirm commit 45751f709d08f2f96a56403281b879f231e42231, apply only pending 0001 once, deploy api/diary-worker/format-entries and publish frontend with gate OFF.
 - [ ] Install pg_cron/pg_net, set dedicated worker/Vault secrets and configure the durable schedule while OFF.
 - [ ] Verify real scheduler/PostgREST/LLM/frontend with isolated fictional data. No production diary writes authorized.
 - [ ] Activate production only after the user explicitly identifies and authorizes the rollout scope.
