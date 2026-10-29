@@ -108,7 +108,7 @@ export interface TimeQuestion {
   question: string;
 }
 
-// formatEntry のレスポンス型
+// 旧生成レスポンス型（既存の表示・時刻質問との型互換用）
 export interface FormatEntryResponse {
   formatted_content: string;
   summary: string;
@@ -125,7 +125,6 @@ export interface FormatEntryResponse {
 export function useEntries() {
   const { user, session } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [formatting, setFormatting] = useState(false);
   
   // Memoize user.id to prevent unnecessary re-renders from user object changes
   const userId = user?.id;
@@ -146,6 +145,11 @@ export function useEntries() {
     }
     
     if (count === 0) {
+      // Preserve the last diary until the server saves the empty-day result and
+      // records history. Deleting it here would bypass that preservation path.
+      const { data: existing } = await supabase.from('entries')
+        .select('formatted_content').eq('id', entryId).maybeSingle();
+      if (existing?.formatted_content) return;
       const { error: deleteError } = await supabase
         .from('entries')
         .delete()
@@ -542,85 +546,7 @@ export function useEntries() {
     return true;
   }, [cleanupEmptyEntry]);
 
-  /**
-   * エントリを整形（時刻推測 + 日記生成）
-   */
-  const formatEntry = useCallback(async (entryId: string, blocks: Block[], date: string, dayBoundaryHour: number = 0): Promise<FormatEntryResponse | null> => {
-    if (!session) return null;
 
-    setFormatting(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('format-entries', {
-        body: {
-          blocks: blocks.map(b => ({
-            id: b.id,
-            content: b.content,
-            occurred_at: b.occurred_at,
-            time_confirmed_at: b.time_confirmed_at,
-            images: b.images,
-            category: b.category,
-            is_done: b.is_done,
-            done_at: b.done_at,
-            due_at: b.due_at,
-            due_all_day: b.due_all_day,
-          })),
-          date,
-          dayBoundaryHour,
-        },
-      });
-
-      if (error) throw error;
-
-      const updateData: {
-        formatted_content: string;
-        summary: string;
-        score?: number;
-        score_details?: string;
-      } = {
-        formatted_content: data.formatted_content,
-        summary: data.summary,
-      };
-
-      // Include score if present
-      if (data.score !== undefined) {
-        updateData.score = data.score;
-      }
-      if (data.score_details !== undefined) {
-        updateData.score_details = data.score_details;
-      }
-
-      const { error: updateError } = await supabase
-        .from('entries')
-        .update(updateData)
-        .eq('id', entryId);
-
-      if (updateError) throw updateError;
-
-      // 時刻更新があった場合のみトースト表示
-      if (data.time_updates && data.time_updates.length > 0) {
-        toast.success(`${data.time_updates.length}件の時刻を自動調整しました`);
-      } else if (data.score !== undefined) {
-        toast.success(`整形が完了しました（得点: ${data.score}点）`);
-      } else {
-        toast.success('整形が完了しました');
-      }
-      
-      return data as FormatEntryResponse;
-    } catch (error: unknown) {
-      console.error('Error formatting entry:', error);
-      const errMsg = error instanceof Error ? error.message : '';
-      if (errMsg.includes('429')) {
-        toast.error('レート制限に達しました。しばらくしてから再試行してください。');
-      } else if (errMsg.includes('402')) {
-        toast.error('クレジットが不足しています。');
-      } else {
-        toast.error('整形に失敗しました');
-      }
-      return null;
-    } finally {
-      setFormatting(false);
-    }
-  }, [session]);
 
   /**
    * 全エントリを取得
@@ -699,7 +625,6 @@ export function useEntries() {
 
   return {
     loading,
-    formatting,
     cleanupEmptyEntry,
     getOrCreateEntryForDate,
     getBlocksByDate,
@@ -708,7 +633,6 @@ export function useEntries() {
     updateBlock,
     updateBlockWithOccurredAt,
     deleteBlock,
-    formatEntry,
     getEntries,
     getEntry,
     summarizeUrl,

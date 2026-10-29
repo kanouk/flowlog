@@ -8,3 +8,11 @@
 - [x] Run existing isolated synthetic API/DB/canary detection tests — 11 passed, 0 failed; no production mutation requests or canary apply executed.
 - [ ] Production PostgREST write tests in isolated dedicated environment/account — no dedicated environment/account established.
 - [ ] User-designated single-target API readback and FlowLog image display — waits for user-designated date, block ID, and image URL; separate later step. No owner production writes or canary apply performed.
+# Issue #8 server diary generation
+
+- [x] Implement durable owner/life-day jobs, debouncing, leases, stale-output rejection, bounded retries, history and server-only worker.
+- [x] Move browser generation/persistence to server status polling and owner-scoped manual job requests; update API to 1.2.0.
+- [ ] Deploy the new migration/functions/frontend through Lovable with the global generation gate OFF.
+- [ ] Install pg_cron/pg_net, set dedicated worker/Vault secrets and configure the durable schedule while OFF.
+- [ ] Verify real scheduler/PostgREST/LLM/frontend with isolated fictional data. No production diary writes authorized.
+- [ ] Activate production only after the user explicitly identifies and authorizes the rollout scope.

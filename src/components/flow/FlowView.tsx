@@ -1,3 +1,5 @@
+import { useDiaryGeneration } from '@/hooks/useDiaryGeneration';
+import { DiaryGenerationState } from '@/components/flow/DiaryGenerationState';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { FlowInput } from '@/components/flow/FlowInput';
@@ -50,13 +52,11 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
   const loadedDateRef = useRef<string | null>(null);
 
   const { 
-    formatting, 
     getBlocksByDate,
     getEntry,
     addBlockWithDate,
     deleteBlock,
     updateBlock,
-    formatEntry,
     summarizeUrl,
   } = useEntries();
 
@@ -123,46 +123,8 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     return match ? match[1] : null;
   };
 
-  /**
-   * 自動日記生成（出来事ブロックのみ）+ 時刻推測
-   */
-  const triggerAutoFormat = useCallback(async (targetDate: string) => {
-    try {
-      const entryData = await getEntry(targetDate);
-      const blocksData = await getBlocksByDate(targetDate, dayBoundaryHour);
-      
-      // 「出来事」カテゴリのブロックのみ抽出
-      const eventBlocks = blocksData.filter(b => b.category === 'event');
-      
-      if (entryData && eventBlocks.length > 0) {
-        const result = await formatEntry(entryData.id, eventBlocks, targetDate, dayBoundaryHour);
-        
-        // 時刻が更新された場合、ブロックをリロード
-        if (result?.time_updates && result.time_updates.length > 0) {
-          const updatedBlocks = await getBlocksByDate(targetDate, dayBoundaryHour);
-          setBlocks(updatedBlocks);
-        }
-        
-        // 質問がある場合、質問リストに追加
-        if (result?.needs_clarification && result.questions) {
-          // 時刻確定済みのブロックへの質問は表示しない（サーバー側でも除外されるが保険）
-          const confirmedIds = new Set(
-            blocksData.filter(b => b.time_confirmed_at).map(b => b.id)
-          );
-          setPendingQuestions(prev => {
-            // 重複を避ける
-            const existingIds = new Set(prev.map(q => q.block_id));
-            const newQuestions = result.questions!.filter(
-              q => !existingIds.has(q.block_id) && !confirmedIds.has(q.block_id)
-            );
-            return [...prev, ...newQuestions];
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Auto format error:', error);
-    }
-  }, [getEntry, getBlocksByDate, formatEntry, dayBoundaryHour]);
+  // Mutations enqueue server jobs transactionally. The browser only observes.
+  const generation = useDiaryGeneration(selectedDate, () => {void loadData();});
 
   /**
    * 時刻質問への回答
@@ -180,9 +142,9 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
           : b)
       ));
       setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
-      triggerAutoFormat(selectedDate);
+
     }
-  }, [selectedDate, updateBlock, triggerAutoFormat, dayBoundaryHour]);
+  }, [selectedDate, updateBlock, dayBoundaryHour]);
 
   const handleExactTimeAnswer = useCallback(async (blockId: string, time: string) => {
     const newOccurredAt = createOccurredAt(selectedDate, time, dayBoundaryHour);
@@ -196,9 +158,9 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
           : b)
       ));
       setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
-      triggerAutoFormat(selectedDate);
+
     }
-  }, [selectedDate, updateBlock, triggerAutoFormat, dayBoundaryHour]);
+  }, [selectedDate, updateBlock, dayBoundaryHour]);
 
   /**
    * 時刻質問を無視
@@ -405,11 +367,6 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
         }
       }
 
-      // 「出来事」カテゴリの場合、自動日記生成
-      if (category === 'event') {
-        const targetDate = navigateToDate || selectedDate;
-        triggerAutoFormat(targetDate);
-      }
       return true;
     } else {
       setBlocks(prev => prev.filter(b => b.id !== tempId));
@@ -421,17 +378,11 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
    * ブロック削除
    */
   const handleDeleteBlock = async (blockId: string) => {
-    const blockToDelete = blocks.find(b => b.id === blockId);
-    const wasEvent = blockToDelete?.category === 'event';
     
     const success = await deleteBlock(blockId);
     if (success) {
       setBlocks(prev => prev.filter(b => b.id !== blockId));
       setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
-      
-      if (wasEvent) {
-        triggerAutoFormat(selectedDate);
-      }
     }
   };
 
@@ -440,8 +391,6 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
    */
   const handleUpdateBlock = async (blockId: string, updates: BlockUpdatePayload) => {
     const originalBlocks = [...blocks];
-    const blockToUpdate = blocks.find(b => b.id === blockId);
-    const isEvent = blockToUpdate?.category === 'event';
     
     setBlocks(prev => prev.map(b => 
       b.id === blockId ? { ...b, ...updates } : b
@@ -456,20 +405,9 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       if (newDayKey !== selectedDate) {
         setBlocks(prev => prev.filter(b => b.id !== blockId));
         toast.success(`${formatDisplayDateJST(updates.occurred_at, dayBoundaryHour)}に移動しました`);
-        
-        if (isEvent) {
-          triggerAutoFormat(selectedDate);
-          triggerAutoFormat(newDayKey);
-        }
       } else {
         setBlocks(prev => sortBlocksDesc(prev));
-        
-        if (isEvent) {
-          triggerAutoFormat(selectedDate);
-        }
       }
-    } else if (isEvent && (updates.content !== undefined)) {
-      triggerAutoFormat(selectedDate);
     }
   };
 
@@ -503,8 +441,6 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     }
 
     const newOccurredAt = result.occurredAt;
-    const blockToMove = blocks.find(b => b.id === activeId);
-    const isEvent = blockToMove?.category === 'event';
 
     const updated = await updateBlock(activeId, { occurred_at: newOccurredAt });
     
@@ -514,10 +450,6 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       setBlocks(prev => sortBlocksDesc(
         prev.map(b => b.id === activeId ? { ...b, occurred_at: newOccurredAt } : b)
       ));
-      
-      if (isEvent) {
-        triggerAutoFormat(selectedDate);
-      }
     }
   };
 
@@ -566,13 +498,15 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
               </span>
             </div>
 
-            {(refreshing || formatting) && (
+            {refreshing && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                {refreshing ? '更新中...' : '日記生成中...'}
+                更新中...
               </div>
             )}
           </div>
+
+          <DiaryGenerationState status={generation.status} unavailable={generation.unavailable} onRetry={() => {void generation.request();}} />
 
           <BlockList
             blocks={blocks}

@@ -13,7 +13,8 @@
     "test:watch": "TZ=Asia/Tokyo vitest",
     "migrate:image-references": "node scripts/migrate-image-references.mjs",
     "analyze": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:diary": "deno test --node-modules-dir=false --allow-env --allow-net --allow-read --allow-write --allow-sys supabase/functions/diary-worker/diary.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

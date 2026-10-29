@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { PGlite } from "npm:@electric-sql/pglite@0.3.14";
+import type { PGlite } from "npm:@electric-sql/pglite@0.3.14";
+import { database } from "../_test/database.ts";
 import {
   isExpectedBlock,
   isTimestamp,
@@ -19,89 +20,11 @@ const other = "99999999-9999-4999-8999-999999999999";
 const photo = "https://i.gyazo.com/0123456789abcdef0123456789abcdef.jpg";
 const oldPhoto = "https://i.gyazo.com/fedcba9876543210fedcba9876543210.jpg";
 
-async function database(cloudMigrationGuard = false) {
-  const db = new PGlite();
-  await db.exec(`
-    CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;
-    CREATE SCHEMA auth; CREATE SCHEMA storage;
-    CREATE TABLE auth.users(id uuid PRIMARY KEY, raw_user_meta_data jsonb);
-    CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT NULL::uuid $$;
-    CREATE TABLE storage.buckets(id text, name text, public boolean);
-    CREATE TABLE storage.objects(bucket_id text, name text);
-    CREATE FUNCTION storage.foldername(text) RETURNS text[] LANGUAGE sql AS $$ SELECT string_to_array($1, '/') $$;
-  `);
-  for (
-    const name of [
-      "20251219063412_429c270d-2561-4ce3-98f8-5f74b6f82f36.sql",
-      "20260110103001_0aa9a2be-47ab-420e-82ac-0c502adfbd15.sql",
-      "20260118062009_01a1acc8-5775-41cb-b604-938a6ff65928.sql",
-      "20260118095215_a2c9ab1f-099e-474c-9323-7fb4d1f06add.sql",
-      "20260119084100_f23b84f0-66ac-4bc7-9e62-19082a254420.sql",
-      "20260126004534_cdf86a69-8300-4c69-b7a0-3163bb01bfee.sql",
-      "20260307024051_eb77362c-c4d4-470c-81c6-da59104004c0.sql",
-      "20260120083759_9f82ba1a-7f8e-4623-9298-df5e4ff3bf1d.sql",
-      "20260725041802_c12483eb-4f1b-4fcd-ad7f-882305b05dd8.sql",
-    ]
-  ) {
-    await db.exec(
-      await Deno.readTextFile(
-        new URL(`../../migrations/${name}`, import.meta.url),
-      ),
-    );
-  }
-  // Only unrelated columns/settings are fixture DDL; core tables and image/time
-  // constraints above are the real historical migrations.
-  await db.exec(`
-    ALTER TABLE blocks ADD COLUMN priority integer DEFAULT 0;
-    CREATE TABLE user_ai_settings(user_id uuid UNIQUE, day_boundary_hour integer NOT NULL DEFAULT 0);
-    INSERT INTO auth.users(id) VALUES ('${owner}'), ('${other}');
-    INSERT INTO user_ai_settings VALUES ('${owner}',5);
-    GRANT USAGE ON SCHEMA public, auth TO service_role;
-    GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
-  `);
-  // Reproduce the two reported Cloud preflight constraints at each DDL step.
-  // This is a local guard, not a claim that the real Cloud checker has passed.
-  if (cloudMigrationGuard) {
-    await db.exec(`
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
-    CREATE FUNCTION test_cloud_migration_guard() RETURNS event_trigger
-    LANGUAGE plpgsql AS $$
-    DECLARE command record; target oid;
-    BEGIN
-      target := to_regclass('public.event_api_receipts');
-      IF target IS NULL THEN RETURN; END IF;
-      FOR command IN SELECT * FROM pg_event_trigger_ddl_commands() LOOP
-        IF command.classid = 'pg_class'::regclass AND command.objid = target THEN
-          IF EXISTS (
-            SELECT 1 FROM pg_constraint c JOIN pg_class parent ON parent.oid=c.confrelid
-            JOIN pg_namespace n ON n.oid=parent.relnamespace
-            WHERE c.conrelid=target AND c.contype='f' AND n.nspname='auth'
-          ) THEN RAISE EXCEPTION 'Cloud guard: direct auth foreign key'; END IF;
-          IF (SELECT relrowsecurity FROM pg_class WHERE oid=target) AND EXISTS (
-            SELECT 1 FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE']) privilege
-            WHERE NOT has_table_privilege('service_role', target, privilege)
-          ) THEN RAISE EXCEPTION 'Cloud guard: grant service privileges before RLS'; END IF;
-        END IF;
-      END LOOP;
-    END;
-    $$;
-    CREATE EVENT TRIGGER test_cloud_migration_guard ON ddl_command_end
-      EXECUTE FUNCTION test_cloud_migration_guard();
-  `);
-  }
-  await db.exec(
-    await Deno.readTextFile(
-      new URL(
-        "../../migrations/20261028000000_photo_diary_api.sql",
-        import.meta.url,
-      ),
-    ),
-  );
-  return db;
-}
-
 type Call = { url: URL; method: string; body: Record<string, unknown> | null };
-async function withDatabase(fn: (db: PGlite, calls: Call[]) => Promise<void>) {
+async function withDatabase(
+  fn: (db: PGlite, calls: Call[]) => Promise<void>,
+  generationActive = false,
+) {
   const db = await database();
   const before = globalThis.fetch;
   const intervalBefore = globalThis.setInterval;
@@ -150,6 +73,20 @@ async function withDatabase(fn: (db: PGlite, calls: Call[]) => Promise<void>) {
       return id ? reply({ user_id: id }) : reply({ code: "PGRST116" }, 406);
     }
     try {
+      if (url.pathname.endsWith("/rpc/diary_generation_active")) {
+        return reply(generationActive);
+      }
+      if (url.pathname.endsWith("/rpc/diary_generation_status_for_user")) {
+        return reply({
+          active: generationActive,
+          status: generationActive ? "queued" : "disabled",
+          generation: 1,
+          saved_generation: 0,
+        });
+      }
+      if (url.pathname.endsWith("/rpc/enqueue_diary_generation")) {
+        return reply(null);
+      }
       if (url.pathname.endsWith("/rpc/create_event_api")) {
         const data = await db.query<{ result: unknown }>(
           "SELECT create_event_api($1, $2::jsonb, $3) AS result",
@@ -170,7 +107,7 @@ async function withDatabase(fn: (db: PGlite, calls: Call[]) => Promise<void>) {
         return reply(data.rows[0].result);
       }
       const table = url.pathname.split("/").at(-1)!;
-      assert.ok(["entries", "blocks"].includes(table));
+      assert.ok(["entries", "blocks", "user_ai_settings"].includes(table));
       if (method === "POST") {
         const fields = Object.keys(body);
         assert.ok(
@@ -218,9 +155,14 @@ async function withDatabase(fn: (db: PGlite, calls: Call[]) => Promise<void>) {
         );
         if (condition === "is.null") where.push(`${column} IS NULL`);
         else {
-          assert.ok(condition.startsWith("eq."));
-          values.push(condition.slice(3));
-          where.push(`${column} = $${values.length}`);
+          const operator = condition.slice(0, condition.indexOf("."));
+          const comparison =
+            ({ eq: "=", gte: ">=", lt: "<" } as Record<string, string>)[
+              operator
+            ];
+          assert.ok(comparison);
+          values.push(condition.slice(operator.length + 1));
+          where.push(`${column} ${comparison} $${values.length}`);
         }
       }
       let sql = `SELECT * FROM ${table} WHERE ${where.join(" AND ")}`;
@@ -874,4 +816,71 @@ Deno.test("OpenAPI and CORS expose attachments, versioned CAS, readback, idempot
     cors.headers.get("Access-Control-Allow-Headers")!,
     /idempotency-key/i,
   );
+});
+
+Deno.test("generation API is owner-scoped, asynchronous, validates dates and respects deployment OFF", async () => {
+  await withDatabase(async (_db, calls) => {
+    assert.equal((await request("/entries/2026-09-20/generation")).status, 200);
+    assert.equal(
+      (await request("/entries/2026-09-20/regenerate", "POST", {})).status,
+      409,
+    );
+    assert.equal(
+      (await request("/entries/2026-02-30/regenerate", "POST", {})).status,
+      400,
+    );
+    assert.equal(
+      (await request("/entries/2026-09-20/generation", "GET", undefined, ""))
+        .status,
+      401,
+    );
+    assert.ok(
+      !calls.some((c) =>
+        c.url.pathname.endsWith("/rpc/enqueue_diary_generation")
+      ),
+    );
+  });
+  await withDatabase(async (_db, calls) => {
+    const response = await request("/entries/2026-09-20/regenerate", "POST", {
+      user_id: other,
+      p_date: "1999-01-01",
+    });
+    assert.equal(response.status, 202);
+    const queued = calls.find((c) =>
+      c.url.pathname.endsWith("/rpc/enqueue_diary_generation")
+    )!;
+    assert.deepEqual(queued.body, {
+      p_user_id: owner,
+      p_date: "2026-09-20",
+      p_force: true,
+    });
+    assert.equal(
+      calls.some((c) => c.url.pathname.includes("format-entries")),
+      false,
+    );
+  }, true);
+});
+
+Deno.test("entry readback uses the same life-day membership as the server worker without changing legacy blocks", async () => {
+  await withDatabase(async (db) => {
+    const block = await create();
+    await db.query(
+      "INSERT INTO entries(user_id,date) VALUES($1,'2026-09-21')",
+      [owner],
+    );
+    await db.query(
+      "UPDATE blocks SET occurred_at='2026-09-22T02:00:00+09:00' WHERE id=$1",
+      [block.id],
+    );
+    const response = await request("/entries/2026-09-21");
+    assert.equal(response.status, 200);
+    const day = (await response.json()).data;
+    assert.equal(day.blocks.length, 1);
+    assert.equal(day.blocks[0].id, block.id);
+    assert.equal(day.blocks[0].entry_id, block.entry_id);
+    assert.equal(
+      (await (await request("/entries/2026-09-20")).json()).data.blocks.length,
+      0,
+    );
+  });
 });

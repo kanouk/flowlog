@@ -1,4 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useDiaryGeneration } from '@/hooks/useDiaryGeneration';
+import { DiaryGenerationState } from '@/components/flow/DiaryGenerationState';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { Sparkles, Loader2, PenLine, FileText, CalendarDays, Sun } from 'lucide-react';
@@ -37,15 +39,15 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
   const today = getTodayKey(dayBoundaryHour);
   const date = propDate || today;
   const isToday = date === today;
+  const observedDate = useRef(date);
+  observedDate.current = date;
 
   const { 
-    formatting, 
     getBlocksByDate,
     getEntry,
     addBlockWithDate,
     deleteBlock,
     updateBlock,
-    formatEntry,
   } = useEntries();
 
   const { getSettingForFeature } = useAIFeatureSettings();
@@ -238,34 +240,22 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     }
   };
 
-  /**
-   * エントリ整形
-   */
+  const generation = useDiaryGeneration(date, () => {
+    void Promise.all([getEntry(date), getBlocksByDate(date, dayBoundaryHour)])
+      .then(([nextEntry, nextBlocks]) => {
+        if (observedDate.current !== date) return;
+        setEntry(nextEntry);
+        setBlocks(nextBlocks);
+      });
+  });
+  const formatting = generation.busy;
   const handleFormat = async () => {
-    if (blocks.length === 0) return;
-    
-    let currentEntry = entry;
-    if (!currentEntry) {
-      const entryData = await getEntry(date);
-      currentEntry = entryData;
-      setEntry(entryData);
-    }
-    
-    if (!currentEntry) {
-      toast.error('エントリが見つかりません');
-      return;
-    }
-    
-    const result = await formatEntry(currentEntry.id, blocks, date, dayBoundaryHour);
-    if (result) {
-      setEntry(prev => prev ? {
-        ...prev,
-        formatted_content: result.formatted_content,
-        summary: result.summary,
-      } : null);
-      setActiveTab('stock');
-    }
+    if (await generation.request()) setActiveTab('stock');
   };
+  const generationState = (
+    <DiaryGenerationState status={generation.status} unavailable={generation.unavailable}
+      onRetry={() => { void generation.request(); }} />
+  );
 
   const formattedDate = format(new Date(date), 'M月d日（E）', { locale: ja });
 
@@ -308,6 +298,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       </div>
 
       {/* Tabs */}
+      {generationState}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-2 mb-6">
           <TabsTrigger value="flow" className="gap-2">
@@ -341,7 +332,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
             {blocks.length > 0 && (
               <Button
                 onClick={handleFormat}
-                disabled={formatting}
+                disabled={formatting || !generation.status?.active}
                 variant="outline"
                 size="sm"
                 className="gap-2"

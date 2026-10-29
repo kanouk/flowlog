@@ -2,7 +2,9 @@
   "version": "4",
   "specifiers": {
     "npm:@electric-sql/pglite@0.3.14": "0.3.14",
-    "npm:@types/node@*": "22.5.4"
+    "npm:@types/node@*": "22.5.4",
+    "npm:date-fns-tz@3": "3.2.0_date-fns@3.6.0",
+    "npm:date-fns@3": "3.6.0"
   },
   "npm": {
     "@electric-sql/pglite@0.3.14": {
@@ -13,6 +15,15 @@
       "dependencies": [
         "undici-types"
       ]
+    },
+    "date-fns-tz@3.2.0_date-fns@3.6.0": {
+      "integrity": "sha512-sg8HqoTEulcbbbVXeg84u5UnlsQa8GS5QXMqjjYIhS4abEVVKIUwe0/l/UhrZdKaL/W5eWZNlbTeEIiOXTcsBQ==",
+      "dependencies": [
+        "date-fns"
+      ]
+    },
+    "date-fns@3.6.0": {
+      "integrity": "sha512-fRHTG8g/Gif+kSh50gaGEdToemgfj74aRX3swtiouboip5JDLAyDE9F11nHMIcvOaXeOC6D7SpNhi7uFyB7Uww=="
     },
     "undici-types@6.19.8": {
       "integrity": "sha512-ve2KP6f/JnbPBFyobGHuerC9g1FYGn/F8n1LWTwNxCEzd6IfqTwUQcNXgEtmmQ6DlRrC1hrSrBnCZPokRrDHjw=="
@@ -111,6 +122,8 @@
         "npm:clsx@^2.1.1",
         "npm:date-fns-tz@^3.2.0",
         "npm:date-fns@^3.6.0",
+        "npm:drizzle-kit@0",
+        "npm:drizzle-orm@0",
         "npm:eslint-plugin-react-hooks@^5.2.0",
         "npm:eslint-plugin-react-refresh@~0.4.20",
         "npm:eslint@^9.32.0",
@@ -119,6 +132,7 @@
         "npm:lucide-react@0.462",
         "npm:next-themes@0.3",
         "npm:postcss@^8.5.6",
+        "npm:postgres@^3.4.9",
         "npm:react-day-picker@^8.10.1",
         "npm:react-dom@^18.3.1",
         "npm:react-router-dom@^6.30.1",
