@@ -41,7 +41,7 @@ OpenAPIは1.2.0。ブロック保存の成功と日記生成の完了を分け�
 新規マイグレーションは `diary_generation_control.enabled=false`, `all_users=false`, `allowed_user_ids={}` で始まる。過去のブロック走査・ジョブのバックフィル・過去全件の生成は行わない。日記機能の設定がONでも、この運用ゲートがOFFならワーカーは処理せず、画面も停止中と表示する。
 
 1. 対象プロジェクト `wdvwnbeofakzihmjacko` とmainのコミットを確認する。
-2. LovableのDrizzle経路では、下記「既存のDrizzleマイグレーションを適用する」に従い **`drizzle/migrations/0001_server_diary_generation.sql` を1回だけ**適用する。SQLを新規マイグレーション作成ツールへ渡さない。Supabase CLI経路の同等ファイルは `supabase/migrations/20261029000000_server_diary_generation.sql`。両方を同じDBへ二重適用しない。前回の0000/20261028は再適用しない。新規テーブルはpublic.profiles参照、権限設定後にRLSを有効化する。
+2. 下記「Lovable Cloudの管理経路で一度だけ登録・適用する」に従い、**`supabase/migrations/20261029000000_server_diary_generation.sql` の原文をCloudの正式なマイグレーション機能へ1回だけ渡す**。このファイルはレビュー済みSQLの原本として保持し、Supabase CLIからは別途実行しない。Cloud側のSQLファイル・journal・snapshotはCloudに生成させる。未適用の同じSQLがDrizzle側に残っていないことを必ず先に確認する。前回の0000/20261028は再適用しない。新規テーブルはpublic.profiles参照、権限設定後にRLSを有効化する。
 3. `api`、`diary-worker`、旧入口を停止する `format-entries` を、それぞれ依存モジュールとともに配備する。今回のworkerには既存 `LOVABLE_API_KEY`（既定モデルの場合）または所有者の設定済みモデルを使う。専用の強いランダム値を `DIARY_WORKER_SECRET` に安全に設定し、出力・Git保存しない。
 4. 画面の新バンドルも公開する。旧画面は410で生成できなくなるため、旧ブラウザーには再読み込みが必要。新画面は運用ゲートOFFの間「自動生成は停止中」と表示する。
 5. DB拡張 `pg_cron >=1.5` と `pg_net`、Vaultを用意する。2026-10-29の読み取りではpg_cron 1.6.4 / pg_net 0.19.5は利用可能だが未導入、Vault 0.3.1は導入済みだった。利用可能表示だけを導入成功と扱わない。Cloudの許可された経路で導入する。
@@ -50,21 +50,25 @@ OpenAPIは1.2.0。ブロック保存の成功と日記生成の完了を分け�
 8. 公開OpenAPI 1.2.0、RLS/権限、ゲートOFF、スケジュール登録を独立した読み取りで確認する。本番の本人アカウントにPOST/PATCH/DELETE、再生成依頼、canary applyをしない。all_usersやallowed_user_idsを変更しない。
 9. 実PostgREST・スケジューラー・実LLM・画面の結合確認は、隔離されたテスト環境/専用アカウントの架空データで行う。本番本人データでの有効化・更新確認は、対象と許可を別途受けてから行う。
 
-## 既存のDrizzleマイグレーションを適用する
+## Lovable Cloudの管理経路で一度だけ登録・適用する
 
 2026-10-29のLovable適用は `42P07: diary_generation_control already exists` で停止した。その後の独立したSELECTでは新規3テーブルは存在せず、`drizzle.__drizzle_migrations` は0000の1行のみだった。Lovableの実行記録には、既に0001がある状態で、そのSQLを `lov_database--migration(name, query)` に渡した操作がある。未適用の0001に加えて同じSQLを新規作成して実行した可能性が高い。ツール内部の実行ログは取得できず、原因の断定はしていない。
 
-架空DBで、実Drizzle migratorに同じSQLの未適用ファイルを2つ渡すと、同じ42P07と全体ロールバックを再現できる。既存の0001だけなら適用成功し、再実行は何も変更しない。本番復旧ではSQLを `IF NOT EXISTS` に変更したり、履歴を手作業で適用済みにしたりせず、既存ファイルの適用経路を使う。
+PR #10では既存ファイルを直接適用する `npm run db:migrate` を案内したが、必要な `LOVABLE_DB_MIGRATION_URL` はこのCloud実行環境に提供されなかった。Cloudでは接続URLが利用者へ公開されるとは限らないため、この変数を取得・作成することを復旧条件にしない。CLI経路の案内とコマンドは撤回する。
 
-1. ファイル側の `_journal.json` と `.sql` を確認する。現在の想定は0000/0001の2件。失敗時に重複0002等が残っていれば、その内容・ハッシュとDB未適用を確認するまで実行しない。正規0001や適用済み0000を削除・再作成しない。
-2. SELECTでDB履歴のhash/created_atをファイル側と照合する。未反映時の想定は0000だけ（created_at `1793199307320`、SHA-256 `1d6109559b09025ba5a0dd4303d7aaf7e6192087e63c1cb2d8e25fc2b765f81f`）、新規3テーブルと新規RPCは未作成。部分的な作成や予期しない履歴があれば停止する。既に0001が適用済みならSQLを再送せず、ハッシュと停止状態を検証する。
-3. Cloudが提供する `LOVABLE_DB_MIGRATION_URL` を秘密のまま利用できる環境で、プロジェクトルートから **`npm run db:migrate`** を実行する（実体: `drizzle-kit migrate --config=drizzle.config.ts`）。依存関係は既存ロックファイルに従って用意する。これは適用履歴から未適用ファイルだけを選び、SQLと履歴を同じトランザクションで反映する。接続URLを表示・コマンド引数へ展開・Git保存しない。
-4. 新しいSQLの生成、`drizzle-kit generate` / `push`、`lov_database--migration` へのSQL再投入は行わない。Cloudで既存ファイルを適用する正式な機能がある場合はそれでもよいが、新規ファイルを作らないことを確認する。接続URLや適用権限が提供されない場合は、その不足を報告して停止する。
-5. 適用後、別のSELECTで0000/0001の履歴と各SQLのハッシュ、3テーブル・RPC・RLS/権限、および `enabled=false, all_users=false, allowed_user_ids={}` を確認してから関数配備へ進む。ジョブ・履歴は0件であることも確認する。失敗した場合は再試行や履歴修正をせず、ロールバック後の状態を読み取って報告する。
+2026-10-29の独立したSELECTで、DB履歴は0000だけ、新規3テーブル・生成関数・トリガーは未作成であることを再確認した。その状態を根拠に、**Git上で先に用意していた未適用0001のSQL・journal項目・snapshotだけを取り下げた**。適用済み0000とそのmetadata、DBの履歴は変更していない。SQL本文は上記Supabase側の原本に同一バイトで残し、SHA-256は `444f30f554c338a532b0d0e5f44aba33e577e6e9d32f075902b61a43400185e8`。この限定的な整理は前回の「正規0001を削除しない」「新規マイグレーション作成ツールへSQLを渡さない」という指示を置き換える。適用済みマイグレーションの削除や、DB履歴の書き換えを許可するものではない。
+
+1. 最新main取り込み後、ファイル側の `_journal.json` と `.sql` が0000のみで、同じ日記SQLの未適用ファイルが残っていないことを確認する。原本SQLのSHA-256も照合する。Cloudが既に正式登録・適用した後なら、以下の再登録は行わず履歴と実体を検証する。
+2. SELECTでDB履歴のhash/created_atを照合する。未反映時の想定は0000だけ（created_at `1793199307320`、SHA-256 `1d6109559b09025ba5a0dd4303d7aaf7e6192087e63c1cb2d8e25fc2b765f81f`）、新規3テーブル・RPC・対象トリガーは未作成。部分的な作成や予期しない履歴があれば停止する。
+3. 原本SQLを変更せず、Cloudの正式なマイグレーション機能（Lovable内の `lov_database--migration`）へ **1回だけ**渡す。原本を先にDrizzle側へコピーしたり、journal/snapshotを手作業で追加したりしない。Cloudに1つの新規ファイルと適用履歴を作成・管理させる。生成されるファイル名・時刻はCloudが決めるため、過去の0001の時刻への一致は求めない。SQL本文・ハッシュと適用の1回性を照合する。
+4. 適用後、別のSELECTで既存0000が同一のまま、新規履歴が1件だけ追加され、そのhash/created_atがCloudの新しいSQL/journalと一致することを確認する。3テーブル・RPC・RLS/権限、および `enabled=false, all_users=false, allowed_user_ids={}` を確認してから関数配備へ進む。ジョブ・生成履歴は0件を確認する。
+5. 失敗した場合は再試行や履歴修正をせず、ロールバック後の状態を読み取って報告する。SQLを `IF NOT EXISTS` に変更して隠したり、DB履歴を手作業で適用済みにしたり、認証/RLSを弱めたりしない。
+
+Cloudで正式登録されたファイル・journal・snapshotをGitへ同期して残す。それ以降は通常の適用済み履歴として保全する。`drizzle.config.ts` の接続変数を探す、秘密情報を表示する、`drizzle-kit generate` / `push` / CLI migrateを代替実行する必要はない。
 
 DB反映前の型自動生成では、未作成RPCが `src/integrations/supabase/types.ts` から消えることがある。今回必要な `diary_generation_status` / `request_diary_generation` の型を失った状態で画面を公開しない。マイグレーション成功後に型を再生成し、`npx tsc -b --force` とビルドを確認する。
 
-Drizzleの既存ファイル適用と履歴管理は[公式のmigrate手順](https://orm.drizzle.team/docs/drizzle-kit-migrate)に従う。この手順と追加テストは本番への適用成功を示すものではない。
+Cloudによるファイルの作成・適用・型生成は[Lovable公式のDatabase手順](https://docs.lovable.dev/features/database)に従う。直接接続URLが公開されないことは[Supabase公式のCloud説明](https://supabase.com/kb/troubleshooting/identify-lovable-cloud-or-supabase-backend)も参照。この引き渡し方法の実Cloud適用は未実施であり、架空DB試験の成功を本番適用成功と扱わない。
 
 ## 停止・復元
 
@@ -81,4 +85,6 @@ Drizzleの既存ファイル適用と履歴管理は[公式のmigrate手順](htt
 
 ローカル実行結果（2026-10-29）: 日記ワーカー/SQL 16件、API/保全13件、フロント24件が成功。TypeScript、Deno型検査、本番ビルド成功。Lintはエラー0・既存警告7件。実LLM、実スケジューラー、実PostgREST、複数DB接続、本番画面表示は未検証。
 
-配備復旧手順の追加後: Drizzle migratorによる重複エラー・ロールバック・既存0001適用・再実行・日記保全の試験を加え、日記17件/API13件/フロント24件が成功。PGliteの複文SQL実行だけはsimple protocol相当の `exec` へ渡すテスト用アダプターを使用し、選択・トランザクション・履歴更新は実Drizzle migratorで検証した。未反映DB由来の型自動生成で失われた2つのRPC型を復元し、型検査と本番ビルドも成功。本番へのマイグレーション再試行は行っていない。
+配備復旧手順の試験では、同じSQLの二重登録による42P07と全体ロールバック、Cloudが原本SQLを1つだけ登録した想定の正常適用、再実行時に変更しないこと、ゲートOFFと日記保全を検証する。Cloudの登録metadataは架空値であり、実Cloud機能を実行した結果ではない。PGliteの複文SQL実行だけはsimple protocol相当の `exec` へ渡すテスト用アダプターを使用し、選択・トランザクション・履歴更新は実Drizzle migratorで検証する。Cloud登録前はDrizzle側にコピーが0件、登録後は原本と同一の1件だけであることを検査する。本番へのマイグレーション再試行は行っていない。
+
+Cloud管理経路への切替後（2026-10-29）: 日記17件/API13件/フロント24件、型検査、本番ビルドが成功。Lintエラー0・既存警告7件。未反映DBからの型再生成で再度失われていたRPC型も復元した。SQL原本と適用済み0000のファイル・metadataに差分はない。

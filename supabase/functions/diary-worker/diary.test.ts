@@ -44,7 +44,7 @@ async function setup(applyMigration = true) {
   return db;
 }
 
-Deno.test("Drizzle applies existing 0001 once; a duplicate pending file rolls back without changing diaries", async () => {
+Deno.test("Cloud registration with one canonical SQL applies once; duplicate pending SQL rolls back without changing diaries", async () => {
   const db = await setup(false);
   const folder = await Deno.makeTempDir({
     prefix: "flowlog-drizzle-fictional-",
@@ -57,11 +57,30 @@ Deno.test("Drizzle applies existing 0001 once; a duplicate pending file rolls ba
     const journal = JSON.parse(
       await Deno.readTextFile(`${migrationsFolder}/meta/_journal.json`),
     );
-    assert.equal(journal.entries.length, 2);
+    assert.equal(journal.entries[0].tag, "0000_photo_diary_api");
     const baselineSql = await Deno.readTextFile(
       `${migrationsFolder}/${journal.entries[0].tag}.sql`,
     );
     const baselineHash = createHash("sha256").update(baselineSql).digest("hex");
+    const newSql = await Deno.readTextFile(
+      new URL(
+        "../../migrations/20261029000000_server_diary_generation.sql",
+        import.meta.url,
+      ),
+    );
+    // Simulate the migration metadata recorded by Cloud's normal creation tool.
+    // No direct DB URL or real Cloud tool is used by this local test.
+    const cloudEntry = {
+      idx: 1,
+      version: "7",
+      when: journal.entries[0].when + 1,
+      tag: "0001_cloud_registered_diary",
+      breakpoints: true,
+    };
+    const registeredJournal = {
+      ...journal,
+      entries: [journal.entries[0], cloudEntry],
+    };
     await db.exec(`CREATE SCHEMA drizzle;
       CREATE TABLE drizzle.__drizzle_migrations(id serial PRIMARY KEY,hash text NOT NULL,created_at bigint);`);
     await db.query(
@@ -78,26 +97,22 @@ Deno.test("Drizzle applies existing 0001 once; a duplicate pending file rolls ba
     )).rows;
 
     await Deno.mkdir(`${folder}/meta`);
-    for (const entry of journal.entries) {
-      await Deno.copyFile(
-        `${migrationsFolder}/${entry.tag}.sql`,
-        `${folder}/${entry.tag}.sql`,
-      );
-    }
-    await Deno.copyFile(
-      `${folder}/${journal.entries[1].tag}.sql`,
-      `${folder}/0002_duplicate_diary.sql`,
+    await Deno.writeTextFile(
+      `${folder}/${journal.entries[0].tag}.sql`,
+      baselineSql,
     );
+    await Deno.writeTextFile(`${folder}/${cloudEntry.tag}.sql`, newSql);
+    await Deno.writeTextFile(`${folder}/0002_duplicate_diary.sql`, newSql);
     await Deno.writeTextFile(
       `${folder}/meta/_journal.json`,
       JSON.stringify({
-        ...journal,
+        ...registeredJournal,
         entries: [
-          ...journal.entries,
+          ...registeredJournal.entries,
           {
-            ...journal.entries[1],
+            ...cloudEntry,
             idx: 2,
-            when: journal.entries[1].when + 1,
+            when: cloudEntry.when + 1,
             tag: "0002_duplicate_diary",
           },
         ],
@@ -150,19 +165,23 @@ Deno.test("Drizzle applies existing 0001 once; a duplicate pending file rolls ba
       1,
     );
 
-    await migrate(orm, { migrationsFolder });
+    // Only the failed, unrecorded duplicate is removed in this fictional DB.
+    // The deployed 0000 row and file are retained byte for byte.
+    await Deno.writeTextFile(
+      `${folder}/meta/_journal.json`,
+      JSON.stringify(registeredJournal),
+    );
+    await Deno.remove(`${folder}/0002_duplicate_diary.sql`);
+    await migrate(orm, { migrationsFolder: folder });
     const records = (await db.query<{ hash: string; created_at: number }>(
       "SELECT hash,created_at FROM drizzle.__drizzle_migrations ORDER BY created_at",
     )).rows;
-    const newSql = await Deno.readTextFile(
-      `${migrationsFolder}/${journal.entries[1].tag}.sql`,
-    );
     assert.deepEqual(records.map((r) => r.hash), [
       baselineHash,
       createHash("sha256").update(newSql).digest("hex"),
     ]);
-    assert.equal(Number(records[1].created_at), journal.entries[1].when);
-    await migrate(orm, { migrationsFolder });
+    assert.equal(Number(records[1].created_at), cloudEntry.when);
+    await migrate(orm, { migrationsFolder: folder });
     assert.deepEqual(
       (await db.query(
         "SELECT hash,created_at FROM drizzle.__drizzle_migrations ORDER BY created_at",
@@ -771,20 +790,40 @@ Deno.test("selected-day restore requires OFF, current entry timestamp and matchi
     ]);
     assert.equal((await entry(db)).formatted_content, "保全する日記");
   }));
-Deno.test("Cloud and local migration sources stay identical", async () => {
+Deno.test("canonical SQL is preserved and Cloud never holds two copies of the diary creation", async () => {
   const local = await Deno.readTextFile(
     new URL(
       "../../migrations/20261029000000_server_diary_generation.sql",
       import.meta.url,
     ),
   );
-  const cloud = await Deno.readTextFile(
-    new URL(
-      "../../../drizzle/migrations/0001_server_diary_generation.sql",
-      import.meta.url,
-    ),
+  assert.equal(
+    createHash("sha256").update(local).digest("hex"),
+    "444f30f554c338a532b0d0e5f44aba33e577e6e9d32f075902b61a43400185e8",
   );
-  assert.equal(cloud, local);
+  const folder = new URL("../../../drizzle/migrations/", import.meta.url);
+  const journal = JSON.parse(
+    await Deno.readTextFile(new URL("meta/_journal.json", folder)),
+  );
+  const tags = journal.entries.map((e: { tag: string }) => e.tag);
+  assert.equal(new Set(tags).size, tags.length);
+  let copies = 0;
+  for (const tag of tags) {
+    const sql = await Deno.readTextFile(new URL(`${tag}.sql`, folder));
+    if (sql.includes("CREATE TABLE public.diary_generation_control")) {
+      copies++;
+      assert.equal(sql, local);
+    }
+  }
+  assert.ok(copies <= 1, "Cloud must register the canonical SQL only once");
+  for await (const file of Deno.readDir(folder)) {
+    if (file.name.endsWith(".sql")) {
+      assert.ok(
+        tags.includes(file.name.slice(0, -4)),
+        "Unjournaled SQL must not be left in Cloud's migration folder",
+      );
+    }
+  }
 });
 
 Deno.test("scoring remains optional and server generated scores are saved with the diary", () =>
