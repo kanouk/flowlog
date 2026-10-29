@@ -2,7 +2,7 @@ import { Hono, type Context } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
 import { corsHeaders } from "../_shared/cors.ts";
 import { waitUntil } from "../_shared/edge-runtime.ts";
-import { expectedBlockSchema, imageArraySchema, isExpectedBlock, validateEvent, validateImages } from "./native-images.ts";
+import { expectedBlockSchema, imageArraySchema, isExpectedBlock, isTimestamp, validateEvent, validateImages } from "./native-images.ts";
 
 // ベースパスを設定（Edge Functionのパス）
 export const app = new Hono().basePath("/api");
@@ -109,6 +109,8 @@ app.post("/read-later", authMiddlewareInline, addReadLater);
 app.patch("/read-later/:id/read", authMiddlewareInline, markAsReadHandler);
 app.get("/search", authMiddlewareInline, search);
 app.get("/entries/:date", authMiddlewareInline, getEntryHandler);
+app.get("/entries/:date/generation", authMiddlewareInline, generationStatusHandler);
+app.post("/entries/:date/regenerate", authMiddlewareInline, regenerateHandler);
 app.patch("/blocks/:id", authMiddlewareInline, updateBlock);
 app.delete("/blocks/:id", authMiddlewareInline, deleteBlock);
 app.post("/image-reference-migrations", authMiddlewareInline, migrateImageReferences);
@@ -362,7 +364,7 @@ app.get("/health", (c) => {
 app.get("/docs", (c) => {
   const docs = {
     name: "FlowLog REST API",
-    version: "1.1",
+    version: "1.2",
     base_url: `${supabaseUrl}/functions/v1/api`,
     authentication: {
       type: "Bearer Token",
@@ -370,6 +372,8 @@ app.get("/docs", (c) => {
       description: "APIトークンはFlowLog設定画面から発行できます。/health と /docs 以外の全エンドポイントに認証が必要です。",
     },
     endpoints: [
+      {method:"GET",path:"/entries/:date/generation",description:"本人の生活日の日記生成状態"},
+      {method:"POST",path:"/entries/:date/regenerate",description:"日記再生成・再試行を非同期で依頼（202）。本文送信不要"},
       {
         method: "GET", path: "/health",
         description: "ヘルスチェック（認証不要）",
@@ -485,7 +489,7 @@ app.get("/openapi.json", (c) => {
     info: {
       title: "FlowLog API",
       description: "FlowLog REST API – 出来事・タスク・予定・メモ・あとで読むの管理",
-      version: "1.1.0",
+      version: "1.2.0",
     },
     servers: [{ url: baseUrl }],
     security: [{ bearerAuth: [] }],
@@ -558,6 +562,12 @@ app.get("/openapi.json", (c) => {
                 message: { type: "string" },
               },
             },
+          },
+        },
+        DiaryGenerationStatus: {
+          type: "object", properties: {
+            active: {type:"boolean"}, status:{type:"string",enum:["disabled","idle","queued","running","succeeded","failed"]},
+            generation:{type:"integer"}, saved_generation:{type:"integer"}, completed_at:{type:"string",format:"date-time",nullable:true}, error_code:{type:"string",nullable:true},
           },
         },
         SuccessBlockUpdateResponse: {
@@ -646,7 +656,7 @@ app.get("/openapi.json", (c) => {
         },
         post: {
           summary: "出来事を追加",
-          description: "画像はネイティブ添付として保存する。images または Idempotency-Key を指定する新経路では、occurred_at（タイムゾーン必須）をJSTと所有者のday_boundary_hour（未設定0時）で生活日に所属させる。両方省略する従来のテキスト経路は従来の所属日判定と応答を維持。日記整形・画像取得・OCRは呼ばない。画像省略は従来どおり添付なし。例の所属日は境界5時の場合。",
+          description: "画像はネイティブ添付として保存する。images または Idempotency-Key を指定する新経路では、occurred_at（タイムゾーン必須）をJSTと所有者のday_boundary_hour（未設定0時）で生活日に所属させる。両方省略する従来のテキスト経路は従来の所属日判定と応答を維持。保存時に生成ジョブを記録し、有効化された所有者の対象日だけをサーバーで非同期再生成する。画像取得・OCRは呼ばない。画像省略は従来どおり添付なし。例の所属日は境界5時の場合。",
           parameters: [{ name: "Idempotency-Key", in: "header", required: false, schema: { type: "string", pattern: "^[A-Za-z0-9._:-]{1,128}$" }, description: "再送時は同じキーと同じ本文を送る。同一所有者内で永続保持。別内容は409。省略時は毎回新規登録。応答は初回の保存スナップショット（replayedのみtrue）。" }],
           requestBody: {
             required: true,
@@ -786,10 +796,20 @@ app.get("/openapi.json", (c) => {
           },
         },
       },
+      "/entries/{date}/generation": {
+        get: {summary:"日記生成の状態を取得",description:"保存成功と生成完了を区別する。保存済み本文はGET /entries/{date}で取得する。",
+          parameters:[{name:"date",in:"path",required:true,schema:{type:"string",format:"date"}}],
+          responses:{"200":{description:"OK",content:{"application/json":{schema:{type:"object",properties:{success:{type:"boolean"},data:{$ref:"#/components/schemas/DiaryGenerationStatus"}}},example:{success:true,data:{active:true,status:"queued",generation:2,saved_generation:1,completed_at:null,error_code:null}}}}},"400":{description:"Invalid date"},"401":{description:"Unauthorized"},"500":{description:"Status unavailable"}}},
+      },
+      "/entries/{date}/regenerate": {
+        post: {summary:"本人の対象日の日記再生成・再試行を依頼",description:"サーバーがDBから出来事を取得する。本文の送信は不要。同日の待機中/生成中の依頼はまとめる。生成OFF/運用停止は409。",
+          parameters:[{name:"date",in:"path",required:true,schema:{type:"string",format:"date"}}],
+          responses:{"202":{description:"Accepted; generation is not complete",content:{"application/json":{schema:{type:"object",properties:{success:{type:"boolean"},data:{$ref:"#/components/schemas/DiaryGenerationStatus"}}}}}},"400":{description:"Invalid date"},"401":{description:"Unauthorized"},"409":{description:"Generation disabled"},"500":{description:"Queue unavailable"}}},
+      },
       "/blocks/{id}": {
         patch: {
           summary: "ブロックを更新",
-          description: "images を指定すると添付全体を置換。[] は全解除。expected（直前のGET /entries/{date}から転記）が必須。更新と照合は1つのUPDATEで実行し、不一致・他所有者・削除済みは409。images省略は既存画像を保持。imagesだけなら本文・タグ・日時・所属日・日記整形済み本文・他ブロックは変更しない。revisionのみ増加。",
+          description: "images を指定すると添付全体を置換。[] は全解除。expected（直前のGET /entries/{date}から転記）が必須。更新と照合は1つのUPDATEで実行し、不一致・他所有者・削除済みは409。images省略は既存画像を保持。imagesだけなら原ブロックの本文・タグ・日時・所属日・他ブロックは変更しない。画像だけの更新も対象日の日記の非同期再生成を起動する（有効化時）。保存成功は生成完了を意味しない。revisionも増加。",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
           requestBody: {
             required: true,
@@ -1352,8 +1372,15 @@ async function getEntryHandler(c: Context) {
       return c.json({ success: true, data: null, message: "エントリーが見つかりません" });
     }
 
+    // Match the worker/UI's life-day range, including legacy blocks whose entry_id
+    // was assigned by the old API's calendar-date path. Never rewrite those blocks.
+    const {data: settings,error:settingsError}=await supabase.from("user_ai_settings")
+      .select("day_boundary_hour").eq("user_id",userId).maybeSingle();
+    if(settingsError)throw new Error("Cannot read life-day settings");
+    const start=new Date(`${date}T${String(settings?.day_boundary_hour??0).padStart(2,"0")}:00:00+09:00`);
+    const end=new Date(start.getTime()+86400000);
     const { data: blocks, error: blocksError } = await supabase.from("blocks").select("*")
-      .eq("user_id", userId).eq("entry_id", data.id)
+      .eq("user_id", userId).gte("occurred_at",start.toISOString()).lt("occurred_at",end.toISOString())
       .order("occurred_at", { ascending: true }).order("id", { ascending: true });
     if (blocksError) throw new Error("Failed to fetch entry blocks");
     const formattedContent = await expandPhotoMarkersForContent(userId, data.formatted_content);
@@ -1362,6 +1389,30 @@ async function getEntryHandler(c: Context) {
   } catch (error) {
     return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
+}
+
+// Generation is a durable server job; authenticated callers may only act on their own life day.
+async function generationStatusHandler(c: Context) {
+  const date=c.req.param("date");
+  if(!isTimestamp(`${date}T00:00:00Z`))return c.json({success:false,error:"Invalid date"},400);
+  const db=createClient(supabaseUrl,supabaseServiceKey);
+  const {data,error}=await db.rpc("diary_generation_status_for_user",{p_user_id:c.get("userId"),p_date:date});
+  if(error)return c.json({success:false,error:"Cannot read generation status"},500);
+  return c.json({success:true,data});
+}
+async function regenerateHandler(c: Context) {
+  const date=c.req.param("date");
+  if(!isTimestamp(`${date}T00:00:00Z`))return c.json({success:false,error:"Invalid date"},400);
+  const db=createClient(supabaseUrl,supabaseServiceKey);
+  const userId=c.get("userId");
+  const {data:active,error:activeError}=await db.rpc("diary_generation_active",{p_user_id:userId});
+  if(activeError)return c.json({success:false,error:"Cannot read generation settings"},500);
+  if(!active)return c.json({success:false,error:"Diary generation disabled"},409);
+  const {error}=await db.rpc("enqueue_diary_generation",{p_user_id:userId,p_date:date,p_force:true});
+  if(error)return c.json({success:false,error:"Cannot enqueue diary generation"},500);
+  const {data,error:statusError}=await db.rpc("diary_generation_status_for_user",{p_user_id:userId,p_date:date});
+  if(statusError)return c.json({success:false,error:"Cannot read generation status"},500);
+  return c.json({success:true,data},202);
 }
 
 // Block Update (generic)
