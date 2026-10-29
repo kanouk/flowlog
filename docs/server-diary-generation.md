@@ -41,7 +41,7 @@ OpenAPIは1.2.0。ブロック保存の成功と日記生成の完了を分け�
 新規マイグレーションは `diary_generation_control.enabled=false`, `all_users=false`, `allowed_user_ids={}` で始まる。過去のブロック走査・ジョブのバックフィル・過去全件の生成は行わない。日記機能の設定がONでも、この運用ゲートがOFFならワーカーは処理せず、画面も停止中と表示する。
 
 1. 対象プロジェクト `wdvwnbeofakzihmjacko` とmainのコミットを確認する。
-2. LovableのDrizzle経路では **`drizzle/migrations/0001_server_diary_generation.sql` を1回だけ**適用する。Supabase CLI経路の同等ファイルは `supabase/migrations/20261029000000_server_diary_generation.sql`。両方を同じDBへ二重適用しない。前回の0000/20261028は再適用しない。新規テーブルはpublic.profiles参照、権限設定後にRLSを有効化する。
+2. LovableのDrizzle経路では、下記「既存のDrizzleマイグレーションを適用する」に従い **`drizzle/migrations/0001_server_diary_generation.sql` を1回だけ**適用する。SQLを新規マイグレーション作成ツールへ渡さない。Supabase CLI経路の同等ファイルは `supabase/migrations/20261029000000_server_diary_generation.sql`。両方を同じDBへ二重適用しない。前回の0000/20261028は再適用しない。新規テーブルはpublic.profiles参照、権限設定後にRLSを有効化する。
 3. `api`、`diary-worker`、旧入口を停止する `format-entries` を、それぞれ依存モジュールとともに配備する。今回のworkerには既存 `LOVABLE_API_KEY`（既定モデルの場合）または所有者の設定済みモデルを使う。専用の強いランダム値を `DIARY_WORKER_SECRET` に安全に設定し、出力・Git保存しない。
 4. 画面の新バンドルも公開する。旧画面は410で生成できなくなるため、旧ブラウザーには再読み込みが必要。新画面は運用ゲートOFFの間「自動生成は停止中」と表示する。
 5. DB拡張 `pg_cron >=1.5` と `pg_net`、Vaultを用意する。2026-10-29の読み取りではpg_cron 1.6.4 / pg_net 0.19.5は利用可能だが未導入、Vault 0.3.1は導入済みだった。利用可能表示だけを導入成功と扱わない。Cloudの許可された経路で導入する。
@@ -49,6 +49,22 @@ OpenAPIは1.2.0。ブロック保存の成功と日記生成の完了を分け�
 7. ゲートOFFを確認して `scripts/configure-diary-worker.sql` を実行する。10秒間隔の定期呼び出しを設定する。スクリプトは前提不足なら明示的に失敗する。機能が使えない場合、画面を閉じても処理できる別の永続スケジューラーを用意するまで有効化しない。
 8. 公開OpenAPI 1.2.0、RLS/権限、ゲートOFF、スケジュール登録を独立した読み取りで確認する。本番の本人アカウントにPOST/PATCH/DELETE、再生成依頼、canary applyをしない。all_usersやallowed_user_idsを変更しない。
 9. 実PostgREST・スケジューラー・実LLM・画面の結合確認は、隔離されたテスト環境/専用アカウントの架空データで行う。本番本人データでの有効化・更新確認は、対象と許可を別途受けてから行う。
+
+## 既存のDrizzleマイグレーションを適用する
+
+2026-10-29のLovable適用は `42P07: diary_generation_control already exists` で停止した。その後の独立したSELECTでは新規3テーブルは存在せず、`drizzle.__drizzle_migrations` は0000の1行のみだった。Lovableの実行記録には、既に0001がある状態で、そのSQLを `lov_database--migration(name, query)` に渡した操作がある。未適用の0001に加えて同じSQLを新規作成して実行した可能性が高い。ツール内部の実行ログは取得できず、原因の断定はしていない。
+
+架空DBで、実Drizzle migratorに同じSQLの未適用ファイルを2つ渡すと、同じ42P07と全体ロールバックを再現できる。既存の0001だけなら適用成功し、再実行は何も変更しない。本番復旧ではSQLを `IF NOT EXISTS` に変更したり、履歴を手作業で適用済みにしたりせず、既存ファイルの適用経路を使う。
+
+1. ファイル側の `_journal.json` と `.sql` を確認する。現在の想定は0000/0001の2件。失敗時に重複0002等が残っていれば、その内容・ハッシュとDB未適用を確認するまで実行しない。正規0001や適用済み0000を削除・再作成しない。
+2. SELECTでDB履歴のhash/created_atをファイル側と照合する。未反映時の想定は0000だけ（created_at `1793199307320`、SHA-256 `1d6109559b09025ba5a0dd4303d7aaf7e6192087e63c1cb2d8e25fc2b765f81f`）、新規3テーブルと新規RPCは未作成。部分的な作成や予期しない履歴があれば停止する。既に0001が適用済みならSQLを再送せず、ハッシュと停止状態を検証する。
+3. Cloudが提供する `LOVABLE_DB_MIGRATION_URL` を秘密のまま利用できる環境で、プロジェクトルートから **`npm run db:migrate`** を実行する（実体: `drizzle-kit migrate --config=drizzle.config.ts`）。依存関係は既存ロックファイルに従って用意する。これは適用履歴から未適用ファイルだけを選び、SQLと履歴を同じトランザクションで反映する。接続URLを表示・コマンド引数へ展開・Git保存しない。
+4. 新しいSQLの生成、`drizzle-kit generate` / `push`、`lov_database--migration` へのSQL再投入は行わない。Cloudで既存ファイルを適用する正式な機能がある場合はそれでもよいが、新規ファイルを作らないことを確認する。接続URLや適用権限が提供されない場合は、その不足を報告して停止する。
+5. 適用後、別のSELECTで0000/0001の履歴と各SQLのハッシュ、3テーブル・RPC・RLS/権限、および `enabled=false, all_users=false, allowed_user_ids={}` を確認してから関数配備へ進む。ジョブ・履歴は0件であることも確認する。失敗した場合は再試行や履歴修正をせず、ロールバック後の状態を読み取って報告する。
+
+DB反映前の型自動生成では、未作成RPCが `src/integrations/supabase/types.ts` から消えることがある。今回必要な `diary_generation_status` / `request_diary_generation` の型を失った状態で画面を公開しない。マイグレーション成功後に型を再生成し、`npx tsc -b --force` とビルドを確認する。
+
+Drizzleの既存ファイル適用と履歴管理は[公式のmigrate手順](https://orm.drizzle.team/docs/drizzle-kit-migrate)に従う。この手順と追加テストは本番への適用成功を示すものではない。
 
 ## 停止・復元
 
@@ -64,3 +80,5 @@ OpenAPIは1.2.0。ブロック保存の成功と日記生成の完了を分け�
 これは実際のCloudスケジューラー・複数DB接続・実LLMの出力品質・本番画面表示の検証とは区別する。本番にはこの作業から配備・データ更新を行わない。
 
 ローカル実行結果（2026-10-29）: 日記ワーカー/SQL 16件、API/保全13件、フロント24件が成功。TypeScript、Deno型検査、本番ビルド成功。Lintはエラー0・既存警告7件。実LLM、実スケジューラー、実PostgREST、複数DB接続、本番画面表示は未検証。
+
+配備復旧手順の追加後: Drizzle migratorによる重複エラー・ロールバック・既存0001適用・再実行・日記保全の試験を加え、日記17件/API13件/フロント24件が成功。PGliteの複文SQL実行だけはsimple protocol相当の `exec` へ渡すテスト用アダプターを使用し、選択・トランザクション・履歴更新は実Drizzle migratorで検証した。未反映DB由来の型自動生成で失われた2つのRPC型を復元し、型検査と本番ビルドも成功。本番へのマイグレーション再試行は行っていない。

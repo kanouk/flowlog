@@ -1,7 +1,11 @@
 import { legacyFormatHandler } from "../format-entries/legacy-handler.ts";
 import assert from "node:assert/strict";
 import { database, other, owner } from "../_test/database.ts";
-import type { PGlite } from "npm:@electric-sql/pglite@0.3.14";
+import type { PGlite, Transaction } from "npm:@electric-sql/pglite@0.3.14";
+import { drizzle } from "npm:drizzle-orm@0.45.4/pglite";
+import { migrate } from "npm:drizzle-orm@0.45.4/pglite/migrator";
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import {
   createClient,
   type SupabaseClient,
@@ -18,7 +22,7 @@ import {
 } from "../format-entries/diary.ts";
 
 type Client = SupabaseClient;
-async function setup() {
+async function setup(applyMigration = true) {
   const db = await database();
   await db.exec(`
     ALTER TABLE entries ADD COLUMN score integer, ADD COLUMN score_details text;
@@ -27,16 +31,165 @@ async function setup() {
     CREATE TABLE user_ai_api_keys(id uuid DEFAULT gen_random_uuid(),user_id uuid,api_key text,updated_at timestamptz DEFAULT now());
     CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT NULLIF(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
   `);
-  await db.exec(
-    await Deno.readTextFile(
-      new URL(
-        "../../migrations/20261029000000_server_diary_generation.sql",
-        import.meta.url,
+  if (applyMigration) {
+    await db.exec(
+      await Deno.readTextFile(
+        new URL(
+          "../../migrations/20261029000000_server_diary_generation.sql",
+          import.meta.url,
+        ),
       ),
-    ),
-  );
+    );
+  }
   return db;
 }
+
+Deno.test("Drizzle applies existing 0001 once; a duplicate pending file rolls back without changing diaries", async () => {
+  const db = await setup(false);
+  const folder = await Deno.makeTempDir({
+    prefix: "flowlog-drizzle-fictional-",
+  });
+  try {
+    // The fixture has applied 0000 already, matching the observed deployed state.
+    const migrationsFolder = fileURLToPath(
+      new URL("../../../drizzle/migrations", import.meta.url),
+    );
+    const journal = JSON.parse(
+      await Deno.readTextFile(`${migrationsFolder}/meta/_journal.json`),
+    );
+    assert.equal(journal.entries.length, 2);
+    const baselineSql = await Deno.readTextFile(
+      `${migrationsFolder}/${journal.entries[0].tag}.sql`,
+    );
+    const baselineHash = createHash("sha256").update(baselineSql).digest("hex");
+    await db.exec(`CREATE SCHEMA drizzle;
+      CREATE TABLE drizzle.__drizzle_migrations(id serial PRIMARY KEY,hash text NOT NULL,created_at bigint);`);
+    await db.query(
+      "INSERT INTO drizzle.__drizzle_migrations(hash,created_at) VALUES($1,$2)",
+      [baselineHash, journal.entries[0].when],
+    );
+    await post(db);
+    await db.query("UPDATE entries SET formatted_content=$1,summary=$2", [
+      "架空の既存日記。配備で書き換えない。",
+      "架空の要約",
+    ]);
+    const before = (await db.query(
+      "SELECT (SELECT jsonb_agg(b) FROM blocks b) blocks,(SELECT jsonb_agg(e) FROM entries e) entries",
+    )).rows;
+
+    await Deno.mkdir(`${folder}/meta`);
+    for (const entry of journal.entries) {
+      await Deno.copyFile(
+        `${migrationsFolder}/${entry.tag}.sql`,
+        `${folder}/${entry.tag}.sql`,
+      );
+    }
+    await Deno.copyFile(
+      `${folder}/${journal.entries[1].tag}.sql`,
+      `${folder}/0002_duplicate_diary.sql`,
+    );
+    await Deno.writeTextFile(
+      `${folder}/meta/_journal.json`,
+      JSON.stringify({
+        ...journal,
+        entries: [
+          ...journal.entries,
+          {
+            ...journal.entries[1],
+            idx: 2,
+            when: journal.entries[1].when + 1,
+            tag: "0002_duplicate_diary",
+          },
+        ],
+      }),
+    );
+    // Production postgres-js supports a multi-statement migration with unsafe().
+    // PGlite.query uses the prepared protocol, so forward that one SQL batch to
+    // PGlite.exec (simple protocol). Drizzle still controls selection/history/
+    // transaction boundaries; the migration bytes and hashes stay unchanged.
+    const migrationClient = new Proxy(db, {
+      get(target, key) {
+        if (key === "transaction") {
+          return (callback: (tx: Transaction) => Promise<unknown>) =>
+            target.transaction((tx) => {
+              const query = tx.query.bind(tx);
+              tx.query =
+                ((sql: string, params?: unknown[], options?: unknown) => {
+                  if (sql.startsWith("-- Issue #8:")) {
+                    assert.equal(params?.length ?? 0, 0);
+                    return tx.exec(sql).then((results) => results.at(-1));
+                  }
+                  return query(sql, params, options as never);
+                }) as typeof tx.query;
+              return callback(tx);
+            });
+        }
+        const value = Reflect.get(target, key, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const orm = drizzle(migrationClient);
+    await assert.rejects(
+      () => migrate(orm, { migrationsFolder: folder }),
+      (error: unknown) => {
+        const cause =
+          (error as { cause?: { code?: string; message?: string } }).cause;
+        return cause?.code === "42P07" &&
+          !!cause.message?.includes("diary_generation_control");
+      },
+    );
+    assert.deepEqual(
+      (await db.query(
+        "SELECT to_regclass('public.diary_generation_control') control,to_regclass('public.diary_generation_jobs') jobs,to_regclass('public.diary_generation_history') history",
+      )).rows,
+      [{ control: null, jobs: null, history: null }],
+    );
+    assert.equal(
+      (await db.query("SELECT * FROM drizzle.__drizzle_migrations")).rows
+        .length,
+      1,
+    );
+
+    await migrate(orm, { migrationsFolder });
+    const records = (await db.query<{ hash: string; created_at: number }>(
+      "SELECT hash,created_at FROM drizzle.__drizzle_migrations ORDER BY created_at",
+    )).rows;
+    const newSql = await Deno.readTextFile(
+      `${migrationsFolder}/${journal.entries[1].tag}.sql`,
+    );
+    assert.deepEqual(records.map((r) => r.hash), [
+      baselineHash,
+      createHash("sha256").update(newSql).digest("hex"),
+    ]);
+    assert.equal(Number(records[1].created_at), journal.entries[1].when);
+    await migrate(orm, { migrationsFolder });
+    assert.deepEqual(
+      (await db.query(
+        "SELECT hash,created_at FROM drizzle.__drizzle_migrations ORDER BY created_at",
+      )).rows,
+      records,
+    );
+    assert.deepEqual(
+      (await db.query(
+        "SELECT enabled,all_users,allowed_user_ids FROM diary_generation_control",
+      )).rows,
+      [{ enabled: false, all_users: false, allowed_user_ids: [] }],
+    );
+    assert.equal(
+      (await db.query("SELECT * FROM diary_generation_jobs")).rows.length,
+      0,
+    );
+    assert.deepEqual(
+      (await db.query(
+        "SELECT (SELECT jsonb_agg(b) FROM blocks b) blocks,(SELECT jsonb_agg(e) FROM entries e) entries",
+      )).rows,
+      before,
+    );
+  } finally {
+    await db.close();
+    await Deno.remove(folder, { recursive: true });
+  }
+});
 async function enable(db: PGlite) {
   await db.query(
     "UPDATE diary_generation_control SET enabled=true,allowed_user_ids=$1",

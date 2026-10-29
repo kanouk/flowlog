@@ -4,7 +4,8 @@
     "npm:@electric-sql/pglite@0.3.14": "0.3.14",
     "npm:@types/node@*": "22.5.4",
     "npm:date-fns-tz@3": "3.2.0_date-fns@3.6.0",
-    "npm:date-fns@3": "3.6.0"
+    "npm:date-fns@3": "3.6.0",
+    "npm:drizzle-orm@0.45.4": "0.45.4_@electric-sql+pglite@0.3.14"
   },
   "npm": {
     "@electric-sql/pglite@0.3.14": {
@@ -24,6 +25,12 @@
     },
     "date-fns@3.6.0": {
       "integrity": "sha512-fRHTG8g/Gif+kSh50gaGEdToemgfj74aRX3swtiouboip5JDLAyDE9F11nHMIcvOaXeOC6D7SpNhi7uFyB7Uww=="
+    },
+    "drizzle-orm@0.45.4_@electric-sql+pglite@0.3.14": {
+      "integrity": "sha512-NiM1YZpJ2UxyeE67DpDDZ+Tsw4YLX3trSlkNT7Tm9eKoUNb1LvaAaQzXgYQsWs+AQ9TUmmwMmBOCXuqqxUWKKQ==",
+      "dependencies": [
+        "@electric-sql/pglite"
+      ]
     },
     "undici-types@6.19.8": {
       "integrity": "sha512-ve2KP6f/JnbPBFyobGHuerC9g1FYGn/F8n1LWTwNxCEzd6IfqTwUQcNXgEtmmQ6DlRrC1hrSrBnCZPokRrDHjw=="
