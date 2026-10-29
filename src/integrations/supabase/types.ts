@@ -531,9 +531,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      diary_generation_status: { Args: { p_date: string }; Returns: Json }
-      request_diary_generation: { Args: { p_date: string }; Returns: Json }
-
       create_event_api: {
         Args: { p_key?: string; p_request: Json; p_user_id: string }
         Returns: Json
