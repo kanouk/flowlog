@@ -13,10 +13,11 @@
 - [x] Implement durable owner/life-day jobs, debouncing, leases, stale-output rejection, bounded retries, history and server-only worker.
 - [x] Move browser generation/persistence to server status polling and owner-scoped manual job requests; update API to 1.2.0.
 - [x] Confirm commit 45751f709d08f2f96a56403281b879f231e42231 and requested source agreement; only generated types and roadmap differ.
-- [ ] Apply pending 0001 once — BLOCKED: migration tool returned 42P07 diary_generation_control already exists; post-failure read confirms no new tables and only 0000 in database history. No retry or migration-history edits performed.
-- [ ] Deploy api, diary-worker and format-entries, then publish frontend — blocked by migration failure; none requested this turn.
-- [ ] Install pg_cron/pg_net, set dedicated worker/Vault secrets and configure the durable schedule while OFF — blocked by migration failure; supported secure Vault provisioning also unverified.
+- [x] PR #10 read-only preflight: commit 2803834bc6d0b54d62cb213bf678879fb8f312c8 is contained in HEAD 8e6a3bb7bc147c1373be02f13913a9680a70567f; deployment docs, journal, SQL, config and lockfile match the requested commit. Journal/files contain only 0000/0001; DB history contains only 0000 with matching hash/timestamp; new tables/RPCs absent.
+- [ ] Apply existing 0001 once — BLOCKED before execution: LOVABLE_DB_MIGRATION_URL is unavailable in this environment; no supported non-generating existing-file application path provided. Do not resubmit SQL to the migration creation tool or use alternate credentials. No npm db:migrate execution, retry, new migration, or history edits performed.
+- [ ] Deploy api, diary-worker and format-entries, regenerate RPC types, then publish frontend — blocked by unapplied 0001; no deployment/publication performed in PR #10 resumption.
+- [ ] Install pg_cron/pg_net, set dedicated worker/Vault secrets and configure the durable schedule while OFF — blocked by unapplied 0001; supported secure Vault provisioning also unverified.
 - [x] Run isolated existing mock tests: diary suite 16 passed and API suite 12 passed; no production or LLM/scheduler calls.
-- [ ] Independently verify public OpenAPI 1.2.0, deployed schema permissions, OFF gate and published stopped-state screen — blocked by migration failure.
+- [ ] Independently verify public OpenAPI 1.2.0, deployed schema permissions, OFF gate and published stopped-state screen — blocked by unapplied 0001. No new verification performed after PR #10 preflight stop.
 - [ ] Verify real scheduler/PostgREST/LLM/frontend with isolated fictional data — isolated hosted environment not established. No production diary writes authorized.
 - [ ] Activate production only after the user explicitly identifies and authorizes the rollout scope.
