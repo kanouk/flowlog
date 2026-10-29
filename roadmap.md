@@ -12,7 +12,11 @@
 
 - [x] Implement durable owner/life-day jobs, debouncing, leases, stale-output rejection, bounded retries, history and server-only worker.
 - [x] Move browser generation/persistence to server status polling and owner-scoped manual job requests; update API to 1.2.0.
-- [ ] Deploy the new migration/functions/frontend through Lovable with the global generation gate OFF.
-- [ ] Install pg_cron/pg_net, set dedicated worker/Vault secrets and configure the durable schedule while OFF.
-- [ ] Verify real scheduler/PostgREST/LLM/frontend with isolated fictional data. No production diary writes authorized.
+- [x] Confirm commit 45751f709d08f2f96a56403281b879f231e42231 and requested source agreement; only generated types and roadmap differ.
+- [ ] Apply pending 0001 once — BLOCKED: migration tool returned 42P07 diary_generation_control already exists; post-failure read confirms no new tables and only 0000 in database history. No retry or migration-history edits performed.
+- [ ] Deploy api, diary-worker and format-entries, then publish frontend — blocked by migration failure; none requested this turn.
+- [ ] Install pg_cron/pg_net, set dedicated worker/Vault secrets and configure the durable schedule while OFF — blocked by migration failure; supported secure Vault provisioning also unverified.
+- [x] Run isolated existing mock tests: diary suite 16 passed and API suite 12 passed; no production or LLM/scheduler calls.
+- [ ] Independently verify public OpenAPI 1.2.0, deployed schema permissions, OFF gate and published stopped-state screen — blocked by migration failure.
+- [ ] Verify real scheduler/PostgREST/LLM/frontend with isolated fictional data — isolated hosted environment not established. No production diary writes authorized.
 - [ ] Activate production only after the user explicitly identifies and authorizes the rollout scope.
