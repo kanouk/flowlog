@@ -44,6 +44,9 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
   const isToday = selectedDate === today;
   const dateSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const loadRequestIdRef = useRef(0);
+  const savedDuringLoad = useRef<Block[] | null>(null);
+  const selectedDateRef = useRef(selectedDate);
+  selectedDateRef.current = selectedDate;
   // 現在表示中のデータがどの日付のものか。selectedDate と異なる間は
   // 古い日付のブロックを見せず、スケルトン表示に切り替える
   const loadedDateRef = useRef<string | null>(null);
@@ -67,6 +70,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
   const loadData = useCallback(async () => {
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
+    savedDuringLoad.current = [];
     const isInitialLoad = loadedDateRef.current !== selectedDate;
 
     if (isInitialLoad) {
@@ -80,12 +84,13 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
         getEntry(selectedDate),
         getBlocksByDate(selectedDate, dayBoundaryHour),
       ]);
-      if (loadRequestIdRef.current !== requestId) return;
+      if (loadRequestIdRef.current !== requestId || selectedDateRef.current !== selectedDate) return;
 
       setEntry(entryData);
-      setBlocks(blocksData);
+      setBlocks(sortBlocksDesc([...(savedDuringLoad.current || []), ...blocksData]));
     } finally {
-      if (loadRequestIdRef.current === requestId) {
+      if (loadRequestIdRef.current === requestId && selectedDateRef.current === selectedDate) {
+        savedDuringLoad.current = null;
         loadedDateRef.current = selectedDate;
         setInitialLoading(false);
         setRefreshing(false);
@@ -176,6 +181,12 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     handlePrevDay();
   }, [handleNextDay, handlePrevDay, isMobile]);
 
+  const showSavedBlock = (tempId: string, saved: Block) => {
+    if (selectedDateRef.current !== selectedDate) return;
+    savedDuringLoad.current?.push(saved);
+    setBlocks(current => sortBlocksDesc([...current.filter(block => block.id !== tempId), saved]));
+  };
+
   /**
    * ブロック追加
    */
@@ -247,7 +258,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
         });
 
         if (savedBlock) {
-          setBlocks(prev => sortBlocksDesc(prev.map(b => b.id === tempId ? savedBlock : b)));
+          showSavedBlock(tempId, savedBlock);
           successCount += 1;
           if (confirm) confirmations.push(confirm);
         } else {
@@ -310,7 +321,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
         onNavigateToDate?.(navigateToDate);
         toast.success(`今日（${formatDisplayDateJST(new Date().toISOString(), dayBoundaryHour)}）に追加しました`);
       } else {
-        setBlocks(prev => sortBlocksDesc(prev.map(b => b.id === tempId ? savedBlock : b)));
+        showSavedBlock(tempId, savedBlock);
       }
 
       // 「あとで」カテゴリでURLが含まれている場合は自動サマライズ
@@ -341,6 +352,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     
     const success = await deleteBlock(blockId);
     if (success) {
+      if (savedDuringLoad.current) savedDuringLoad.current = savedDuringLoad.current.filter(block => block.id !== blockId);
       setBlocks(prev => prev.filter(b => b.id !== blockId));
     }
   };

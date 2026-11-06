@@ -463,7 +463,7 @@ print(json.dumps(out))`],{encoding:'utf8'});
   const browser=await chromium.launch();
   try {
    const page=await browser.newPage({viewport:{width:390,height:844},timezoneId:'Asia/Tokyo'});
-   const pageErrors=[];
+   const pageErrors=[], failedRequests=[];
    page.on('pageerror',error=>pageErrors.push(error.message));
    await page.route('**/*',async route=>{
     const req=route.request(),url=new URL(req.url());
@@ -471,7 +471,9 @@ print(json.dumps(out))`],{encoding:'utf8'});
     if(url.pathname.startsWith('/api/')){
      const key=req.headers()['idempotency-key'];
      const extraHeaders=key?{'Idempotency-Key':key}:{};
-     const result=await http(url.pathname+url.search,{method:req.method(),body:req.postDataJSON()??undefined,extraHeaders});
+     const body=req.postDataJSON()??undefined;
+     const result=await http(url.pathname+url.search,{method:req.method(),body,extraHeaders});
+     if(result.status>=400) failedRequests.push([url.pathname,result.status,result.data]);
      return route.fulfill({status:result.status,json:result.data});
     }
     if(url.pathname.startsWith('/assets/'))return route.fulfill({path:'dist-production'+url.pathname});
@@ -481,8 +483,12 @@ print(json.dumps(out))`],{encoding:'utf8'});
    const input=page.getByPlaceholder('今、思い出したことを書く…');
    await input.fill('朝ごはんを食べた');
    await page.getByRole('button',{name:'保存',exact:true}).click();
-   await page.getByRole('button',{name:'出来事の時刻を確認'}).filter({hasText:'朝ごろ'}).waitFor();
-   check('quick text save clears the composer without opening a review sheet',await input.inputValue()===''&&!await page.getByRole('dialog').isVisible());
+   try {
+    await page.getByRole('button',{name:'出来事の時刻を確認'}).filter({hasText:'朝ごろ'}).waitFor({timeout:8000});
+   } catch(error) {
+    throw new Error(JSON.stringify({pageErrors,failedRequests,text:await page.locator('body').innerText()}),{cause:error});
+   }
+   check('quick text save during startup clears the composer without review',await input.inputValue()===''&&!await page.getByRole('dialog').isVisible());
    await page.getByRole('button',{name:'出来事の時刻を確認'}).filter({hasText:'朝ごろ'}).click();
    await page.getByRole('button',{name:'昼',exact:true}).click();
    await page.getByRole('button',{name:'出来事の時刻を確認'}).filter({hasText:'昼ごろ'}).waitFor();
