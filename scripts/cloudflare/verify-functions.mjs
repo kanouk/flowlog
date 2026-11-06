@@ -469,7 +469,9 @@ print(json.dumps(out))`],{encoding:'utf8'});
     const req=route.request(),url=new URL(req.url());
     if(url.origin!==origin)return route.abort();
     if(url.pathname.startsWith('/api/')){
-     const result=await http(url.pathname+url.search,{method:req.method(),body:req.postDataJSON()??undefined,extraHeaders:req.headers()});
+     const key=req.headers()['idempotency-key'];
+     const extraHeaders=key?{'Idempotency-Key':key}:{};
+     const result=await http(url.pathname+url.search,{method:req.method(),body:req.postDataJSON()??undefined,extraHeaders});
      return route.fulfill({status:result.status,json:result.data});
     }
     if(url.pathname.startsWith('/assets/'))return route.fulfill({path:'dist-production'+url.pathname});

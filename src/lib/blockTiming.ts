@@ -38,7 +38,7 @@ export function inferEventTiming(content: string | null, date: string, boundary:
     const match = clocks[0];
     const tail = text.slice(match.index + match[0].length);
     const approximate = tail.match(/^(?:ごろ|頃|くらい)/)?.[0];
-    if (!/^\s*(?:に|、|,|[\s　])/.test(tail.slice(approximate?.length ?? 0))) return unknown;
+    if (!/^\s*(?:に|、|,|\s)/.test(tail.slice(approximate?.length ?? 0))) return unknown;
     let hour = Number(match[2]);
     const minute = Number(match[3] || match[4] || (match[5] ? 30 : 0));
     if (hour > 23 || minute > 59) return unknown;
