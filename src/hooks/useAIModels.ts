@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog } from '@/integrations/cloudflare/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 
@@ -52,7 +52,7 @@ export function useAIModels() {
       return;
     }
     try {
-      const { data, error } = await supabase.rpc('get_user_ai_models_safe');
+      const { data, error } = await flowlog.rpc('get_user_ai_models_safe');
       if (error) throw error;
       setModels((data as unknown as AIModelSafe[]) || []);
     } catch (error) {
@@ -71,7 +71,7 @@ export function useAIModels() {
     if (!user) return false;
     setSaving(true);
     try {
-      const { error } = await supabase.from('user_ai_models').insert({
+      const { error } = await flowlog.from('user_ai_models').insert({
         user_id: user.id,
         provider: input.provider,
         display_name: input.display_name,
@@ -106,7 +106,7 @@ export function useAIModels() {
       if (updates.note !== undefined) updateData.note = updates.note;
       if (updates.api_key_id !== undefined) updateData.api_key_id = updates.api_key_id;
 
-      const { error } = await supabase
+      const { error } = await flowlog
         .from('user_ai_models')
         .update(updateData)
         .eq('id', id)
@@ -128,7 +128,7 @@ export function useAIModels() {
     if (!user) return false;
     setSaving(true);
     try {
-      const { error } = await supabase
+      const { error } = await flowlog
         .from('user_ai_models')
         .delete()
         .eq('id', id)
@@ -148,7 +148,7 @@ export function useAIModels() {
 
   const testModelById = async (modelId: string): Promise<{ success: boolean; message: string }> => {
     try {
-      const { data, error } = await supabase.functions.invoke('test-ai-connection', {
+      const { data, error } = await flowlog.functions.invoke('test-ai-connection', {
         body: { model_id: modelId },
       });
       if (error) return { success: false, message: error.message };
@@ -160,7 +160,7 @@ export function useAIModels() {
 
   const testApiKeyById = async (apiKeyId: string): Promise<{ success: boolean; message: string }> => {
     try {
-      const { data, error } = await supabase.functions.invoke('test-ai-connection', {
+      const { data, error } = await flowlog.functions.invoke('test-ai-connection', {
         body: { api_key_id: apiKeyId },
       });
       if (error) return { success: false, message: error.message };
@@ -172,7 +172,7 @@ export function useAIModels() {
 
   const testConnection = async (provider: AIModelProvider, apiKey: string): Promise<{ success: boolean; message: string }> => {
     try {
-      const { data, error } = await supabase.functions.invoke('test-ai-connection', {
+      const { data, error } = await flowlog.functions.invoke('test-ai-connection', {
         body: { provider, api_key: apiKey },
       });
       if (error) return { success: false, message: error.message };

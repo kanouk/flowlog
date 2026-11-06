@@ -16,6 +16,9 @@ dist-ssr
 stats.html
 .migration-backups/
 
+# Local infrastructure survey originals; publish only reviewed summaries.
+/docs/migration/survey-*.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -26,3 +29,11 @@ stats.html
 *.njsproj
 *.sln
 *.sw?
+
+# Isolated Worker runtime and private bootstrap material
+.wrangler/
+.dev.vars*
+dist-staging/
+__pycache__/
+
+dist-production/

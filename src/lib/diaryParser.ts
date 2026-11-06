@@ -3,6 +3,11 @@ export interface DiarySection {
   body: string;
 }
 
+/** Photo markers supported by the diary's photo renderer (URLs and legacy block IDs). */
+export function diaryHasPhotos(content: string | null | undefined): boolean {
+  return /\{\{PHOTO:(https?:\/\/[^}\s]+|[a-zA-Z0-9-]+:\d+)\}\}/.test(content || '');
+}
+
 /**
  * Defensively parse formatted diary content into sections.
  * Handles:

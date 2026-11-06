@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog } from '@/integrations/cloudflare/client';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -9,7 +9,7 @@ export function useAuth() {
 
   useEffect(() => {
     // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    const { data: { subscription } } = flowlog.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
@@ -18,7 +18,7 @@ export function useAuth() {
     );
 
     // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    flowlog.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -28,7 +28,7 @@ export function useAuth() {
   }, []);
 
   const signInWithEmail = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await flowlog.auth.signInWithPassword({
       email,
       password,
     });
@@ -37,7 +37,7 @@ export function useAuth() {
 
   const signUpWithEmail = async (email: string, password: string) => {
     const redirectUrl = `${window.location.origin}/`;
-    const { error } = await supabase.auth.signUp({
+    const { error } = await flowlog.auth.signUp({
       email,
       password,
       options: {
@@ -48,12 +48,12 @@ export function useAuth() {
   };
 
   const signInAnonymously = async () => {
-    const { error } = await supabase.auth.signInAnonymously();
+    const { error } = await flowlog.auth.signInAnonymously();
     return { error };
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
+    const { error } = await flowlog.auth.signOut();
     return { error };
   };
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog } from '@/integrations/cloudflare/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 
@@ -31,7 +31,7 @@ export function useImageStorageSettings() {
     }
 
     try {
-      const { data, error } = await supabase.rpc('get_user_image_storage_settings_safe');
+      const { data, error } = await flowlog.rpc('get_user_image_storage_settings_safe');
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
       setSettings(row ? {
@@ -62,7 +62,7 @@ export function useImageStorageSettings() {
 
     setSaving(true);
     try {
-      const { error } = await supabase.functions.invoke('save-image-storage-settings', {
+      const { error } = await flowlog.functions.invoke('save-image-storage-settings', {
         body: {
         provider,
           gyazo_token: gyazoToken?.trim() || undefined,
@@ -86,7 +86,7 @@ export function useImageStorageSettings() {
     if (!user) return false;
     setSaving(true);
     try {
-      const { error } = await supabase.functions.invoke('save-image-storage-settings', {
+      const { error } = await flowlog.functions.invoke('save-image-storage-settings', {
         body: {
           provider: 'default',
           clear_gyazo_token: true,

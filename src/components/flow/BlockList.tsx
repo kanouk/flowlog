@@ -1,8 +1,12 @@
+import { timingLabel, type Period } from '@/lib/blockTiming';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { TimeQuestion } from './TimeQuestion';
 import { useState } from 'react';
 import { Trash2, Pencil, FileInput, GripVertical, CalendarClock, ScanText, Loader2, ChevronDown, ChevronUp, Copy, RefreshCw } from 'lucide-react';
 import { Block, BlockUpdatePayload } from '@/hooks/useEntries';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog } from '@/components/ui/dialog';
+import { PhotoDialogContent } from '@/components/common/PhotoDialogContent';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,7 +18,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { TaskCheckbox } from '@/components/ui/task-checkbox';
-import { formatTimeWithDayBoundary } from '@/lib/dateUtils';
+import { formatTimeJST, formatTimeWithDayBoundary } from '@/lib/dateUtils';
 import { BlockCategory, BlockTag, CATEGORY_CONFIG, TAG_CONFIG, TAGS, formatScheduleRange } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
 import { PriorityIndicator } from './PrioritySelector';
@@ -22,13 +26,15 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEn
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { BlockEditModal } from './BlockEditModal';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog } from '@/integrations/cloudflare/client';
 import { toast } from 'sonner';
 import { getIconComponent } from '@/lib/iconUtils';
 interface BlockListProps {
   blocks: Block[];
   onDelete?: (blockId: string) => void;
   onUpdate?: (blockId: string, updates: BlockUpdatePayload) => void;
+  onTimingAnswer?: (id: string, answer: { period: Period } | { dismiss: true }) => Promise<boolean>;
+  onExactTime?: (id: string, time: string) => Promise<boolean>;
   onDragEnd?: (activeId: string, overId: string) => void;
   showDelete?: boolean;
   editable?: boolean;
@@ -150,7 +156,11 @@ export function BlockList({
   selectedDate,
   highlightQuery,
   dayBoundaryHour = 0,
+  onTimingAnswer,
+  onExactTime,
 }: BlockListProps) {
+  const [timingBlock, setTimingBlock] = useState<string | null>(null);
+  const hasTimeAnchors = blocks.filter(b => b.event_timing?.kind === 'exact' || b.event_timing?.kind === 'period').length >= 2;
   const [modalImage, setModalImage] = useState<string | null>(null);
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
   const [blockToDelete, setBlockToDelete] = useState<string | null>(null);
@@ -189,12 +199,12 @@ export function BlockList({
     if (!block.images || block.images.length === 0) return;
     setExtractingBlockId(block.id);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await flowlog.auth.getSession();
       if (!session) {
         toast.error('ログインが必要です');
         return;
       }
-      const response = await supabase.functions.invoke('ocr-image', {
+      const response = await flowlog.functions.invoke('ocr-image', {
         body: { block_id: block.id, image_urls: block.images },
       });
       if (response.error) {
@@ -427,9 +437,35 @@ export function BlockList({
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                           <CategoryBadge category={block.category} />
                           <TagBadge tag={block.tag} customTags={customTags} />
-                          <span className="timestamp-badge">
-                            {formatTimeWithDayBoundary(block.occurred_at, dayBoundaryHour)}
-                          </span>
+                          {onTimingAnswer && onExactTime && !isTemporary && block.event_timing ? (
+                            <Popover open={timingBlock === block.id} onOpenChange={open => setTimingBlock(open ? block.id : null)}>
+                              <PopoverTrigger asChild>
+                                <button type="button" className="timestamp-badge hover:underline" aria-label="出来事の時刻を確認">
+                                  {timingLabel(block, at => formatTimeWithDayBoundary(at, dayBoundaryHour))}
+                                  {block.event_timing.origin === 'inferred' && !block.timeline_placement ? ' · 本文から' :
+                                    block.event_timing.kind === 'unknown' && !block.event_timing.dismissed && !block.timeline_placement && hasTimeAnchors ? ' · いつごろ？' : ''}
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[min(23rem,calc(100vw-2rem))] p-1" align="start">
+                                <TimeQuestion
+                                  blockId={block.id}
+                                  contentPreview={block.event_timing.kind !== 'unknown' && block.event_timing.evidence
+                                    ? `手がかり：${block.event_timing.evidence}` : block.content || '写真の記録'}
+                                  question="いつごろですか？"
+                                  onAnswer={async (id, period) => { if (await onTimingAnswer(id, { period })) setTimingBlock(null); }}
+                                  onAnswerExactTime={async (id, time) => { if (await onExactTime(id, time)) setTimingBlock(null); }}
+                                  onDismiss={async id => { if (await onTimingAnswer(id, { dismiss: true })) setTimingBlock(null); }}
+                                  onClose={() => setTimingBlock(null)}
+                                  canDismiss={block.event_timing.origin !== 'human'}
+                                  suggestedTime={block.event_timing.kind === 'exact' ? formatTimeJST(block.event_timing.at) : undefined}
+                                />
+                              </PopoverContent>
+                            </Popover>
+                          ) : (
+                            <span className="timestamp-badge">
+                              {timingLabel(block, at => formatTimeWithDayBoundary(at, dayBoundaryHour))}
+                            </span>
+                          )}
                         </div>
                       </div>
                       
@@ -484,7 +520,7 @@ export function BlockList({
 
       {/* 画像拡大モーダル */}
       <Dialog open={!!modalImage} onOpenChange={() => setModalImage(null)}>
-        <DialogContent className="max-w-4xl p-2">
+        <PhotoDialogContent>
           {modalImage && (
             <img
               src={modalImage}
@@ -493,7 +529,7 @@ export function BlockList({
               className="w-full h-auto max-h-[80vh] object-contain rounded"
             />
           )}
-        </DialogContent>
+        </PhotoDialogContent>
       </Dialog>
 
       {/* 編集モーダル */}

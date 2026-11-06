@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog } from '@/integrations/cloudflare/client';
 import { useAuth } from './useAuth';
 import { subDays, format, parseISO } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
@@ -35,7 +35,7 @@ export function useAnalytics(days: PeriodDays) {
   const scoreQuery = useQuery({
     queryKey: ['analytics-scores', userId, days],
     queryFn: async (): Promise<ScoreDataPoint[]> => {
-      const { data, error } = await supabase
+      const { data, error } = await flowlog
         .from('entries')
         .select('date, score')
         .not('score', 'is', null)
@@ -51,7 +51,7 @@ export function useAnalytics(days: PeriodDays) {
   const blocksQuery = useQuery({
     queryKey: ['analytics-blocks', userId, days],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await flowlog
         .from('blocks')
         .select('category, occurred_at, is_done, done_at')
         .gte('occurred_at', new Date(startDate + 'T00:00:00').toISOString());
@@ -66,7 +66,7 @@ export function useAnalytics(days: PeriodDays) {
   const allDatesQuery = useQuery({
     queryKey: ['analytics-all-dates', userId],
     queryFn: async (): Promise<string[]> => {
-      const { data, error } = await supabase
+      const { data, error } = await flowlog
         .from('entries')
         .select('date')
         .order('date', { ascending: true });

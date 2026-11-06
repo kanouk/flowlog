@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog } from '@/integrations/cloudflare/client';
 import { toast } from 'sonner';
 
 const SYNC_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
@@ -19,7 +19,7 @@ export function useExternalSync() {
 
     setSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('raindrop-sync', {
+      const { data, error } = await flowlog.functions.invoke('raindrop-sync', {
         body: { mode },
       });
 
@@ -48,7 +48,7 @@ export function useExternalSync() {
   }, []);
 
   const hasRaindropToken = useCallback(async (): Promise<boolean> => {
-    const { data } = await supabase
+    const { data } = await flowlog
       .from('user_external_tokens')
       .select('id')
       .eq('service', 'raindrop')

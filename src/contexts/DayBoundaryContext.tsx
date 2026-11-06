@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog } from '@/integrations/cloudflare/client';
 import { useAuth } from '@/hooks/useAuth';
 
 interface DayBoundaryContextValue {
@@ -32,7 +32,7 @@ export function DayBoundaryProvider({ children }: { children: ReactNode }) {
 
     async function fetchSetting() {
       try {
-        const { data } = await supabase
+        const { data } = await flowlog
           .from('user_ai_settings')
           .select('day_boundary_hour')
           .eq('user_id', user!.id)
@@ -57,20 +57,20 @@ export function DayBoundaryProvider({ children }: { children: ReactNode }) {
 
     try {
       // Upsert: try update first, if no row exists insert
-      const { data: existing } = await supabase
+      const { data: existing } = await flowlog
         .from('user_ai_settings')
         .select('id')
         .eq('user_id', user.id)
         .maybeSingle();
 
       if (existing) {
-        const { error } = await supabase
+        const { error } = await flowlog
           .from('user_ai_settings')
           .update({ day_boundary_hour: hour })
           .eq('user_id', user.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { error } = await flowlog
           .from('user_ai_settings')
           .insert({ user_id: user.id, day_boundary_hour: hour });
         if (error) throw error;

@@ -17,7 +17,11 @@ export function DiaryGenerationState(
   }
   if (!status) return null;
   const labels: Record<DiaryGenerationStatus["status"], string> = {
-    disabled: "日記の自動生成は停止中",
+    disabled: status.scope_reason === 'protected_date'
+      ? '過去の日記は保護されています（自動生成の対象外）'
+      : status.scope_reason === 'awaiting_new_record'
+        ? '新しく追加する出来事から日記を自動生成します'
+        : "日記の自動生成は停止中",
     idle: "",
     queued: "日記生成待ち",
     running: "日記生成中",

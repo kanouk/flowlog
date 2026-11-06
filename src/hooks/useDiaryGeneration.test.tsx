@@ -6,8 +6,8 @@ const mocks = vi.hoisted(() => ({
   error: vi.fn(),
 }));
 vi.mock(
-  "@/integrations/supabase/client",
-  () => ({ supabase: { rpc: mocks.rpc } }),
+  "@/integrations/cloudflare/client",
+  () => ({ flowlog: { rpc: mocks.rpc } }),
 );
 vi.mock(
   "@/hooks/useAuth",

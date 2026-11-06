@@ -1,3 +1,4 @@
+import { orderTimeline } from '@/lib/blockTiming';
 import { useDiaryGeneration } from '@/hooks/useDiaryGeneration';
 import { DiaryGenerationState } from '@/components/flow/DiaryGenerationState';
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -12,8 +13,8 @@ import { useAIFeatureSettings } from '@/hooks/useAIFeatureSettings';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
-import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDisplayDateJST, calculateMiddleOccurredAt } from '@/lib/dateUtils';
+import { flowlog } from '@/integrations/cloudflare/client';
+import { getTodayKey, getOccurredAtDayKey, formatDisplayDateJST } from '@/lib/dateUtils';
 import { BlockCategory } from '@/lib/categoryUtils';
 import { arrayMove } from '@dnd-kit/sortable';
 import { useDayBoundary } from '@/contexts/DayBoundaryContext';
@@ -27,11 +28,7 @@ interface FlowEditorProps {
  * ブロックを降順にソート（occurred_at, created_at）
  */
 function sortBlocksDesc(blocks: Block[]): Block[] {
-  return [...blocks].sort((a, b) => {
-    const diff = parseTimestamp(b.occurred_at).getTime() - parseTimestamp(a.occurred_at).getTime();
-    if (diff !== 0) return diff;
-    return parseTimestamp(b.created_at).getTime() - parseTimestamp(a.created_at).getTime();
-  });
+  return orderTimeline(blocks).blocks;
 }
 
 export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps) {
@@ -48,6 +45,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     addBlockWithDate,
     deleteBlock,
     updateBlock,
+    setBlockTiming,
   } = useEntries();
 
   const { getSettingForFeature } = useAIFeatureSettings();
@@ -142,7 +140,7 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
       const autoOcr = ocrSetting?.enabled ?? false;
       
       if (autoOcr && images.length > 0) {
-        supabase.functions.invoke('ocr-image', {
+        flowlog.functions.invoke('ocr-image', {
           body: { block_id: savedBlock.id, image_urls: savedBlock.images || images },
         }).then(({ data, error }) => {
           if (error) {
@@ -211,33 +209,11 @@ export function FlowEditor({ date: propDate, onNavigateToDate }: FlowEditorProps
     const newBlocks = arrayMove(blocks, oldIndex, newIndex);
     setBlocks(newBlocks);
 
-    const prevBlock = newIndex > 0 ? newBlocks[newIndex - 1] : null;
-    const nextBlock = newIndex < newBlocks.length - 1 ? newBlocks[newIndex + 1] : null;
-
-    const result = calculateMiddleOccurredAt(
-      prevBlock?.occurred_at || null,
-      nextBlock?.occurred_at || null,
-      date,
-      dayBoundaryHour
-    );
-
-    if (result.success === false) {
-      toast.error(result.reason);
-      setBlocks(originalBlocks);
-      return;
-    }
-
-    const newOccurredAt = result.occurredAt;
-
-    const updated = await updateBlock(activeId, { occurred_at: newOccurredAt }, dayBoundaryHour);
-    
-    if (!updated) {
-      setBlocks(originalBlocks);
-    } else {
-      setBlocks(prev => sortBlocksDesc(
-        prev.map(b => b.id === activeId ? { ...b, occurred_at: newOccurredAt } : b)
-      ));
-    }
+    const updated = await setBlockTiming(activeId, {
+      later: newBlocks[newIndex - 1]?.id ?? null,
+      earlier: newBlocks[newIndex + 1]?.id ?? null,
+    });
+    setBlocks(current => sortBlocksDesc(current.map(block => block.id === activeId ? (updated ?? originalBlocks[oldIndex]) : block)));
   };
 
   const generation = useDiaryGeneration(date, () => {

@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Shield, Check, X, AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog } from '@/integrations/cloudflare/client';
 import { toast } from 'sonner';
 import { AppSplash } from '@/components/common/AppSplash';
 
@@ -41,7 +41,7 @@ export default function OAuthAuthorize() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await flowlog.auth.getSession();
       
       if (!session) {
         // 未ログイン → ログインページにリダイレクト（現在のURLをリダイレクト先として保持）
@@ -70,7 +70,7 @@ export default function OAuthAuthorize() {
     
     setAuthorizing(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await flowlog.auth.getSession();
       if (!session) {
         toast.error('セッションが切れました。再度ログインしてください。');
         navigate('/auth');
@@ -79,7 +79,7 @@ export default function OAuthAuthorize() {
 
       // MCPサーバーに認可コード作成をリクエスト
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mcp-server/oauth/create-code`,
+        `${window.location.origin}/api/mcp/oauth/create-code`,
         {
           method: 'POST',
           headers: {

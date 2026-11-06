@@ -1,6 +1,6 @@
 import { format, addDays, subDays, isToday as isTodayFn, isFuture } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, CalendarDays, Sun } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarDays, Sun, Camera } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useState } from 'react';
@@ -11,9 +11,10 @@ interface DateNavigationProps {
   selectedDate: string;
   onDateChange: (date: string) => void;
   datesWithEntries?: string[];
+  datesWithPhotos?: string[];
 }
 
-export function DateNavigation({ selectedDate, onDateChange, datesWithEntries = [] }: DateNavigationProps) {
+export function DateNavigation({ selectedDate, onDateChange, datesWithEntries = [], datesWithPhotos = [] }: DateNavigationProps) {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const { dayBoundaryHour } = useDayBoundary();
   const today = getTodayKey(dayBoundaryHour);
@@ -112,6 +113,7 @@ export function DateNavigation({ selectedDate, onDateChange, datesWithEntries = 
             <Calendar
               mode="single"
               selected={selectedDateObj}
+              datesWithPhotos={datesWithPhotos}
               onSelect={handleCalendarSelect}
               disabled={(date) => isFuture(date) && !isTodayFn(date)}
               locale={ja}
@@ -123,6 +125,10 @@ export function DateNavigation({ selectedDate, onDateChange, datesWithEntries = 
               }}
               className="pointer-events-auto"
             />
+            <div className="flex items-center justify-center gap-4 border-t border-border px-3 py-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-primary" />投稿あり</span>
+              <span className="flex items-center gap-1.5"><Camera className="h-3 w-3" aria-hidden="true" />写真あり</span>
+            </div>
           </PopoverContent>
         </Popover>
       </div>

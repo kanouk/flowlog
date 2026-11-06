@@ -10,6 +10,8 @@
 - [ ] User-designated single-target API readback and FlowLog image display — waits for user-designated date, block ID, and image URL; separate later step. No owner production writes or canary apply performed.
 # Issue #8 server diary generation
 
+**Deployment frozen (2026-10-29, user decision; migration tracked in Issue #12).** Do not resume the Lovable diary SQL registration/initialization, related api/diary-worker/format-entries deployments, pg_cron/pg_net/Vault provisioning, or publication of the new frontend. Implement and validate diary jobs on Cloudflare instead. The unchecked Lovable deployment steps below are historical pending work, not instructions to resume. Preserve SQL sources and applied history; this documentation update does not change production or DNS.
+
 - [x] Implement durable owner/life-day jobs, debouncing, leases, stale-output rejection, bounded retries, history and server-only worker.
 - [x] Move browser generation/persistence to server status polling and owner-scoped manual job requests; update API to 1.2.0.
 - [x] Confirm commit 45751f709d08f2f96a56403281b879f231e42231 and requested source agreement; only generated types and roadmap differ.

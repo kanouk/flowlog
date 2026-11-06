@@ -1,3 +1,5 @@
+import {useAIModels} from '@/hooks/useAIModels';
+import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue} from '@/components/ui/select';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -20,6 +22,9 @@ const DEFAULT_BEHAVIOR_RULES = `- お酒を飲まない (-20点)
 export function ScoreSettingsSection() {
   const { getSettingForFeature, upsertSetting, loading, saving } = useAIFeatureSettings();
   
+  const {activeModels}=useAIModels();
+  const [modelId,setModelId]=useState<string|null>(null);
+  const [originalModel,setOriginalModel]=useState<string|null>(null);
   const [scoreEnabled, setScoreEnabled] = useState(false);
   const [behaviorRules, setBehaviorRules] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -38,12 +43,14 @@ export function ScoreSettingsSection() {
 
     // Only sync from DB if user has no unsaved local changes
     if (!hasChanges) {
+      setModelId(scoreSetting?.assigned_model_id||null);
       setScoreEnabled(enabled);
       setBehaviorRules(rules);
       if (enabled) {
         setIsOpen(true);
       }
     }
+    setOriginalModel(scoreSetting?.assigned_model_id||null);
     setOrigEnabled(enabled);
     setOrigRules(rules);
   }, [loading, getSettingForFeature]);
@@ -51,15 +58,17 @@ export function ScoreSettingsSection() {
   useEffect(() => {
     const enabledChanged = scoreEnabled !== origEnabled;
     const rulesChanged = behaviorRules !== origRules;
-    setHasChanges(enabledChanged || rulesChanged);
-  }, [scoreEnabled, behaviorRules, origEnabled, origRules]);
+    setHasChanges(enabledChanged || rulesChanged || modelId!==originalModel);
+  }, [scoreEnabled, behaviorRules, origEnabled, origRules,modelId,originalModel]);
 
   const handleSave = async () => {
     const success = await upsertSetting('score_evaluation', {
+      assigned_model_id:modelId,
       enabled: scoreEnabled,
       user_prompt_template: behaviorRules || null,
     });
     if (success) {
+      setOriginalModel(modelId);
       setOrigEnabled(scoreEnabled);
       setOrigRules(behaviorRules);
     }
@@ -99,6 +108,18 @@ export function ScoreSettingsSection() {
             点数を守ることで、良い習慣を維持しましょう。
           </p>
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="score-model">採点に使うモデル</Label>
+        <Select value={modelId||'_none'} onValueChange={value=>setModelId(value==='_none'?null:value)}>
+          <SelectTrigger id="score-model"><SelectValue placeholder="モデルを選択" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_none">未設定（採点を実行しない）</SelectItem>
+            {activeModels.map(model=><SelectItem key={model.id} value={model.id}>{model.display_name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {!modelId&&scoreEnabled&&<p className="text-xs text-amber-700 dark:text-amber-300">採点を使うには、APIキーを登録したモデルを選択してください。</p>}
       </div>
 
       {/* Behavior Rules */}

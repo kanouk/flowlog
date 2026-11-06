@@ -5,7 +5,7 @@ import { formatTimeWithDayBoundary, formatDisplayDateJST, formatTimeJST, formatD
 import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 import { BlockTag, TAGS, TAG_CONFIG } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
-import { TagFilterDropdown } from './TagFilterDropdown';
+import { StockFilterPanel } from './StockFilterPanel';
 import { QuickAddModal } from './QuickAddModal';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -261,45 +261,22 @@ export function ReadLaterView({ targetBlockId, onBlockScrolled, onSearchCleared 
           </Button>
         </div>
         
-        {/* Filters */}
-        <div className="mt-4 space-y-3">
-          {/* Read Filter */}
-          <div className="grid grid-cols-3 gap-1.5">
-            <Button
-              variant={readFilter === 'all' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setReadFilter('all')}
-              className={cn("h-8 text-xs px-2", readFilter === 'all' && 'bg-gray-500 hover:bg-gray-600')}
-            >
-              すべて
-            </Button>
-            <Button
-              variant={readFilter === 'unread' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setReadFilter('unread')}
-              className={cn("h-8 text-xs px-2", readFilter === 'unread' && 'bg-green-500 hover:bg-green-600')}
-            >
-              <Circle className="h-3 w-3 mr-1" />
-              未読
-            </Button>
-            <Button
-              variant={readFilter === 'read' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setReadFilter('read')}
-              className={cn("h-8 text-xs px-2", readFilter === 'read' && 'bg-gray-400 hover:bg-gray-500')}
-            >
-              <CheckCircle2 className="h-3 w-3 mr-1" />
-              既読
-            </Button>
-          </div>
-          
-          {/* Tag Filter Dropdown */}
-          <TagFilterDropdown
-            value={tagFilter === 'all' ? null : tagFilter}
-            onChange={handleTagChange}
-            customTags={customTags}
-          />
-        </div>
+        <StockFilterPanel
+          tone="green"
+          tagFilter={tagFilter}
+          onTagChange={handleTagChange}
+          customTags={customTags}
+          stateFilter={{
+            value: readFilter,
+            onChange: value => setReadFilter(value as ReadFilter),
+            options: [
+              { value: 'all', label: 'すべて' },
+              { value: 'unread', label: '未読' },
+              { value: 'read', label: '既読' },
+            ],
+          }}
+          onClear={() => { setReadFilter('all'); setTagFilter('all'); }}
+        />
       </div>
 
       {/* Read Later List */}

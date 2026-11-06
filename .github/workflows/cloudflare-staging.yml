@@ -1,0 +1,51 @@
+name: Cloudflare staging (manual only)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: flowlog-cloudflare-staging
+  cancel-in-progress: false
+jobs:
+  deploy-staging:
+    if: startsWith(github.ref, 'refs/heads/codex/flowlog-cloudflare-')
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.FLOWLOG_STAGING_CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.FLOWLOG_STAGING_CLOUDFLARE_ACCOUNT_ID }}
+      FLOWLOG_STAGING_D1_ID: ${{ secrets.FLOWLOG_STAGING_D1_ID }}
+      FLOWLOG_STAGING_OWNER_EMAIL: ${{ secrets.FLOWLOG_STAGING_OWNER_EMAIL }}
+      FLOWLOG_STAGING_OWNER_ID: ${{ secrets.FLOWLOG_STAGING_OWNER_ID }}
+      FLOWLOG_STAGING_ORIGIN: ${{ secrets.FLOWLOG_STAGING_ORIGIN }}
+      FLOWLOG_STAGING_ENCRYPTION_KEY: ${{ secrets.FLOWLOG_STAGING_ENCRYPTION_KEY }}
+      FLOWLOG_STAGING_AUTH_SECRET: ${{ secrets.FLOWLOG_STAGING_AUTH_SECRET }}
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - run: npx tsc -b --force && npm run typecheck:worker && npm test && npm run test:worker && npm run build:staging
+      - run: node scripts/cloudflare/render-config.mjs
+      - name: Verify Cloudflare account without printing credentials or bindings
+        shell: bash
+        run: |
+          npx wrangler whoami --json > "$RUNNER_TEMP/cloudflare-whoami.json"
+          node --input-type=module <<'JS'
+          import { readFileSync } from 'node:fs';
+          import assert from 'node:assert/strict';
+          const data = JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/cloudflare-whoami.json', 'utf8'));
+          assert.equal(data.loggedIn, true);
+          assert.deepEqual(data.accounts.map(a => a.id), [process.env.CLOUDFLARE_ACCOUNT_ID]);
+          assert.equal(data.accounts[0].id, process.env.CLOUDFLARE_ACCOUNT_ID);
+          assert.ok(process.env.FLOWLOG_STAGING_AUTH_SECRET?.length >= 32);
+          assert.equal(Buffer.from(process.env.FLOWLOG_STAGING_ENCRYPTION_KEY || '', 'base64').length, 32);
+          JS
+      - name: Deploy existing staging resources only
+        shell: bash
+        run: |
+          npx wrangler deploy --config .migration-backups/wrangler.staging.json > "$RUNNER_TEMP/staging-deploy.log" 2>&1
+          printf '%s' "$FLOWLOG_STAGING_AUTH_SECRET" | npx wrangler secret put AUTH_SECRET --config .migration-backups/wrangler.staging.json > "$RUNNER_TEMP/staging-secret.log" 2>&1
+          printf '%s' "$FLOWLOG_STAGING_ENCRYPTION_KEY" | npx wrangler secret put ENCRYPTION_KEY --config .migration-backups/wrangler.staging.json > "$RUNNER_TEMP/staging-encryption.log" 2>&1

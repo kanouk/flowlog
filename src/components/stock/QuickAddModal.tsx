@@ -165,7 +165,7 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
       if (hasImages) {
         uploadedUrls = await uploadImages(selectedImages);
         if (uploadedUrls.length !== selectedImages.length) {
-          toast.warning('一部の画像のアップロードに失敗しました');
+          throw new Error('画像のアップロードが完了していません。再試行してください');
         }
       }
 
@@ -193,8 +193,11 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
         if (lines.length === 0) return;
 
         let lastBlock: import('@/hooks/useEntries').Block | null = null;
-        for (const line of lines) {
-          const { block } = await addBlockWithDate({
+        const confirmations: Array<() => void> = [];
+        const batchKey=JSON.stringify({content,category,tag,priority});
+        for (const [index,line] of lines.entries()) {
+          const { block,confirm } = await addBlockWithDate({
+            batchKey: batchKey+':'+index,
             content: line,
             selectedDate: getTodayKey(dayBoundaryHour),
             mode: 'toNow',
@@ -204,10 +207,11 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
             priority,
             dayBoundaryHour,
           });
-          if (block) lastBlock = block;
+          if (block) { lastBlock = block; if(confirm) confirmations.push(confirm); }
         }
 
-        if (lastBlock) {
+        if (lastBlock && confirmations.length === lines.length) {
+          confirmations.forEach(confirm=>confirm());
           onBlockAdded(lastBlock);
           toast.success(`${lines.length}件のタスクを登録しました`);
           onOpenChange(false);
@@ -234,6 +238,8 @@ export function QuickAddModal({ open, onOpenChange, category, onBlockAdded }: Qu
         toast.success(`${config.title.replace('を追加', '')}を追加しました`);
         onOpenChange(false);
       }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '保存結果を確認できませんでした。同じ内容で再試行できます。');
     } finally {
       setIsSubmitting(false);
     }
