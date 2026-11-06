@@ -11,7 +11,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogTrigger } from '@/components/ui/dialog';
+import { PhotoDialogContent } from '@/components/common/PhotoDialogContent';
 import { parseDiarySections } from '@/lib/diaryParser';
 import { BlockListSkeleton } from '@/components/common/BlockListSkeleton';
 
@@ -84,7 +85,7 @@ function PhotoMarker({ images }: PhotoMarkerProps) {
           ))}
         </button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl p-4">
+      <PhotoDialogContent className="max-w-2xl">
         <div className={cn(
           "grid gap-2",
           images.length === 1 ? "grid-cols-1" : "grid-cols-2"
@@ -99,7 +100,7 @@ function PhotoMarker({ images }: PhotoMarkerProps) {
             />
           ))}
         </div>
-      </DialogContent>
+      </PhotoDialogContent>
     </Dialog>
   );
 }

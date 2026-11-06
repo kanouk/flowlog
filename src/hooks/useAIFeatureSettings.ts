@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog } from '@/integrations/cloudflare/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 
@@ -45,7 +45,7 @@ export const FEATURE_DEFINITIONS: FeatureInfo[] = [
   {
     key: 'time_inference',
     label: '時刻推測',
-    description: 'ブロックの内容から実際の発生時刻を推測します',
+    description: '設定を保持しています。現在の日記生成では時刻推測を実行しません。',
     defaultSystemPrompt: '',
     defaultUserPromptTemplate: '',
     templateVars: ['date', 'blocks_text'],
@@ -89,7 +89,7 @@ export function useAIFeatureSettings() {
       return;
     }
     try {
-      const { data, error } = await supabase
+      const { data, error } = await flowlog
         .from('user_ai_feature_settings')
         .select('*')
         .eq('user_id', user.id);
@@ -117,7 +117,7 @@ export function useAIFeatureSettings() {
     try {
       const existing = getSettingForFeature(featureKey);
       if (existing) {
-        const { error } = await supabase
+        const { error } = await flowlog
           .from('user_ai_feature_settings')
           .update(updates as Record<string, unknown>)
           .eq('id', existing.id)
@@ -132,7 +132,7 @@ export function useAIFeatureSettings() {
             user_prompt_template: updates.user_prompt_template ?? null,
             enabled: updates.enabled ?? true,
           };
-        const { error } = await supabase
+        const { error } = await flowlog
           .from('user_ai_feature_settings')
           .insert(insertData);
         if (error) throw error;
@@ -153,7 +153,7 @@ export function useAIFeatureSettings() {
     if (!user) return false;
     setSaving(true);
     try {
-      const { error } = await supabase
+      const { error } = await flowlog
         .from('user_ai_feature_settings')
         .delete()
         .eq('user_id', user.id)

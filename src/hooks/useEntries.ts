@@ -1,5 +1,7 @@
+import { orderTimeline, type EventTiming, type Period, type TimelinePlacement } from '@/lib/blockTiming';
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog, postBlock } from '@/integrations/cloudflare/client';
+import { pendingPost, confirmPost } from '@/lib/pendingPost';
 import type { Json } from '@/integrations/supabase/types';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
@@ -30,8 +32,12 @@ export interface Block {
   content: string | null;
   images: string[];
   occurred_at: string;
+  source?: string | null;
   // ユーザーが時刻を確定した日時（回答・手動変更・質問却下でセット。時刻推測の質問対象外になる）
   time_confirmed_at: string | null;
+  event_timing?: EventTiming | null;
+  timeline_placement?: TimelinePlacement | null;
+  content_confirmed_at?: string | null;
   created_at: string;
   category: BlockCategory;
   tag: string | null;
@@ -69,7 +75,6 @@ export type AddBlockMode = 'toSelectedDate' | 'toNow';
 export interface BlockUpdatePayload {
   content?: string;
   occurred_at?: string;
-  time_confirmed_at?: string | null;
   category?: BlockCategory;
   tag?: string | null;
   is_done?: boolean;
@@ -134,7 +139,7 @@ export function useEntries() {
    * ※将来的にDBトリガー化を検討（競合対策）
    */
   const cleanupEmptyEntry = useCallback(async (entryId: string) => {
-    const { count, error: countError } = await supabase
+    const { count, error: countError } = await flowlog
       .from('blocks')
       .select('*', { count: 'exact', head: true })
       .eq('entry_id', entryId);
@@ -147,10 +152,10 @@ export function useEntries() {
     if (count === 0) {
       // Preserve the last diary until the server saves the empty-day result and
       // records history. Deleting it here would bypass that preservation path.
-      const { data: existing } = await supabase.from('entries')
+      const { data: existing } = await flowlog.from('entries')
         .select('formatted_content').eq('id', entryId).maybeSingle();
       if (existing?.formatted_content) return;
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await flowlog
         .from('entries')
         .delete()
         .eq('id', entryId);
@@ -167,7 +172,7 @@ export function useEntries() {
   const getOrCreateEntryForDate = useCallback(async (dayKey: string) => {
     if (!userId) return null;
 
-    const { data: existing } = await supabase
+    const { data: existing } = await flowlog
       .from('entries')
       .select('*')
       .eq('user_id', userId)
@@ -176,7 +181,7 @@ export function useEntries() {
 
     if (existing) return existing as Entry;
 
-    const { data, error } = await supabase
+    const { data, error } = await flowlog
       .from('entries')
       .insert({ user_id: userId, date: dayKey })
       .select()
@@ -196,7 +201,7 @@ export function useEntries() {
     if (!userId) return [];
     const { start, end } = getDateRangeUTC(selectedDate, dayBoundaryHour);
     
-    const { data, error } = await supabase
+    const { data, error } = await flowlog
       .from('blocks')
       .select('*')
       .eq('user_id', userId)
@@ -209,7 +214,7 @@ export function useEntries() {
       console.error('Error fetching blocks:', error);
       return [];
     }
-    return data as unknown as Block[];
+    return orderTimeline(data as unknown as Block[]).blocks;
   }, [userId]);
 
   /**
@@ -227,7 +232,7 @@ export function useEntries() {
     const categories = Array.isArray(category) ? category : [category];
     const limit = options?.limit || 100;
     
-    let query = supabase
+    let query = flowlog
       .from('blocks')
       .select('*')
       .eq('user_id', userId)
@@ -288,7 +293,9 @@ export function useEntries() {
     due_at = null,
     due_all_day = false,
     dayBoundaryHour = 0,
+    batchKey,
   }: { 
+    batchKey?: string;
     content: string; 
     selectedDate: string; 
     mode: AddBlockMode; 
@@ -307,6 +314,7 @@ export function useEntries() {
 
     setLoading(true);
     try {
+      const {storageKey, post} = await pendingPost({batchKey,userId,content,selectedDate,mode,images,category,tag,starts_at,ends_at,is_all_day,priority,due_at,due_all_day,dayBoundaryHour}, async () => {
       const today = getTodayKey(dayBoundaryHour);
       const isToday = selectedDate === today;
       
@@ -318,7 +326,7 @@ export function useEntries() {
         // 過去日：その日の最終ブロック + 1分、なければ 23:59 JST
         const { start, end } = getDateRangeUTC(selectedDate, dayBoundaryHour);
         const endMs = parseTimestamp(end).getTime() - 1;
-        const { data: lastBlocks } = await supabase
+        const { data: lastBlocks } = await flowlog
           .from('blocks')
           .select('occurred_at')
           .eq('user_id', userId)
@@ -364,20 +372,20 @@ export function useEntries() {
         insertData.due_all_day = due_all_day;
       }
 
-      const { data, error } = await supabase
-        .from('blocks')
-        .insert(insertData as typeof insertData & { entry_id: string; user_id: string })
-        .select()
-        .single();
-
+      return insertData;
+      });
+      const {data,error} = await postBlock(post.values!,post.key);
       if (error) throw error;
       
-      const navigateToDate = mode === 'toNow' && !isToday ? today : null;
+      const confirm = () => confirmPost(storageKey,post.key);
+      if (!batchKey) confirm();
+      const today = getTodayKey(dayBoundaryHour);
+      const navigateToDate = mode === 'toNow' && selectedDate !== today ? today : null;
       
-      return { block: data as unknown as Block, navigateToDate };
+      return { block: data as unknown as Block, navigateToDate, confirm };
     } catch (error) {
       console.error('Error adding block:', error);
-      toast.error('ブロックの保存に失敗しました');
+      toast.error('保存結果を確認できませんでした。同じ内容で再試行できます。');
       return { block: null, navigateToDate: null };
     } finally {
       setLoading(false);
@@ -400,7 +408,7 @@ export function useEntries() {
     }
 
     try {
-      const { data: currentBlock } = await supabase
+      const { data: currentBlock } = await flowlog
         .from('blocks')
         .select('entry_id')
         .eq('id', blockId)
@@ -408,7 +416,7 @@ export function useEntries() {
       
       const oldEntryId = currentBlock?.entry_id;
       
-      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at' | 'images' | 'starts_at' | 'ends_at' | 'is_all_day' | 'priority' | 'extracted_text' | 'due_at' | 'due_all_day' | 'time_confirmed_at'>> = {};
+      const updateData: Partial<Pick<Block, 'content' | 'occurred_at' | 'entry_id' | 'category' | 'tag' | 'is_done' | 'done_at' | 'images' | 'starts_at' | 'ends_at' | 'is_all_day' | 'priority' | 'extracted_text' | 'due_at' | 'due_all_day'>> = {};
       
       if (updates.content !== undefined) {
         updateData.content = updates.content;
@@ -453,9 +461,6 @@ export function useEntries() {
       if (updates.due_all_day !== undefined) {
         updateData.due_all_day = updates.due_all_day;
       }
-      if (updates.time_confirmed_at !== undefined) {
-        updateData.time_confirmed_at = updates.time_confirmed_at;
-      }
       if (updates.occurred_at) {
         const newDayKey = getOccurredAtDayKey(updates.occurred_at, dayBoundaryHour);
         const entry = await getOrCreateEntryForDate(newDayKey);
@@ -463,14 +468,10 @@ export function useEntries() {
 
         updateData.occurred_at = updates.occurred_at;
         updateData.entry_id = entry.id;
-        // occurred_at の更新経路はすべてユーザー操作（質問回答・編集モーダル・D&D）のため
-        // 時刻確定として扱い、以降の時刻推測で質問・自動変更の対象外にする
-        if (updates.time_confirmed_at === undefined) {
-          updateData.time_confirmed_at = new Date().toISOString();
-        }
+
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await flowlog
         .from('blocks')
         .update(updateData)
         .eq('id', blockId)
@@ -505,6 +506,18 @@ export function useEntries() {
     }
   }, [userId, getOrCreateEntryForDate, cleanupEmptyEntry]);
 
+  const setBlockTiming = useCallback(async (id: string, action: { period: Period } | { dismiss: true } | TimelinePlacement) => {
+    const args = 'period' in action ? { p_action: 'period', p_period: action.period }
+      : 'dismiss' in action ? { p_action: 'dismiss' }
+      : { p_action: 'place', p_later: action.later, p_earlier: action.earlier };
+    const { data, error } = await flowlog.rpc('set_block_timing', { p_id: id, ...args });
+    if (error) {
+      toast.error(error.message || '時刻や順番を保存できませんでした');
+      return null;
+    }
+    return data as unknown as Block;
+  }, []);
+
   /**
    * ブロック更新（後方互換: content + occurred_at）
    */
@@ -520,7 +533,7 @@ export function useEntries() {
    * ブロック削除（空entry削除対応）
    */
   const deleteBlock = useCallback(async (blockId: string) => {
-    const { data: block } = await supabase
+    const { data: block } = await flowlog
       .from('blocks')
       .select('entry_id')
       .eq('id', blockId)
@@ -528,7 +541,7 @@ export function useEntries() {
     
     const entryId = block?.entry_id;
     
-    const { error } = await supabase
+    const { error } = await flowlog
       .from('blocks')
       .delete()
       .eq('id', blockId);
@@ -554,7 +567,7 @@ export function useEntries() {
   const getEntries = useCallback(async () => {
     if (!userId) return [];
 
-    const { data, error } = await supabase
+    const { data, error } = await flowlog
       .from('entries')
       .select('*')
       .eq('user_id', userId)
@@ -573,7 +586,7 @@ export function useEntries() {
   const getEntry = useCallback(async (date: string) => {
     if (!userId) return null;
 
-    const { data, error } = await supabase
+    const { data, error } = await flowlog
       .from('entries')
       .select('*')
       .eq('user_id', userId)
@@ -594,7 +607,7 @@ export function useEntries() {
     if (!session) return null;
 
     try {
-      const { data, error } = await supabase.functions.invoke('summarize-url', {
+      const { data, error } = await flowlog.functions.invoke('summarize-url', {
         body: { url, blockId },
       });
 
@@ -609,7 +622,7 @@ export function useEntries() {
         };
 
         // DBに保存
-        await supabase
+        await flowlog
           .from('blocks')
           .update({ url_metadata: metadata as unknown as Json })
           .eq('id', blockId);
@@ -632,6 +645,7 @@ export function useEntries() {
     addBlockWithDate,
     updateBlock,
     updateBlockWithOccurredAt,
+    setBlockTiming,
     deleteBlock,
     getEntries,
     getEntry,

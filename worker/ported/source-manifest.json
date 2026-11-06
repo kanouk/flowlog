@@ -1,0 +1,72 @@
+[
+  {
+    "name": "api",
+    "source": "supabase/functions/api/index.ts",
+    "sha256": "6fd5ca41a86a3705201d287a94ca837b91c1d023f31608d3efd97f9423362e1b"
+  },
+  {
+    "name": "mcp-server",
+    "source": "supabase/functions/mcp-server/index.ts",
+    "sha256": "b410f15e9ba131761078df44c56baee852d487e473f22ab34ad7cb1374dd9184"
+  },
+  {
+    "name": "ocr-image",
+    "source": "supabase/functions/ocr-image/index.ts",
+    "sha256": "e82c7a03a17501fadae26dc5971fa0950ebb0e7f337e6cc5671dc437a948006b"
+  },
+  {
+    "name": "summarize-url",
+    "source": "supabase/functions/summarize-url/index.ts",
+    "sha256": "0a2a7899c90068cedb0c5a3e162459560c5c3ba1d54e70b87a090e31282ee457"
+  },
+  {
+    "name": "test-ai-connection",
+    "source": "supabase/functions/test-ai-connection/index.ts",
+    "sha256": "229000e1b0ac41686c03b89208f1fdb5ea82b84fa5f0fa65c91254810e7febc3"
+  },
+  {
+    "name": "gyazo-upload",
+    "source": "supabase/functions/gyazo-upload/index.ts",
+    "sha256": "e1cecfce2cd0f423b857383385f533cb4fa7ee24536db276afdd53078d94b0b4"
+  },
+  {
+    "name": "gyazo-delete",
+    "source": "supabase/functions/gyazo-delete/index.ts",
+    "sha256": "810a68cf090a318a46fc5c09e559fc7d7c6dad2248a7abbbb315b880e8f89117"
+  },
+  {
+    "name": "save-image-storage-settings",
+    "source": "supabase/functions/save-image-storage-settings/index.ts",
+    "sha256": "c04bc529bb1e032c649e788e5f929039401e526450e729e41b02861d647e07e3"
+  },
+  {
+    "name": "raindrop-sync",
+    "source": "supabase/functions/raindrop-sync/index.ts",
+    "sha256": "18ce5923b6815e13dd09088650c46a7809a04a02e6cd788f286e15663ed5d1ba"
+  },
+  {
+    "name": "format-entries",
+    "source": "supabase/functions/format-entries/index.ts",
+    "sha256": "8fd5387b2b81ec6f3e0cd80c35c0472e3d67de43db71813f5c23798f795b59a1"
+  },
+  {
+    "name": "diary-worker/worker.ts",
+    "source": "supabase/functions/diary-worker/worker.ts",
+    "sha256": "17e162a2b6d162831aa9263226141950377035a0bb77c32e3f0fdbbb738621c8"
+  },
+  {
+    "name": "format-entries/diary.ts",
+    "source": "supabase/functions/format-entries/diary.ts",
+    "sha256": "1e332c1ef3f3da3dc23b0fbdaeb9b8cdf07b5339e273fe7baa0a43aad553a42b"
+  },
+  {
+    "name": "_shared/cors.ts",
+    "source": "supabase/functions/_shared/cors.ts",
+    "sha256": "709b70f8b5e71da910102284e7eb36b2ac3feb72a37bedcd21a3f515b07b8543"
+  },
+  {
+    "name": "api/native-images.ts",
+    "source": "supabase/functions/api/native-images.ts",
+    "sha256": "4a2eb30442f29b4e9d7f89ea028de17d9b7ca678eefa478c3f9cf65e7c362bd9"
+  }
+]

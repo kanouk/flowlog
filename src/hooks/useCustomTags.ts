@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog } from '@/integrations/cloudflare/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 import { queryKeys } from '@/lib/queryKeys';
@@ -97,7 +97,7 @@ export function useCustomTags() {
     staleTime: 5 * 60_000,
     queryFn: async () => {
       if (!user) return [];
-      const { data, error: fetchError } = await supabase
+      const { data, error: fetchError } = await flowlog
         .from('custom_tags')
         .select('id, user_id, name, icon, color, sort_order, created_at, updated_at')
         .eq('user_id', user.id)
@@ -122,7 +122,7 @@ export function useCustomTags() {
         ? Math.max(...customTags.map(t => t.sort_order))
         : -1;
 
-      const { data, error: insertError } = await supabase
+      const { data, error: insertError } = await flowlog
         .from('custom_tags')
         .insert({
           user_id: user.id,
@@ -147,7 +147,7 @@ export function useCustomTags() {
     mutationFn: async ({ id, input }: { id: string; input: UpdateCustomTagInput }) => {
       if (!user) throw new Error('ログインが必要です');
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await flowlog
         .from('custom_tags')
         .update(input)
         .eq('id', id)
@@ -168,7 +168,7 @@ export function useCustomTags() {
     mutationFn: async (id: string) => {
       if (!user) throw new Error('ログインが必要です');
 
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await flowlog
         .from('custom_tags')
         .delete()
         .eq('id', id)

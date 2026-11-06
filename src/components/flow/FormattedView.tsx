@@ -6,7 +6,8 @@ import { CATEGORY_CONFIG, BlockCategory } from '@/lib/categoryUtils';
 import { BookOpen, ListTodo, Bookmark } from 'lucide-react';
 import { TaskCheckbox } from '@/components/ui/task-checkbox';
 import { parseDiarySections } from '@/lib/diaryParser';
-import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogTrigger } from '@/components/ui/dialog';
+import { PhotoDialogContent } from '@/components/common/PhotoDialogContent';
 
 interface FormattedViewProps {
   entry: Entry | null;
@@ -57,13 +58,13 @@ function PhotoMarker({ images }: { images: string[] }) {
           ))}
         </button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl p-4">
+      <PhotoDialogContent className="max-w-2xl">
         <div className={`grid gap-2 ${images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
           {images.map((url, i) => (
             <img key={url} src={url} alt={`写真 ${i + 1}`} decoding="async" className="w-full rounded-lg object-contain max-h-[70vh]" />
           ))}
         </div>
-      </DialogContent>
+      </PhotoDialogContent>
     </Dialog>
   );
 }

@@ -59,6 +59,7 @@ function FeatureCard({
   onReset: (featureKey: FeatureKey) => Promise<boolean>;
 }) {
   const def = FEATURE_DEFINITIONS.find(d => d.key === featureKey)!;
+  const settingsOnly = featureKey === 'time_inference';
   const Icon = FEATURE_ICONS[featureKey];
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<FeatureCardState>({
@@ -109,14 +110,15 @@ function FeatureCard({
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm">{def.label}</span>
-                  {!state.enabled && (
+                  {settingsOnly && <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">AIモデルは未使用</span>}
+                  {!state.enabled && !settingsOnly && (
                     <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">無効</span>
                   )}
                   {state.dirty && (
                     <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">未保存</span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">{def.description}</p>
+                <p className="text-xs text-muted-foreground">{settingsOnly ? '本文の時刻や時間帯はFlowLogが自動で読み取ります。ここで設定するAIモデルは現在使っていません。' : def.description}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -149,10 +151,10 @@ function FeatureCard({
                 onValueChange={(v) => handleChange('assigned_model_id', v === '_default' ? null : v)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="デフォルト (Lovable AI)" />
+                  <SelectValue placeholder="未設定（モデルを選択）" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="_default">デフォルト (Lovable AI)</SelectItem>
+                  <SelectItem value="_default">未設定（モデルを選択）</SelectItem>
                   {activeModels.map(m => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.display_name} ({m.model_name})
@@ -245,7 +247,7 @@ export function AIFeatureSettingsSection() {
       </h2>
 
       <p className="text-sm text-muted-foreground">
-        各AI処理ごとに使用モデルとプロンプトを個別に設定できます。未設定の場合はデフォルト (Lovable AI) が使用されます。
+        各AI処理のモデルとプロンプトを設定できます。モデルとAPIキーが未設定の処理は実行されません。
       </p>
 
       <div className="space-y-3">

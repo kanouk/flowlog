@@ -3,7 +3,9 @@ import { Sun, Cloud, Sunset, Moon, X, Clock3, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-export type Timeframe = 'morning' | 'noon' | 'evening' | 'night';
+import type { Period } from '@/lib/blockTiming';
+
+export type Timeframe = Period;
 
 interface TimeQuestionProps {
   blockId: string;
@@ -11,32 +13,31 @@ interface TimeQuestionProps {
   question: string;
   onAnswer: (blockId: string, timeframe: Timeframe) => void;
   onAnswerExactTime: (blockId: string, time: string) => void;
+  onClose: () => void;
+  canDismiss?: boolean;
+  suggestedTime?: string;
   onDismiss: (blockId: string) => void;
 }
 
-const TIMEFRAME_CONFIG: Record<Timeframe, { label: string; icon: typeof Sun; time: string; color: string }> = {
+const TIMEFRAME_CONFIG: Record<Timeframe, { label: string; icon: typeof Sun; color: string }> = {
   morning: { 
     label: '朝', 
     icon: Sun, 
-    time: '08:00',
     color: 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30',
   },
   noon: { 
     label: '昼', 
     icon: Cloud, 
-    time: '12:00',
     color: 'text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30',
   },
   evening: { 
     label: '夕方', 
     icon: Sunset, 
-    time: '18:00',
     color: 'text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/30',
   },
   night: { 
     label: '夜', 
     icon: Moon, 
-    time: '21:00',
     color: 'text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30',
   },
 };
@@ -47,10 +48,13 @@ export function TimeQuestion({
   question,
   onAnswer, 
   onAnswerExactTime,
-  onDismiss 
+  onDismiss,
+  onClose,
+  canDismiss = true,
+  suggestedTime,
 }: TimeQuestionProps) {
   const [showExactTimeInput, setShowExactTimeInput] = useState(false);
-  const [exactTime, setExactTime] = useState('19:00');
+  const [exactTime, setExactTime] = useState(suggestedTime || '');
   const displayQuestion = question.includes('何時') ? 'いつごろですか？' : question;
 
   return (
@@ -71,7 +75,8 @@ export function TimeQuestion({
           variant="ghost"
           size="icon"
           className="h-6 w-6 flex-shrink-0 text-muted-foreground hover:text-foreground"
-          onClick={() => onDismiss(blockId)}
+          aria-label="閉じる"
+          onClick={onClose}
         >
           <X className="h-3.5 w-3.5" />
         </Button>
@@ -102,6 +107,7 @@ export function TimeQuestion({
           <Pencil className="h-3.5 w-3.5" />
           時刻を入れる
         </Button>
+        {canDismiss && (
         <Button
           variant="ghost"
           size="sm"
@@ -110,6 +116,7 @@ export function TimeQuestion({
         >
           わからない
         </Button>
+        )}
       </div>
 
       {showExactTimeInput && (
@@ -126,6 +133,7 @@ export function TimeQuestion({
           <Button
             size="sm"
             className="h-8 px-3 text-xs"
+            disabled={!exactTime}
             onClick={() => onAnswerExactTime(blockId, exactTime)}
           >
             この時刻で保存
@@ -134,8 +142,4 @@ export function TimeQuestion({
       )}
     </div>
   );
-}
-
-export function getTimeFromTimeframe(timeframe: Timeframe): string {
-  return TIMEFRAME_CONFIG[timeframe].time;
 }

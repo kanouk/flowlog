@@ -29,8 +29,8 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 
-const MCP_SERVER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mcp-server/mcp`;
-const REST_API_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/api`;
+const MCP_SERVER_URL = `${window.location.origin}/mcp`;
+const REST_API_BASE = `${window.location.origin}/api`;
 
 export function McpSettingsSection() {
   const { tokens, loading, generateToken, deleteToken } = useApiTokens();

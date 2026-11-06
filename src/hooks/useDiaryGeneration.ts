@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { flowlog } from "@/integrations/cloudflare/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
@@ -10,6 +10,7 @@ export interface DiaryGenerationStatus {
   saved_generation: number;
   completed_at: string | null;
   error_code: string | null;
+  scope_reason?: 'protected_date' | 'awaiting_new_record' | null;
 }
 export function useDiaryGeneration(date: string, onChange: () => void) {
   const { user } = useAuth();
@@ -35,7 +36,7 @@ export function useDiaryGeneration(date: string, onChange: () => void) {
     const poll = async () => {
       if (document.hidden || inflight) return;
       inflight = true;
-      const { data, error } = await supabase.rpc("diary_generation_status", {
+      const { data, error } = await flowlog.rpc("diary_generation_status", {
         p_date: date,
       });
       inflight = false;
@@ -70,7 +71,7 @@ export function useDiaryGeneration(date: string, onChange: () => void) {
     };
   }, [date, userId]);
   const request = useCallback(async () => {
-    const { data, error } = await supabase.rpc("request_diary_generation", {
+    const { data, error } = await flowlog.rpc("request_diary_generation", {
       p_date: date,
     });
     if (error) {

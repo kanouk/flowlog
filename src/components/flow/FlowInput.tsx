@@ -29,7 +29,7 @@ import {
   setLastCategory,
   setLastTag,
 } from '@/lib/categoryUtils';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog } from '@/integrations/cloudflare/client';
 import {
   buildScheduleDateTime,
   formatScheduleDateDisplay,
@@ -98,6 +98,8 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [retryImages,setRetryImages]=useState<string[]>([]);
+  const pendingFormKey=`${DRAFT_KEY_PREFIX}${selectedDate}:pending`;
   const [category, setCategory] = useState<BlockCategory>('event');
   const [tag, setTag] = useState<string | null>(null);
   const [priority, setPriority] = useState<TaskPriorityValue>(0);
@@ -141,6 +143,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     resetImages,
     restoreImages,
   } = useImageAttachments({ maxImages });
+  const visiblePreviews = previewUrls.length ? previewUrls : retryImages;
   const { user } = useAuth();
   const { customTags, createCustomTag } = useCustomTags();
 
@@ -222,7 +225,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     let cancelled = false;
 
     const loadTopTags = async () => {
-      const { data, error } = await supabase
+      const { data, error } = await flowlog
         .from('blocks')
         .select('tag, occurred_at')
         .eq('user_id', user.id)
@@ -353,12 +356,15 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     setIsComposing(false);
   };
 
-  const canContinue = (content.trim().length > 0 || selectedImages.length > 0) && !disabled && !isSubmitting;
+  const canContinue = (content.trim().length > 0 || selectedImages.length > 0 || retryImages.length > 0) && !disabled && !isSubmitting;
+  const quickCapture = category === 'event' && !tag && !selectedImages.length && !retryImages.length && !!content.trim();
   const canSaveSchedule = category === 'schedule' && startDate;
-  const canSave = (content.trim().length > 0 || selectedImages.length > 0 || canSaveSchedule) && !disabled && !isSubmitting;
+  const canSave = (content.trim().length > 0 || selectedImages.length > 0 || retryImages.length > 0 || canSaveSchedule) && !disabled && !isSubmitting;
 
   const resetForm = useCallback(() => {
     setContent('');
+    setRetryImages([]);
+    sessionStorage.removeItem(pendingFormKey);
     sessionStorage.removeItem(`${DRAFT_KEY_PREFIX}${selectedDate}`);
     resetImages();
     setIsReviewOpen(false);
@@ -381,7 +387,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
       textareaRef.current.style.height = 'auto';
     }
     focusTextarea();
-  }, [focusTextarea, resetImages, selectedDate]);
+  }, [focusTextarea, resetImages, selectedDate, pendingFormKey]);
 
   const restoreForm = useCallback((snapshot: SubmissionSnapshot) => {
     setContent(snapshot.content);
@@ -413,6 +419,17 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     focusTextarea();
   }, [focusTextarea, restoreImages]);
 
+  useEffect(() => {
+    const saved=sessionStorage.getItem(pendingFormKey);
+    if(!saved){setRetryImages([]);return;}
+    try {
+      const pending=JSON.parse(saved);
+      const snapshot={...pending.snapshot,images:[],startDate:pending.snapshot.startDate?new Date(pending.snapshot.startDate):undefined,endDate:pending.snapshot.endDate?new Date(pending.snapshot.endDate):undefined,dueDate:pending.snapshot.dueDate?new Date(pending.snapshot.dueDate):undefined};
+      restoreForm(snapshot);
+      setRetryImages(pending.urls);
+    } catch { sessionStorage.removeItem(pendingFormKey); }
+  },[pendingFormKey,restoreForm]);
+
   const handleOpenReview = () => {
     if (!canContinue) return;
     reviewOpenedAtRef.current = Date.now();
@@ -426,7 +443,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
     const trimmedContent = content.trim();
     const imagesToUpload = [...selectedImages];
     const hasContent = trimmedContent.length > 0;
-    const hasImages = imagesToUpload.length > 0;
+    const hasImages = imagesToUpload.length > 0 || retryImages.length > 0;
 
     if (category === 'schedule' && !startDate) {
       toast.error('開始日を選択してください');
@@ -486,19 +503,18 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
 
     submitLockedRef.current = true;
     setIsSubmitting(true);
-    resetForm();
-    setIsSubmitting(false);
 
-    void (async () => {
-      try {
-        let uploadedUrls: string[] = [];
-        if (hasImages) {
+    try {
+        let uploadedUrls: string[] = retryImages;
+        if (imagesToUpload.length) {
           uploadedUrls = await uploadImages(imagesToUpload);
           if (uploadedUrls.length !== imagesToUpload.length) {
-            toast.warning('一部の画像のアップロードに失敗しました');
+            throw new Error('画像のアップロードが完了していません。再試行してください');
           }
         }
 
+        sessionStorage.setItem(pendingFormKey,JSON.stringify({snapshot:{...submissionSnapshot,images:[]},urls:uploadedUrls}));
+        setRetryImages(uploadedUrls);
         const submitted = await onSubmit(
           trimmedContent,
           mode,
@@ -510,18 +526,20 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
           isBatch,
           dueData
         );
-        if (!submitted) {
-          restoreForm(submissionSnapshot);
-        }
+        if (submitted) resetForm();
+        else restoreForm(submissionSnapshot);
       } catch (error) {
-        console.error('Background submit failed:', error);
+        console.error('Submit result unavailable:', error);
         restoreForm(submissionSnapshot);
+      } finally {
+        submitLockedRef.current = false;
+        setIsSubmitting(false);
       }
-    })();
-    submitLockedRef.current = false;
   }, [
     category,
     content,
+    retryImages,
+    pendingFormKey,
     disabled,
     endDate,
     endTime,
@@ -598,12 +616,13 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
   }, [category, handleCategoryChange, handleSubmitWithMode, isReviewOpen]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (isComposing) return;
+    if (isComposing || e.nativeEvent.isComposing) return;
 
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       if (canContinue) {
-        handleOpenReview();
+        if (quickCapture) void handleSubmitWithMode('toSelectedDate');
+        else handleOpenReview();
       }
     }
   };
@@ -646,9 +665,9 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
             rows={4}
           />
 
-          {previewUrls.length > 0 && (
+          {visiblePreviews.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-2">
-              {previewUrls.map((url, i) => (
+              {visiblePreviews.map((url, i) => (
                 <div
                   key={url}
                   className="group relative h-20 w-20 animate-thumbnail-enter"
@@ -663,7 +682,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                   />
                   <button
                     type="button"
-                    onClick={() => removeImage(i)}
+                    onClick={() => { if(selectedImages.length)removeImage(i); else {setRetryImages(prev=>prev.filter((_,index)=>index!==i));sessionStorage.removeItem(pendingFormKey);} }}
                     className="absolute -right-2 -top-2 rounded-full bg-destructive p-0.5 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     <X className="h-3 w-3" />
@@ -711,7 +730,7 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
                 <Camera className="h-4 w-4" />
               </button>
 
-              {selectedImages.length > 0 && (
+          {selectedImages.length > 0 && (
                 <p className="text-sm text-muted-foreground">
                   画像{selectedImages.length}/{maxImages}
                 </p>
@@ -724,13 +743,17 @@ export function FlowInput({ onSubmit, disabled, selectedDate, isToday }: FlowInp
               )}
               <Button
                 size="sm"
+                variant={quickCapture ? 'ghost' : 'default'}
                 onClick={handleOpenReview}
                 disabled={!canContinue}
-                className="bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50"
               >
-                <ArrowRight className="mr-1 h-4 w-4" />
-                次へ
+                {quickCapture ? '分類・タグ' : <><ArrowRight className="mr-1 h-4 w-4" />次へ</>}
               </Button>
+              {quickCapture && (
+                <Button size="sm" onClick={() => void handleSubmitWithMode('toSelectedDate')} disabled={!canContinue}>
+                  <Send className="mr-1 h-4 w-4" />保存
+                </Button>
+              )}
             </div>
           </div>
         </div>

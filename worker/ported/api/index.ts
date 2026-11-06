@@ -1,0 +1,1550 @@
+import { orderTimeline } from '../../../src/lib/blockTiming';
+// Ported from supabase/functions/api/index.ts; source behaviour retained except documented runtime/security adaptations.
+import type { Env } from '../../auth';
+import { createServerClient } from '../../database';
+import { guardedFetch } from '../../outbound';
+import { createBlocks, CreationError, requireCreationKey, readCreation, creationRequest } from '../../create-block';
+import { Hono, type Context } from "hono";
+import { corsHeaders } from "../_shared/cors.ts";
+import { expectedBlockSchema, imageArraySchema, isExpectedBlock, isTimestamp, validateEvent, validateImages } from "./native-images.ts";
+// Explicit boundary type retains the original Deno JSON contracts. Request validation remains in each handler.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type LegacyJSON = any;
+export function createHandler(env: Env, actor: string | null, ctx: Pick<ExecutionContext, 'waitUntil'>, delegate: typeof globalThis.fetch = globalThis.fetch) {
+    const fetch = guardedFetch(env, delegate);
+    const runtime: Record<string, string | undefined> = { ...env as unknown as Record<string, string>, SUPABASE_URL: env.APP_ORIGIN, SUPABASE_SERVICE_ROLE_KEY: 'worker-owner', SUPABASE_ANON_KEY: 'worker-owner', FLOWLOG_APP_URL: env.APP_ORIGIN, SITE_URL: env.APP_ORIGIN, SUPABASE_SITE_URL: env.APP_ORIGIN, LOVABLE_API_KEY: undefined };
+    const Deno = { env: { get: (key: string) => runtime[key] } };
+    const createClient = (..._args: unknown[]) => createServerClient(env, env.OWNER_ID, actor);
+    const waitUntil = (promise: PromiseLike<unknown>) => ctx.waitUntil(Promise.resolve(promise));
+    const console = { log: (..._args: unknown[]) => { }, warn: (..._args: unknown[]) => { }, error: (..._args: unknown[]) => { } };
+    const app = new Hono().basePath("/api");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    function getErrorMessage(error: unknown): string {
+        return error instanceof Error ? error.message : String(error);
+    }
+    app.use("*", async (c, next) => {
+        if (c.req.method === "OPTIONS") {
+            return new Response(null, {
+                headers: {
+                    ...corsHeaders,
+                    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+                },
+            });
+        }
+        await next();
+        c.header("Access-Control-Allow-Origin", "*");
+    });
+    async function authenticateUser(authHeader: string | undefined): Promise<string | null> {
+        if (actor)
+            return actor;
+        if (!authHeader?.startsWith("Bearer ")) {
+            return null;
+        }
+        const token = authHeader.slice(7);
+        // SHA-256ハッシュを計算
+        const encoder = new TextEncoder();
+        const data = encoder.encode(token);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const tokenHash = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        const { data: tokenData, error } = await supabase
+            .from("user_api_tokens")
+            .select("user_id")
+            .eq("token_hash", tokenHash)
+            .single();
+        if (error || !tokenData) {
+            return null;
+        }
+        // 最終使用日時をバックグラウンド更新
+        waitUntil(Promise.resolve(supabase
+            .from("user_api_tokens")
+            .update({ last_used_at: new Date().toISOString() })
+            .eq("token_hash", tokenHash)
+            .then(() => undefined)));
+        return tokenData.user_id;
+    }
+    app.use("/events/*", authMiddleware);
+    app.use("/tasks/*", authMiddleware);
+    app.use("/schedules/*", authMiddleware);
+    app.use("/memos/*", authMiddleware);
+    app.use("/read-later/*", authMiddleware);
+    app.use("/search", authMiddleware);
+    app.use("/entries/*", authMiddleware);
+    app.use("/blocks/*", authMiddleware);
+    app.use("/image-reference-migrations", authMiddleware);
+    async function creationMiddleware(c: Context, next: () => Promise<void>) {
+        try { requireCreationKey(c.req.header('Idempotency-Key')); }
+        catch(error) { return c.json({success:false,error:getErrorMessage(error)}, error instanceof CreationError ? error.status : 400); }
+        await next();
+    }
+    async function authMiddleware(c: Context, next: () => Promise<void>) {
+        const userId = await authenticateUser(c.req.header("Authorization"));
+        if (!userId) {
+            return c.json({
+                success: false,
+                error: "Unauthorized",
+                error_description: "Bearer token required",
+            }, 401, {
+                "WWW-Authenticate": 'Bearer realm="FlowLog API"',
+            });
+        }
+        c.set("userId", userId);
+        await next();
+    }
+    app.get("/events", authMiddlewareInline, listEvents);
+    app.post("/events", authMiddlewareInline, creationMiddleware, addEvent);
+    app.get("/tasks", authMiddlewareInline, listTasks);
+    app.post("/tasks", authMiddlewareInline, creationMiddleware, addTask);
+    app.patch("/tasks/:id/complete", authMiddlewareInline, completeTask);
+    app.patch("/tasks/:id/priority", authMiddlewareInline, updateTaskPriority);
+    app.get("/schedules", authMiddlewareInline, listSchedules);
+    app.post("/schedules", authMiddlewareInline, creationMiddleware, addSchedule);
+    app.get("/memos", authMiddlewareInline, listMemos);
+    app.post("/memos", authMiddlewareInline, creationMiddleware, addMemo);
+    app.get("/read-later", authMiddlewareInline, listReadLater);
+    app.post("/read-later", authMiddlewareInline, creationMiddleware, addReadLater);
+    app.patch("/read-later/:id/read", authMiddlewareInline, markAsReadHandler);
+    app.get("/search", authMiddlewareInline, search);
+    app.get("/entries/:date", authMiddlewareInline, getEntryHandler);
+    app.get("/entries/:date/generation", authMiddlewareInline, generationStatusHandler);
+    app.post("/entries/:date/regenerate", authMiddlewareInline, regenerateHandler);
+    app.patch("/blocks/:id", authMiddlewareInline, updateBlock);
+    app.delete("/blocks/:id", authMiddlewareInline, deleteBlock);
+    app.post("/image-reference-migrations", authMiddlewareInline, migrateImageReferences);
+    app.post("/capture", authMiddlewareInline, creationMiddleware, captureHandler);
+    app.post("/capture-image", authMiddlewareInline, creationMiddleware, captureImageHandler);
+    async function authMiddlewareInline(c: Context, next: () => Promise<void>) {
+        const userId = await authenticateUser(c.req.header("Authorization"));
+        if (!userId) {
+            return c.json({
+                success: false,
+                error: "Unauthorized",
+                error_description: "Bearer token required",
+            }, 401, {
+                "WWW-Authenticate": 'Bearer realm="FlowLog API"',
+            });
+        }
+        c.set("userId", userId);
+        await next();
+    }
+    function getTodayDate(): string {
+        const now = new Date();
+        return now.toISOString().split("T")[0];
+    }
+    async function getBlocksHelper(userId: string, category: string, options: {
+        date?: string;
+        start_date?: string;
+        end_date?: string;
+        tag?: string;
+        limit?: number;
+        include_completed?: boolean;
+        include_past?: boolean;
+        filter?: string;
+    }) {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        let query = supabase
+            .from("blocks")
+            .select("*")
+            .eq("user_id", userId)
+            .eq("category", category)
+            .order("occurred_at", { ascending: false })
+            .limit(options.limit || 50);
+        // 日付フィルタ
+        if (options.date) {
+            const startOfDay = `${options.date}T00:00:00.000Z`;
+            const endOfDay = `${options.date}T23:59:59.999Z`;
+            query = query.gte("occurred_at", startOfDay).lte("occurred_at", endOfDay);
+        }
+        else if (options.start_date || options.end_date) {
+            if (options.start_date) {
+                query = query.gte("occurred_at", `${options.start_date}T00:00:00.000Z`);
+            }
+            if (options.end_date) {
+                query = query.lte("occurred_at", `${options.end_date}T23:59:59.999Z`);
+            }
+        }
+        // タグフィルタ
+        if (options.tag) {
+            query = query.eq("tag", options.tag);
+        }
+        // タスク用: 完了済みを含めるか
+        if (category === "task" && !options.include_completed) {
+            query = query.eq("is_done", false);
+        }
+        // スケジュール用: 過去を含めるか
+        if (category === "schedule" && !options.include_past) {
+            query = query.gte("starts_at", new Date().toISOString());
+        }
+        // あとで用: フィルタ
+        if (category === "read_later" && options.filter && options.filter !== "all") {
+            if (options.filter === "read") {
+                query = query.eq("is_done", true);
+            }
+            else if (options.filter === "unread") {
+                query = query.eq("is_done", false);
+            }
+        }
+        const { data, error } = await query;
+        if (error) {
+            throw new Error(`Failed to fetch blocks: ${error.message}`);
+        }
+        return data;
+    }
+    async function addBlockHelper(userId: string, block: {
+        category: string;
+        content: string;
+        tag?: string;
+        occurred_at?: string;
+        starts_at?: string;
+        ends_at?: string;
+        is_all_day?: boolean;
+        priority?: number;
+        due_at?: string;
+        due_all_day?: boolean;
+        source?: string;
+        images?: string[];
+    }, key: unknown, fingerprint?: unknown): Promise<Record<string, unknown> & {replayed: boolean}> {
+        const created = await createBlocks(env, userId, key, [block], fingerprint);
+        return {...created.blocks[0], replayed: created.replayed};
+    }
+    async function searchBlocksHelper(userId: string, options: {
+        query: string;
+        category?: string;
+        tag?: string;
+        limit?: number;
+    }) {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        let query = supabase
+            .from("blocks")
+            .select("*")
+            .eq("user_id", userId)
+            .ilike("content", `%${options.query}%`)
+            .order("occurred_at", { ascending: false })
+            .limit(options.limit || 20);
+        if (options.category) {
+            query = query.eq("category", options.category);
+        }
+        if (options.tag) {
+            query = query.eq("tag", options.tag);
+        }
+        const { data, error } = await query;
+        if (error) {
+            throw new Error(`Failed to search blocks: ${error.message}`);
+        }
+        return data;
+    }
+    async function expandPhotoMarkersForContent(userId: string, content: string | null): Promise<string | null> {
+        if (!content)
+            return content;
+        const legacyIds = Array.from(content.matchAll(/\{\{PHOTO:([a-zA-Z0-9-]+):(\d+)\}\}/g)).map((match) => match[1]);
+        const blocksById = new Map<string, {
+            images?: string[];
+        }>();
+        if (legacyIds.length > 0) {
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            const { data, error } = await supabase
+                .from("blocks")
+                .select("id, images")
+                .eq("user_id", userId)
+                .in("id", [...new Set(legacyIds)]);
+            if (!error && data) {
+                data.forEach((block: {
+                    id: string;
+                    images?: string[] | null;
+                }) => blocksById.set(block.id, { images: block.images || [] }));
+            }
+        }
+        return content
+            .replace(/\{\{PHOTO:(https?:\/\/[^}\s]+)\}\}/g, (_match, url) => `\n\n${url}\n\n`)
+            .replace(/\{\{PHOTO:([a-zA-Z0-9-]+):(\d+)\}\}/g, (match, blockId) => {
+            const images = blocksById.get(blockId)?.images || [];
+            return images.length > 0 ? `\n\n${images.join('\n')}\n\n` : match;
+        })
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
+    }
+    function normalizeSource(value: unknown): string | undefined {
+        return typeof value === "string" && value.trim() ? value.trim() : undefined;
+    }
+    app.get("/health", (c) => {
+        return c.json({ success: true, message: "FlowLog API is running" });
+    });
+    app.get("/docs", (c) => {
+        const docs = {
+            name: "FlowLog REST API",
+            version: "1.2",
+            base_url: `${supabaseUrl}/api`,
+            authentication: {
+                type: "Bearer Token",
+                header: "Authorization: Bearer YOUR_API_TOKEN",
+                description: "APIトークンはFlowLog設定画面から発行できます。/health と /docs 以外の全エンドポイントに認証が必要です。",
+            },
+            endpoints: [
+                { method: "GET", path: "/entries/:date/generation", description: "本人の生活日の日記生成状態" },
+                { method: "POST", path: "/entries/:date/regenerate", description: "日記再生成・再試行を非同期で依頼（202）。本文送信不要" },
+                {
+                    method: "GET", path: "/health",
+                    description: "ヘルスチェック（認証不要）",
+                },
+                {
+                    method: "GET", path: "/docs",
+                    description: "このAPIドキュメント（認証不要）",
+                },
+                {
+                    method: "GET", path: "/events",
+                    description: "出来事一覧を取得",
+                    query: { date: "string? (YYYY-MM-DD)", start_date: "string?", end_date: "string?", tag: "string?", limit: "number? (default 50)" },
+                },
+                {
+                    method: "POST", path: "/capture",
+                    description: "捕獲口。形式判別のみ行い、URLを含むテキストは「あとで」、それ以外は出来事として保存する。意味の分類はしない",
+                    body: { text: "string (required)", source: "string? (mac-cli / raycast / share / watch-voice / alexa など)", occurred_at: "string? (ISO8601)" },
+                },
+                {
+                    method: "POST", path: "/capture-image",
+                    description: "写真の捕獲口。画像ストレージ設定（Gyazo / Supabase Storage）に従ってアップロードし、画像つき出来事としてフローに保存する。multipart/form-data（image / comment? / source?）または image/* 生ボディ（?source=）を受ける",
+                    body: { image: "file (required)", comment: "string?", source: "string?" },
+                },
+                {
+                    method: "POST", path: "/events",
+                    description: "出来事を追加",
+                    body: { content: "string (required)", occurred_at: "string? (ISO8601)", tag: "string?", source: "string?", images: "string[]? (max 5 unique HTTPS URLs; native attachments)", idempotency: "Idempotency-Key header required; same request replays; different request returns 409" },
+                },
+                {
+                    method: "GET", path: "/tasks",
+                    description: "タスク一覧を取得",
+                    query: { include_completed: "boolean? (default false)", tag: "string?", limit: "number?" },
+                },
+                {
+                    method: "POST", path: "/tasks",
+                    description: "タスクを追加",
+                    body: { content: "string (required)", tag: "string?", priority: "number? (0-3)", due_at: "string? (ISO8601)", due_all_day: "boolean?", source: "string?" },
+                },
+                {
+                    method: "PATCH", path: "/tasks/:id/complete",
+                    description: "タスクの完了/未完了を切り替え",
+                    body: { is_done: "boolean? (default true)" },
+                },
+                {
+                    method: "PATCH", path: "/tasks/:id/priority",
+                    description: "タスクの優先度を変更",
+                    body: { priority: "number (required, 0-3)" },
+                },
+                {
+                    method: "GET", path: "/schedules",
+                    description: "予定一覧を取得",
+                    query: { include_past: "boolean? (default false)", start_date: "string?", end_date: "string?", limit: "number?" },
+                },
+                {
+                    method: "POST", path: "/schedules",
+                    description: "予定を追加",
+                    body: { title: "string (required)", starts_at: "string (required, ISO8601)", ends_at: "string?", is_all_day: "boolean?", details: "string?", tag: "string?", source: "string?" },
+                },
+                {
+                    method: "GET", path: "/memos",
+                    description: "メモ一覧を取得",
+                    query: { date: "string?", start_date: "string?", end_date: "string?", tag: "string?", limit: "number?" },
+                },
+                {
+                    method: "POST", path: "/memos",
+                    description: "メモを追加",
+                    body: { content: "string (required)", tag: "string?", source: "string?" },
+                },
+                {
+                    method: "GET", path: "/read-later",
+                    description: "あとで一覧を取得",
+                    query: { filter: "string? (all|read|unread, default all)", tag: "string?", limit: "number?" },
+                },
+                {
+                    method: "POST", path: "/read-later",
+                    description: "あとでに追加",
+                    body: { url: "string (required)", comment: "string?", tag: "string?", source: "string?" },
+                },
+                {
+                    method: "PATCH", path: "/read-later/:id/read",
+                    description: "既読/未読を切り替え",
+                    body: { is_read: "boolean? (default true)" },
+                },
+                {
+                    method: "GET", path: "/search",
+                    description: "ブロックを横断検索",
+                    query: { query: "string (required)", category: "string?", tag: "string?", limit: "number?" },
+                },
+                {
+                    method: "GET", path: "/entries/:date",
+                    description: "指定日のエントリーを取得。formatted_content 内の写真マーカーはURL文字列へ展開されます。",
+                    params: { date: "string (YYYY-MM-DD)" },
+                },
+                {
+                    method: "PATCH", path: "/blocks/:id",
+                    description: "ブロックを更新",
+                    body: { content: "string?", tag: "string?", occurred_at: "string?", priority: "number?", is_done: "boolean?", starts_at: "string?", ends_at: "string?", is_all_day: "boolean?", due_at: "string?", due_all_day: "boolean?", images: "string[]? (replace native attachments; max 5)", expected: "{content, images, occurred_at, entry_id, revision} (required with images; atomic conflict check, 409 on mismatch)" },
+                },
+                {
+                    method: "DELETE", path: "/blocks/:id",
+                    description: "ブロックを削除",
+                },
+            ],
+        };
+        return c.json(docs);
+    });
+    app.get("/openapi.json", (c) => {
+        const baseUrl = `${supabaseUrl}/api`;
+        const spec = {
+            openapi: "3.0.3",
+            info: {
+                title: "FlowLog API",
+                description: "FlowLog REST API – 出来事・タスク・予定・メモ・あとで読むの管理",
+                version: "1.2.0",
+            },
+            servers: [{ url: baseUrl }],
+            security: [{ bearerAuth: [] }],
+            components: {
+                securitySchemes: {
+                    bearerAuth: {
+                        type: "http",
+                        scheme: "bearer",
+                        description: "FlowLog設定画面で発行したAPIトークン",
+                    },
+                },
+                schemas: {
+                    Block: {
+                        type: "object",
+                        properties: {
+                            id: { type: "string", format: "uuid" },
+                            entry_id: { type: "string", format: "uuid" },
+                            user_id: { type: "string", format: "uuid" },
+                            category: { type: "string", enum: ["event", "task", "schedule", "thought", "read_later"] },
+                            content: { type: "string", nullable: true },
+                            tag: { type: "string", nullable: true },
+                            source: { type: "string", nullable: true, description: "入力経路（mac-cli / raycast / share / watch-voice / alexa など）" },
+                            priority: { type: "integer", nullable: true, minimum: 0, maximum: 3 },
+                            is_done: { type: "boolean" },
+                            done_at: { type: "string", format: "date-time", nullable: true },
+                            occurred_at: { type: "string", format: "date-time" },
+                            starts_at: { type: "string", format: "date-time", nullable: true },
+                            ends_at: { type: "string", format: "date-time", nullable: true },
+                            is_all_day: { type: "boolean", nullable: true },
+                            due_at: { type: "string", format: "date-time", nullable: true },
+                            due_all_day: { type: "boolean", nullable: true },
+                            images: { type: "array", items: { type: "string" }, nullable: true },
+                            url_metadata: { type: "object", nullable: true },
+                            extracted_text: { type: "string", nullable: true },
+                            revision: { type: "integer", minimum: 1 },
+                            created_at: { type: "string", format: "date-time" },
+                        },
+                    },
+                    Entry: {
+                        type: "object",
+                        properties: {
+                            id: { type: "string", format: "uuid" },
+                            user_id: { type: "string", format: "uuid" },
+                            date: { type: "string", format: "date" },
+                            blocks: { type: "array", items: { $ref: "#/components/schemas/Block" } },
+                            stored_formatted_content: { type: "string", nullable: true },
+                            summary: { type: "string", nullable: true },
+                            formatted_content: { type: "string", nullable: true, description: "AI整形済み本文。写真マーカーはAPI返却時に実URL文字列へ展開されます。" },
+                            score: { type: "integer", nullable: true },
+                            score_details: { type: "string", nullable: true },
+                            created_at: { type: "string", format: "date-time" },
+                            updated_at: { type: "string", format: "date-time" },
+                        },
+                    },
+                    SuccessListResponse: {
+                        type: "object",
+                        properties: {
+                            success: { type: "boolean", example: true },
+                            data: { type: "array", items: { $ref: "#/components/schemas/Block" } },
+                        },
+                    },
+                    SuccessCreateResponse: {
+                        type: "object",
+                        properties: {
+                            success: { type: "boolean", example: true },
+                            data: {
+                                type: "object",
+                                properties: {
+                                    id: { type: "string", format: "uuid" },
+                                    message: { type: "string" },
+                                },
+                            },
+                        },
+                    },
+                    DiaryGenerationStatus: {
+                        type: "object", properties: {
+                            active: { type: "boolean" }, status: { type: "string", enum: ["disabled", "idle", "queued", "running", "succeeded", "failed"] },
+                            generation: { type: "integer" }, saved_generation: { type: "integer" }, completed_at: { type: "string", format: "date-time", nullable: true }, error_code: { type: "string", nullable: true },
+                        },
+                    },
+                    SuccessBlockUpdateResponse: {
+                        type: "object", properties: { success: { type: "boolean" }, data: { $ref: "#/components/schemas/Block" }, message: { type: "string" } },
+                    },
+                    SuccessMessageResponse: {
+                        type: "object",
+                        properties: {
+                            success: { type: "boolean", example: true },
+                            message: { type: "string" },
+                        },
+                    },
+                    ErrorResponse: {
+                        type: "object",
+                        properties: {
+                            success: { type: "boolean", example: false },
+                            error: { type: "string" },
+                            error_description: { type: "string" },
+                        },
+                    },
+                },
+                parameters: {
+                    dateQuery: { name: "date", in: "query", schema: { type: "string", format: "date" }, description: "YYYY-MM-DD" },
+                    startDateQuery: { name: "start_date", in: "query", schema: { type: "string", format: "date" } },
+                    endDateQuery: { name: "end_date", in: "query", schema: { type: "string", format: "date" } },
+                    tagQuery: { name: "tag", in: "query", schema: { type: "string" } },
+                    limitQuery: { name: "limit", in: "query", schema: { type: "integer", default: 50 } },
+                },
+            },
+            paths: {
+                "/health": {
+                    get: {
+                        summary: "ヘルスチェック",
+                        security: [],
+                        responses: { "200": { description: "OK", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean" }, message: { type: "string" } } } } } } },
+                    },
+                },
+                "/docs": {
+                    get: {
+                        summary: "APIドキュメント（JSON）",
+                        security: [],
+                        responses: { "200": { description: "OK" } },
+                    },
+                },
+                "/openapi.json": {
+                    get: {
+                        summary: "OpenAPI仕様",
+                        security: [],
+                        responses: { "200": { description: "OK" } },
+                    },
+                },
+                "/capture": {
+                    post: {
+                        summary: "捕獲口（形式判別のみ。URL入りは「あとで」、それ以外は出来事へ）",
+                        requestBody: {
+                            required: true,
+                            content: { "application/json": { schema: { type: "object", required: ["text"], properties: { text: { type: "string" }, source: { type: "string" }, occurred_at: { type: "string", format: "date-time" } } } } },
+                        },
+                        responses: { "200": { description: "Created", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean", example: true }, data: { type: "object", properties: { id: { type: "string", format: "uuid" }, routed_to: { type: "string", enum: ["read_later", "event"] }, message: { type: "string" } } } } } } } } },
+                    },
+                },
+                "/capture-image": {
+                    post: {
+                        summary: "写真の捕獲口（画像ストレージ設定に従いアップロード→画像つき出来事）",
+                        requestBody: {
+                            required: true,
+                            content: {
+                                "multipart/form-data": { schema: { type: "object", required: ["image"], properties: { image: { type: "string", format: "binary" }, comment: { type: "string" }, source: { type: "string" } } } },
+                                "image/*": { schema: { type: "string", format: "binary" } },
+                            },
+                        },
+                        responses: { "200": { description: "Created", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean", example: true }, data: { type: "object", properties: { id: { type: "string", format: "uuid" }, routed_to: { type: "string", enum: ["event"] }, image_url: { type: "string", format: "uri" }, message: { type: "string" } } } } } } } } },
+                    },
+                },
+                "/events": {
+                    get: {
+                        summary: "出来事一覧を取得",
+                        parameters: [
+                            { $ref: "#/components/parameters/dateQuery" },
+                            { $ref: "#/components/parameters/startDateQuery" },
+                            { $ref: "#/components/parameters/endDateQuery" },
+                            { $ref: "#/components/parameters/tagQuery" },
+                            { $ref: "#/components/parameters/limitQuery" },
+                        ],
+                        responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessListResponse" } } } }, "401": { description: "Unauthorized", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } } },
+                    },
+                    post: {
+                        summary: "出来事を追加",
+                        description: "画像はネイティブ添付として保存する。images または Idempotency-Key を指定する新経路では、occurred_at（タイムゾーン必須）をJSTと所有者のday_boundary_hour（未設定0時）で生活日に所属させる。すべての新規投稿でIdempotency-Keyが必須。省略時は428で保存しない。保存時に生成ジョブを記録し、有効化された所有者の対象日だけをサーバーで非同期再生成する。画像取得・OCRは呼ばない。画像省略は従来どおり添付なし。例の所属日は境界5時の場合。",
+                        parameters: [{ name: "Idempotency-Key", in: "header", required: true, schema: { type: "string", pattern: "^[A-Za-z0-9._:-]{1,128}$" }, description: "再送時は同じキーと同じ本文を送る。同一所有者内で永続保持。別内容は409。省略時は428で保存しない。応答は初回の保存スナップショット（replayedのみtrue）。" }],
+                        requestBody: {
+                            required: true,
+                            content: { "application/json": { example: { content: "架空の日記。", occurred_at: "2026-09-21T02:00:00+09:00", tag: "private", source: "photo-diary", images: ["https://i.gyazo.com/0123456789abcdef0123456789abcdef.jpg"] }, schema: { type: "object", required: ["content"], properties: { content: { type: "string" }, occurred_at: { type: "string", format: "date-time" }, tag: { type: "string" }, source: { type: "string" }, images: imageArraySchema } } } },
+                        },
+                        responses: {
+                            "200": { description: "Created or replayed", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean" }, data: { allOf: [{ $ref: "#/components/schemas/Block" }, { type: "object", properties: { date: { type: "string", format: "date" }, message: { type: "string" }, replayed: { type: "boolean" } } }] } } }, example: { success: true, data: { id: "33333333-3333-4333-8333-333333333333", entry_id: "22222222-2222-4222-8222-222222222222", content: "架空の日記。", occurred_at: "2026-09-20T17:00:00Z", date: "2026-09-20", images: ["https://i.gyazo.com/0123456789abcdef0123456789abcdef.jpg"], revision: 1, replayed: false, message: "出来事を追加しました" } } } } },
+                            "400": { description: "Invalid JSON, content, timestamp, images or Idempotency-Key", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { success: false, error: "Duplicate image URLs are not allowed" } } } },
+                            "401": { description: "Invalid or missing bearer token" },
+                            "409": { description: "Idempotency-Key already used with a different request; no write" },
+                            "500": { description: "Storage failure; retry the identical request with the same key" },
+                        },
+                    },
+                },
+                "/tasks": {
+                    get: {
+                        summary: "タスク一覧を取得",
+                        parameters: [
+                            { name: "include_completed", in: "query", schema: { type: "boolean", default: false } },
+                            { $ref: "#/components/parameters/tagQuery" },
+                            { $ref: "#/components/parameters/limitQuery" },
+                        ],
+                        responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessListResponse" } } } } },
+                    },
+                    post: {
+                        summary: "タスクを追加",
+                        requestBody: {
+                            required: true,
+                            content: { "application/json": { schema: { type: "object", required: ["content"], properties: { content: { type: "string" }, tag: { type: "string" }, priority: { type: "integer", minimum: 0, maximum: 3 }, due_at: { type: "string", format: "date-time" }, due_all_day: { type: "boolean" }, source: { type: "string" } } } } },
+                        },
+                        responses: { "200": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessCreateResponse" } } } } },
+                    },
+                },
+                "/tasks/{id}/complete": {
+                    patch: {
+                        summary: "タスクの完了/未完了を切り替え",
+                        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+                        requestBody: { content: { "application/json": { schema: { type: "object", properties: { is_done: { type: "boolean", default: true } } } } } },
+                        responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessMessageResponse" } } } } },
+                    },
+                },
+                "/tasks/{id}/priority": {
+                    patch: {
+                        summary: "タスクの優先度を変更",
+                        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+                        requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["priority"], properties: { priority: { type: "integer", minimum: 0, maximum: 3 } } } } } },
+                        responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessMessageResponse" } } } } },
+                    },
+                },
+                "/schedules": {
+                    get: {
+                        summary: "予定一覧を取得",
+                        parameters: [
+                            { name: "include_past", in: "query", schema: { type: "boolean", default: false } },
+                            { $ref: "#/components/parameters/startDateQuery" },
+                            { $ref: "#/components/parameters/endDateQuery" },
+                            { $ref: "#/components/parameters/limitQuery" },
+                        ],
+                        responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessListResponse" } } } } },
+                    },
+                    post: {
+                        summary: "予定を追加",
+                        requestBody: {
+                            required: true,
+                            content: { "application/json": { schema: { type: "object", required: ["title", "starts_at"], properties: { title: { type: "string" }, starts_at: { type: "string", format: "date-time" }, ends_at: { type: "string", format: "date-time" }, is_all_day: { type: "boolean" }, details: { type: "string" }, tag: { type: "string" }, source: { type: "string" } } } } },
+                        },
+                        responses: { "200": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessCreateResponse" } } } } },
+                    },
+                },
+                "/memos": {
+                    get: {
+                        summary: "メモ一覧を取得",
+                        parameters: [
+                            { $ref: "#/components/parameters/dateQuery" },
+                            { $ref: "#/components/parameters/startDateQuery" },
+                            { $ref: "#/components/parameters/endDateQuery" },
+                            { $ref: "#/components/parameters/tagQuery" },
+                            { $ref: "#/components/parameters/limitQuery" },
+                        ],
+                        responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessListResponse" } } } } },
+                    },
+                    post: {
+                        summary: "メモを追加",
+                        requestBody: {
+                            required: true,
+                            content: { "application/json": { schema: { type: "object", required: ["content"], properties: { content: { type: "string" }, tag: { type: "string" }, source: { type: "string" } } } } },
+                        },
+                        responses: { "200": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessCreateResponse" } } } } },
+                    },
+                },
+                "/read-later": {
+                    get: {
+                        summary: "あとで読む一覧を取得",
+                        parameters: [
+                            { name: "filter", in: "query", schema: { type: "string", enum: ["all", "read", "unread"], default: "all" } },
+                            { $ref: "#/components/parameters/tagQuery" },
+                            { $ref: "#/components/parameters/limitQuery" },
+                        ],
+                        responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessListResponse" } } } } },
+                    },
+                    post: {
+                        summary: "あとで読むに追加",
+                        requestBody: {
+                            required: true,
+                            content: { "application/json": { schema: { type: "object", required: ["url"], properties: { url: { type: "string", format: "uri" }, comment: { type: "string" }, tag: { type: "string" }, source: { type: "string" } } } } },
+                        },
+                        responses: { "200": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessCreateResponse" } } } } },
+                    },
+                },
+                "/read-later/{id}/read": {
+                    patch: {
+                        summary: "既読/未読を切り替え",
+                        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+                        requestBody: { content: { "application/json": { schema: { type: "object", properties: { is_read: { type: "boolean", default: true } } } } } },
+                        responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessMessageResponse" } } } } },
+                    },
+                },
+                "/search": {
+                    get: {
+                        summary: "ブロックを横断検索",
+                        parameters: [
+                            { name: "query", in: "query", required: true, schema: { type: "string" } },
+                            { name: "category", in: "query", schema: { type: "string", enum: ["event", "task", "schedule", "thought", "read_later"] } },
+                            { $ref: "#/components/parameters/tagQuery" },
+                            { $ref: "#/components/parameters/limitQuery" },
+                        ],
+                        responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessListResponse" } } } } },
+                    },
+                },
+                "/entries/{date}": {
+                    get: {
+                        summary: "指定日のエントリーを取得",
+                        description: "date は所属生活日。blocks に保存済み本文・画像URL・日時・entry_id・revisionを返す。stored_formatted_content はDB保存値そのまま。formatted_content の既存マーカー展開は維持する。",
+                        parameters: [{ name: "date", in: "path", required: true, schema: { type: "string", format: "date" }, description: "YYYY-MM-DD" }],
+                        responses: {
+                            "200": { description: "OK", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean" }, data: { $ref: "#/components/schemas/Entry" } } } } } },
+                        },
+                    },
+                },
+                "/entries/{date}/generation": {
+                    get: { summary: "日記生成の状態を取得", description: "保存成功と生成完了を区別する。保存済み本文はGET /entries/{date}で取得する。",
+                        parameters: [{ name: "date", in: "path", required: true, schema: { type: "string", format: "date" } }],
+                        responses: { "200": { description: "OK", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean" }, data: { $ref: "#/components/schemas/DiaryGenerationStatus" } } }, example: { success: true, data: { active: true, status: "queued", generation: 2, saved_generation: 1, completed_at: null, error_code: null } } } } }, "400": { description: "Invalid date" }, "401": { description: "Unauthorized" }, "500": { description: "Status unavailable" } } },
+                },
+                "/entries/{date}/regenerate": {
+                    post: { summary: "本人の対象日の日記再生成・再試行を依頼", description: "サーバーがDBから出来事を取得する。本文の送信は不要。同日の待機中/生成中の依頼はまとめる。生成OFF/運用停止は409。",
+                        parameters: [{ name: "date", in: "path", required: true, schema: { type: "string", format: "date" } }],
+                        responses: { "202": { description: "Accepted; generation is not complete", content: { "application/json": { schema: { type: "object", properties: { success: { type: "boolean" }, data: { $ref: "#/components/schemas/DiaryGenerationStatus" } } } } } }, "400": { description: "Invalid date" }, "401": { description: "Unauthorized" }, "409": { description: "Generation disabled" }, "500": { description: "Queue unavailable" } } },
+                },
+                "/blocks/{id}": {
+                    patch: {
+                        summary: "ブロックを更新",
+                        description: "images を指定すると添付全体を置換。[] は全解除。expected（直前のGET /entries/{date}から転記）が必須。更新と照合は1つのUPDATEで実行し、不一致・他所有者・削除済みは409。images省略は既存画像を保持。imagesだけなら原ブロックの本文・タグ・日時・所属日・他ブロックは変更しない。画像だけの更新も対象日の日記の非同期再生成を起動する（有効化時）。保存成功は生成完了を意味しない。revisionも増加。",
+                        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+                        requestBody: {
+                            required: true,
+                            content: { "application/json": { example: { images: ["https://i.gyazo.com/0123456789abcdef0123456789abcdef.jpg"], expected: { content: "架空の日記。", images: [], occurred_at: "2026-09-20T17:00:00Z", entry_id: "22222222-2222-4222-8222-222222222222", revision: 1 } }, schema: { type: "object", properties: { content: { type: "string" }, tag: { type: "string" }, occurred_at: { type: "string", format: "date-time" }, priority: { type: "integer" }, is_done: { type: "boolean" }, starts_at: { type: "string", format: "date-time" }, ends_at: { type: "string", format: "date-time" }, is_all_day: { type: "boolean" }, due_at: { type: "string", format: "date-time" }, due_all_day: { type: "boolean" }, images: imageArraySchema, expected: expectedBlockSchema } } } },
+                        },
+                        responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessBlockUpdateResponse" }, example: { success: true, data: { id: "33333333-3333-4333-8333-333333333333", entry_id: "22222222-2222-4222-8222-222222222222", content: "架空の日記。", images: ["https://i.gyazo.com/0123456789abcdef0123456789abcdef.jpg"], occurred_at: "2026-09-20T17:00:00Z", revision: 2 }, message: "ブロックを更新しました" } } } }, "400": { description: "Invalid JSON, fields, images or expected snapshot" }, "401": { description: "Invalid or missing bearer token" }, "500": { description: "Storage failure" }, "404": { description: "Block not found (without expected)" }, "409": { description: "Block changed or unavailable; no write performed" } },
+                    },
+                    delete: {
+                        summary: "ブロックを削除",
+                        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+                        responses: { "200": { description: "OK", content: { "application/json": { schema: { $ref: "#/components/schemas/SuccessMessageResponse" } } } } },
+                    },
+                },
+            },
+        };
+        for (const [path, methods] of Object.entries(spec.paths)) {
+            if (!['/events','/tasks','/schedules','/memos','/read-later','/capture','/capture-image'].includes(path)) continue;
+            const operation=(methods as {post?:{parameters?:unknown[];responses:Record<string,unknown>}}).post;
+            if(!operation)continue;
+            operation.parameters=[{name:'Idempotency-Key',in:'header',required:true,schema:{type:'string',pattern:'^[A-Za-z0-9._:-]{1,128}$'},description:'Post ID. Reuse the same key and payload for retries; use a new key for a distinct post.'}];
+            operation.responses['428']={description:'Missing Idempotency-Key; no post was saved'};
+            operation.responses['409']={description:'Key already used for a different post; no write'};
+        }
+        return c.json(spec);
+    });
+    async function listEvents(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const { date, start_date, end_date, tag, limit } = c.req.query();
+            const data = await getBlocksHelper(userId, "event", {
+                date,
+                start_date,
+                end_date,
+                tag,
+                limit: limit ? parseInt(limit) : undefined,
+            });
+            return c.json({ success: true, data });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    const CAPTURE_URL_RE = /https?:\/\/[^\s]+/;
+    async function captureHandler(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const body = await c.req.json<LegacyJSON>();
+            const text = typeof body.text === "string" ? body.text.trim() : "";
+            if (!text) {
+                return c.json({ success: false, error: "text is required" }, 400);
+            }
+            const source = normalizeSource(body.source);
+            const urlMatch = text.match(CAPTURE_URL_RE);
+            let block;
+            let routedTo: string;
+            let message: string;
+            if (urlMatch) {
+                const url = urlMatch[0];
+                const comment = text.replace(url, "").trim();
+                block = await addBlockHelper(userId, {
+                    category: "read_later",
+                    content: comment ? `${url}\n\n${comment}` : url,
+                    source,
+                }, c.req.header('Idempotency-Key'));
+                routedTo = "read_later";
+                message = "あとでリストに追加しました";
+            }
+            else {
+                block = await addBlockHelper(userId, {
+                    category: "event",
+                    content: text,
+                    occurred_at: body.occurred_at,
+                    source,
+                }, c.req.header('Idempotency-Key'));
+                routedTo = "event";
+                message = "出来事を追加しました";
+            }
+            return c.json({
+                success: true,
+                data: { id: block.id, routed_to: routedTo, message },
+            });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function captureImageHandler(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const contentType = c.req.header("Content-Type") || "";
+            let imageBlob: Blob | null = null;
+            let fileName = "capture.jpg";
+            let comment = "";
+            let source: string | undefined;
+            if (contentType.startsWith("multipart/form-data")) {
+                const form = await c.req.formData();
+                const file = form.get("image") ?? form.get("file");
+                if (file instanceof File) {
+                    imageBlob = file;
+                    fileName = file.name || fileName;
+                }
+                comment = typeof form.get("comment") === "string" ? (form.get("comment") as string).trim() : "";
+                source = normalizeSource(form.get("source"));
+            }
+            else if (contentType.startsWith("image/")) {
+                const bytes = await c.req.arrayBuffer();
+                if (bytes.byteLength > 0) {
+                    imageBlob = new Blob([bytes], { type: contentType });
+                    const ext = contentType.split("/")[1]?.split(";")[0] || "jpg";
+                    fileName = `capture.${ext}`;
+                }
+                source = normalizeSource(c.req.query("source"));
+            }
+            if (!imageBlob || imageBlob.size === 0) {
+                return c.json({ success: false, error: "画像がありません。multipart/form-data の image フィールドか、image/* の生ボディで送ってください" }, 400);
+            }
+            const key = requireCreationKey(c.req.header('Idempotency-Key'));
+            const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await imageBlob.arrayBuffer()))).map(n=>n.toString(16).padStart(2,'0')).join('');
+            const fingerprint = {kind:'capture-image', digest, type:imageBlob.type, content:comment, source};
+            const prior = await readCreation(env,userId,key,creationRequest(fingerprint));
+            if(prior) return c.json({success:true,data:{id:prior.blocks[0].id,routed_to:'event',image_url:(prior.blocks[0].images as string[])[0],message:'写真をフローに追加しました'}});
+            const imageUrl = await uploadImageForUser(userId, imageBlob, fileName, key+':'+digest);
+            const block = await addBlockHelper(userId, {
+                category: "event",
+                content: comment,
+                source,
+                images: [imageUrl],
+            }, key, fingerprint);
+            return c.json({
+                success: true,
+                data: { id: block.id, routed_to: "event", image_url: (block.images as string[])[0], message: "写真をフローに追加しました" },
+            });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    const IMAGE_BUCKET = "block-images";
+    async function uploadImageForUser(userId: string, imageBlob: Blob, fileName: string, operationKey: string): Promise<string> {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        const { data: setting } = await supabase
+            .from("user_image_storage_settings")
+            .select("provider, gyazo_token")
+            .eq("user_id", userId)
+            .maybeSingle();
+        if (setting?.provider === "gyazo" && setting?.gyazo_token) {
+            const gyazoForm = new FormData();
+            gyazoForm.append("imagedata", imageBlob, fileName);
+            gyazoForm.append("access_policy", "anyone");
+            const gyazoResponse = await fetch("https://upload.gyazo.com/api/upload", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${setting.gyazo_token}` },
+                body: gyazoForm,
+            });
+            let gyazoData: {
+                url?: string;
+            } = {};
+            try {
+                gyazoData = JSON.parse(await gyazoResponse.text());
+            }
+            catch {
+                // fall through to error below
+            }
+            if (!gyazoResponse.ok || !gyazoData.url) {
+                throw new Error("Gyazoへのアップロードに失敗しました");
+            }
+            return gyazoData.url;
+        }
+        const ext = fileName.split(".").pop()?.toLowerCase() || "jpg";
+        const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(operationKey)))).map(n=>n.toString(16).padStart(2,'0')).join('');
+        const path = `${userId}/capture_${hash}.${ext}`;
+        const { data, error } = await supabase.storage
+            .from(IMAGE_BUCKET)
+            .upload(path, imageBlob, { cacheControl: "3600", upsert: false, contentType: imageBlob.type || undefined });
+        if (error || !data?.path) {
+            throw new Error(`Supabase Storageへのアップロードに失敗しました: ${error?.message ?? "unknown"}`);
+        }
+        const { data: urlData } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(data.path);
+        return urlData.publicUrl;
+    }
+    async function addEvent(c: Context) {
+        try {
+            const userId = c.get("userId");
+            let body;
+            try {
+                body = await c.req.json<LegacyJSON>();
+            }
+            catch {
+                return c.json({ success: false, error: "Invalid JSON" }, 400);
+            }
+            if (!body || typeof body !== "object" || Array.isArray(body))
+                return c.json({ success: false, error: "JSON object required" }, 400);
+            const key = c.req.header("Idempotency-Key");
+            const validation = validateEvent(body, key);
+            if (validation)
+                return c.json({ success: false, error: validation }, 400);
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            const payload = {
+                content: body.content,
+                ...(body.occurred_at !== undefined ? { occurred_at: body.occurred_at } : {}),
+                ...(body.tag !== undefined ? { tag: body.tag } : {}),
+                ...(normalizeSource(body.source) ? { source: normalizeSource(body.source) } : {}),
+                ...(body.images !== undefined ? { images: body.images } : {}),
+            };
+            const { data, error } = await supabase.rpc("create_event_api", {
+                p_user_id: userId, p_request: payload, p_key: key ?? null,
+            });
+            if (error) {
+                const status = error.code === "PT409" ? 409 : error.code === "23514" || error.code === "22007" ? 400 : 500;
+                return c.json({ success: false, error: status === 500 ? "Failed to create event" : error.message }, status);
+            }
+            return c.json({
+                success: true,
+                data: { ...data.block, date: data.date, replayed: data.replayed, message: "出来事を追加しました" },
+            });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function listTasks(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const { include_completed, tag, limit } = c.req.query();
+            const data = await getBlocksHelper(userId, "task", {
+                include_completed: include_completed === "true",
+                tag,
+                limit: limit ? parseInt(limit) : undefined,
+            });
+            return c.json({ success: true, data });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function addTask(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const body = await c.req.json<LegacyJSON>();
+            if (!body.content) {
+                return c.json({ success: false, error: "content is required" }, 400);
+            }
+            const block = await addBlockHelper(userId, {
+                category: "task",
+                content: body.content,
+                tag: body.tag,
+                priority: body.priority,
+                due_at: body.due_at,
+                due_all_day: body.due_all_day,
+                source: normalizeSource(body.source),
+            }, c.req.header('Idempotency-Key'));
+            return c.json({
+                success: true,
+                data: { id: block.id, message: "タスクを追加しました" }
+            });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function completeTask(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const taskId = c.req.param("id");
+            const body = await c.req.json<LegacyJSON>();
+            const isDone = body.is_done !== false;
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            const { error } = await supabase
+                .from("blocks")
+                .update({
+                is_done: isDone,
+                done_at: isDone ? new Date().toISOString() : null
+            })
+                .eq("id", taskId)
+                .eq("user_id", userId)
+                .eq("category", "task");
+            if (error) {
+                throw new Error(`Failed to update task: ${error.message}`);
+            }
+            return c.json({
+                success: true,
+                message: isDone ? "タスクを完了にしました" : "タスクを未完了に戻しました"
+            });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function updateTaskPriority(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const taskId = c.req.param("id");
+            const body = await c.req.json<LegacyJSON>();
+            if (body.priority === undefined) {
+                return c.json({ success: false, error: "priority is required" }, 400);
+            }
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            const { error } = await supabase
+                .from("blocks")
+                .update({ priority: body.priority })
+                .eq("id", taskId)
+                .eq("user_id", userId)
+                .eq("category", "task");
+            if (error) {
+                throw new Error(`Failed to update priority: ${error.message}`);
+            }
+            return c.json({ success: true, message: "優先度を更新しました" });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function listSchedules(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const { include_past, start_date, end_date, limit } = c.req.query();
+            const data = await getBlocksHelper(userId, "schedule", {
+                include_past: include_past === "true",
+                start_date,
+                end_date,
+                limit: limit ? parseInt(limit) : undefined,
+            });
+            return c.json({ success: true, data });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function addSchedule(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const body = await c.req.json<LegacyJSON>();
+            if (!body.title || !body.starts_at) {
+                return c.json({ success: false, error: "title and starts_at are required" }, 400);
+            }
+            const content = body.details
+                ? `${body.title}\n\n${body.details}`
+                : body.title;
+            const block = await addBlockHelper(userId, {
+                category: "schedule",
+                content,
+                occurred_at: Date.parse(body.starts_at) > Date.now() ? undefined : body.starts_at,
+                starts_at: body.starts_at,
+                ends_at: body.ends_at,
+                is_all_day: body.is_all_day,
+                tag: body.tag,
+                source: normalizeSource(body.source),
+            }, c.req.header('Idempotency-Key'));
+            return c.json({
+                success: true,
+                data: { id: block.id, message: "予定を追加しました" }
+            });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function listMemos(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const { date, start_date, end_date, tag, limit } = c.req.query();
+            const data = await getBlocksHelper(userId, "thought", {
+                date,
+                start_date,
+                end_date,
+                tag,
+                limit: limit ? parseInt(limit) : undefined,
+            });
+            return c.json({ success: true, data });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function addMemo(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const body = await c.req.json<LegacyJSON>();
+            if (!body.content) {
+                return c.json({ success: false, error: "content is required" }, 400);
+            }
+            const block = await addBlockHelper(userId, {
+                category: "thought",
+                content: body.content,
+                tag: body.tag,
+                source: normalizeSource(body.source),
+            }, c.req.header('Idempotency-Key'));
+            return c.json({
+                success: true,
+                data: { id: block.id, message: "メモを追加しました" }
+            });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function listReadLater(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const { filter, tag, limit } = c.req.query();
+            const data = await getBlocksHelper(userId, "read_later", {
+                filter: filter || "all",
+                tag,
+                limit: limit ? parseInt(limit) : undefined,
+            });
+            return c.json({ success: true, data });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function addReadLater(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const body = await c.req.json<LegacyJSON>();
+            if (!body.url) {
+                return c.json({ success: false, error: "url is required" }, 400);
+            }
+            const content = body.comment
+                ? `${body.url}\n\n${body.comment}`
+                : body.url;
+            const block = await addBlockHelper(userId, {
+                category: "read_later",
+                content,
+                tag: body.tag,
+                source: normalizeSource(body.source),
+            }, c.req.header('Idempotency-Key'));
+            return c.json({
+                success: true,
+                data: { id: block.id, message: "あとでリストに追加しました" }
+            });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function markAsReadHandler(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const blockId = c.req.param("id");
+            const body = await c.req.json<LegacyJSON>();
+            const isRead = body.is_read !== false;
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            const { error } = await supabase
+                .from("blocks")
+                .update({
+                is_done: isRead,
+                done_at: isRead ? new Date().toISOString() : null
+            })
+                .eq("id", blockId)
+                .eq("user_id", userId)
+                .eq("category", "read_later");
+            if (error) {
+                throw new Error(`Failed to update read status: ${error.message}`);
+            }
+            return c.json({
+                success: true,
+                message: isRead ? "既読にしました" : "未読に戻しました"
+            });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function search(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const { query: searchQuery, category, tag, limit } = c.req.query();
+            if (!searchQuery) {
+                return c.json({ success: false, error: "query is required" }, 400);
+            }
+            const data = await searchBlocksHelper(userId, {
+                query: searchQuery,
+                category,
+                tag,
+                limit: limit ? parseInt(limit) : undefined,
+            });
+            return c.json({ success: true, data });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function getEntryHandler(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const date = c.req.param("date");
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            const { data, error } = await supabase
+                .from("entries")
+                .select("*")
+                .eq("user_id", userId)
+                .eq("date", date)
+                .maybeSingle();
+            if (error) {
+                throw new Error(`Failed to fetch entry: ${error.message}`);
+            }
+            if (!data) {
+                return c.json({ success: true, data: null, message: "エントリーが見つかりません" });
+            }
+            // Match the worker/UI's life-day range, including legacy blocks whose entry_id
+            // was assigned by the old API's calendar-date path. Never rewrite those blocks.
+            const { data: settings, error: settingsError } = await supabase.from("user_ai_settings")
+                .select("day_boundary_hour").eq("user_id", userId).maybeSingle();
+            if (settingsError)
+                throw new Error("Cannot read life-day settings");
+            const start = new Date(`${date}T${String(settings?.day_boundary_hour ?? 0).padStart(2, "0")}:00:00+09:00`);
+            const end = new Date(start.getTime() + 86400000);
+            const { data: blocks, error: blocksError } = await supabase.from("blocks").select("*")
+                .eq("user_id", userId).gte("occurred_at", start.toISOString()).lt("occurred_at", end.toISOString())
+                .order("occurred_at", { ascending: true }).order("id", { ascending: true });
+            if (blocksError)
+                throw new Error("Failed to fetch entry blocks");
+            const formattedContent = await expandPhotoMarkersForContent(userId, data.formatted_content);
+            return c.json({ success: true, data: { ...data, formatted_content: formattedContent, stored_formatted_content: data.formatted_content, blocks: orderTimeline(blocks).blocks.reverse() } });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function generationStatusHandler(c: Context) {
+        const date = c.req.param("date");
+        if (!isTimestamp(`${date}T00:00:00Z`))
+            return c.json({ success: false, error: "Invalid date" }, 400);
+        const db = createClient(supabaseUrl, supabaseServiceKey);
+        const { data, error } = await db.rpc("diary_generation_status_for_user", { p_user_id: c.get("userId"), p_date: date });
+        if (error)
+            return c.json({ success: false, error: "Cannot read generation status" }, 500);
+        return c.json({ success: true, data });
+    }
+    async function regenerateHandler(c: Context) {
+        const date = c.req.param("date");
+        if (!isTimestamp(`${date}T00:00:00Z`))
+            return c.json({ success: false, error: "Invalid date" }, 400);
+        const db = createClient(supabaseUrl, supabaseServiceKey);
+        const userId = c.get("userId");
+        const { data: active, error: activeError } = await db.rpc("diary_generation_active", { p_user_id: userId, p_date: date });
+        if (activeError)
+            return c.json({ success: false, error: "Cannot read generation settings" }, 500);
+        if (!active)
+            return c.json({ success: false, error: "Diary generation disabled" }, 409);
+        const { error } = await db.rpc("enqueue_diary_generation", { p_user_id: userId, p_date: date, p_force: true });
+        if (error)
+            return c.json({ success: false, error: "Cannot enqueue diary generation" }, 500);
+        const { data, error: statusError } = await db.rpc("diary_generation_status_for_user", { p_user_id: userId, p_date: date });
+        if (statusError)
+            return c.json({ success: false, error: "Cannot read generation status" }, 500);
+        return c.json({ success: true, data }, 202);
+    }
+    async function updateBlock(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const blockId = c.req.param("id");
+            let body;
+            try {
+                body = await c.req.json<LegacyJSON>();
+            }
+            catch {
+                return c.json({ success: false, error: "Invalid JSON" }, 400);
+            }
+            if (!body || typeof body !== "object" || Array.isArray(body))
+                return c.json({ success: false, error: "JSON object required" }, 400);
+            if (body.images !== undefined) {
+                const error = validateImages(body.images);
+                if (error)
+                    return c.json({ success: false, error }, 400);
+                if (!isExpectedBlock(body.expected)) {
+                    return c.json({ success: false, error: "expected snapshot is required when replacing images" }, 400);
+                }
+            }
+            if (body.expected !== undefined && !isExpectedBlock(body.expected)) {
+                return c.json({ success: false, error: "Invalid expected snapshot" }, 400);
+            }
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            // 許可するフィールドのみ更新
+            const updates: Record<string, unknown> = {};
+            if (body.content !== undefined)
+                updates.content = body.content;
+            if (body.tag !== undefined)
+                updates.tag = body.tag;
+            if (body.occurred_at !== undefined) {
+                updates.occurred_at = body.occurred_at;
+                updates.event_timing = { kind: 'exact', origin: 'external', at: body.occurred_at };
+            }
+            if (body.priority !== undefined)
+                updates.priority = body.priority;
+            if (body.is_done !== undefined) {
+                updates.is_done = body.is_done;
+                updates.done_at = body.is_done ? new Date().toISOString() : null;
+            }
+            if (body.starts_at !== undefined)
+                updates.starts_at = body.starts_at;
+            if (body.ends_at !== undefined)
+                updates.ends_at = body.ends_at;
+            if (body.is_all_day !== undefined)
+                updates.is_all_day = body.is_all_day;
+            if (body.due_at !== undefined)
+                updates.due_at = body.due_at;
+            if (body.due_all_day !== undefined)
+                updates.due_all_day = body.due_all_day;
+            if (body.images !== undefined)
+                updates.images = body.images;
+
+            if (Object.keys(updates).length === 0) {
+                return c.json({ success: false, error: "No valid fields to update" }, 400);
+            }
+            // Expected values stay in the request body (long diary text must not be
+            // exposed in query URLs or hit proxy URL-length limits). SQL does one CAS.
+            const { data, error } = body.expected !== undefined
+                ? await supabase.rpc("update_block_api", {
+                    p_user_id: userId, p_block_id: blockId,
+                    p_expected: body.expected, p_updates: updates,
+                })
+                : await supabase.from("blocks").update(updates)
+                    .eq("id", blockId).eq("user_id", userId).select("*").maybeSingle();
+            if (error) {
+                if (error.code === "PT409")
+                    return c.json({ success: false, error: error.message }, 409);
+                if (error.code === "23514")
+                    return c.json({ success: false, error: error.message }, 400);
+                throw new Error(`Failed to update block: ${error.message}`);
+            }
+            if (!data) {
+                return body.expected !== undefined
+                    ? c.json({ success: false, error: "Block changed or unavailable; read it again before retrying" }, 409)
+                    : c.json({ success: false, error: "Block not found" }, 404);
+            }
+            return c.json({ success: true, data, message: "ブロックを更新しました" });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    type ImageReferenceMapping = {
+        flowlog_block_id: string;
+        flowlog_image_index: number;
+        source_url: string;
+        image_url: string;
+    };
+    function isHttpUrl(value: unknown): value is string {
+        return typeof value === "string" && /^https?:\/\/[^\s]+$/.test(value);
+    }
+    function replaceEntryPhotoReferences(content: string | null, mappings: ImageReferenceMapping[], finalImagesByBlock: Map<string, string[]>): string | null {
+        if (!content)
+            return content;
+        let updated = content;
+        for (const mapping of mappings) {
+            updated = updated.replaceAll(`{{PHOTO:${mapping.source_url}}}`, `{{PHOTO:${mapping.image_url}}}`);
+        }
+        for (const blockId of new Set(mappings.map((mapping) => mapping.flowlog_block_id))) {
+            const marker = new RegExp(`\\{\\{PHOTO:${blockId.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}:\\d+\\}\\}`, "g");
+            const replacement = (finalImagesByBlock.get(blockId) || [])
+                .filter(isHttpUrl)
+                .map((url) => `{{PHOTO:${url}}}`)
+                .join("\n");
+            if (replacement)
+                updated = updated.replace(marker, replacement);
+        }
+        return updated;
+    }
+    async function migrateImageReferences(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const body = await c.req.json<LegacyJSON>();
+            const mappings = body.mappings as ImageReferenceMapping[];
+            const startDate = body.start_date;
+            const endDate = body.end_date;
+            const dryRun = body.dry_run !== false;
+            if (!Array.isArray(mappings) || mappings.length === 0 || mappings.length > 500) {
+                return c.json({ success: false, error: "mappings must contain 1 to 500 items" }, 400);
+            }
+            if (typeof startDate !== "string" || typeof endDate !== "string" || startDate > endDate) {
+                return c.json({ success: false, error: "valid start_date and end_date are required" }, 400);
+            }
+            const slotKeys = new Set<string>();
+            for (const mapping of mappings) {
+                const slotKey = `${mapping.flowlog_block_id}:${mapping.flowlog_image_index}`;
+                if (!/^[0-9a-f-]{36}$/i.test(mapping.flowlog_block_id) ||
+                    !Number.isInteger(mapping.flowlog_image_index) || mapping.flowlog_image_index < 1 || mapping.flowlog_image_index > 5 ||
+                    !isHttpUrl(mapping.source_url) || !isHttpUrl(mapping.image_url) || mapping.source_url === mapping.image_url ||
+                    slotKeys.has(slotKey)) {
+                    return c.json({ success: false, error: `invalid or duplicate mapping: ${slotKey}` }, 400);
+                }
+                slotKeys.add(slotKey);
+            }
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            const blockIds = [...new Set(mappings.map((mapping) => mapping.flowlog_block_id))];
+            const { data: blocks, error: blockError } = await supabase
+                .from("blocks")
+                .select("id, entry_id, images, entries!inner(id, date, formatted_content)")
+                .eq("user_id", userId)
+                .in("id", blockIds);
+            if (blockError)
+                throw new Error(`Failed to fetch migration blocks: ${blockError.message}`);
+            const blocksById = new Map((blocks || []).map((block: Record<string, unknown>) => [block.id as string, block]));
+            const errors: Array<Record<string, unknown>> = [];
+            const finalImagesByBlock = new Map<string, string[]>();
+            let alreadyMigratedImages = 0;
+            for (const blockId of blockIds) {
+                const block = blocksById.get(blockId);
+                if (!block) {
+                    errors.push({ block_id: blockId, reason: "block_not_found" });
+                    continue;
+                }
+                const entryValue = block.entries as Record<string, unknown> | Record<string, unknown>[];
+                const entry = Array.isArray(entryValue) ? entryValue[0] : entryValue;
+                const entryDate = entry?.date as string | undefined;
+                if (!entryDate || entryDate < startDate || entryDate > endDate) {
+                    errors.push({ block_id: blockId, reason: "outside_date_range", entry_date: entryDate });
+                    continue;
+                }
+                const images = [...((block.images as string[] | null) || [])];
+                for (const mapping of mappings.filter((item) => item.flowlog_block_id === blockId)) {
+                    const index = mapping.flowlog_image_index - 1;
+                    const current = images[index];
+                    if (current === mapping.image_url) {
+                        alreadyMigratedImages += 1;
+                    }
+                    else if (current === mapping.source_url) {
+                        images[index] = mapping.image_url;
+                    }
+                    else {
+                        errors.push({
+                            block_id: blockId,
+                            image_index: mapping.flowlog_image_index,
+                            reason: "source_url_mismatch",
+                            expected: mapping.source_url,
+                            actual: current ?? null,
+                        });
+                    }
+                }
+                finalImagesByBlock.set(blockId, images);
+            }
+            if (errors.length > 0) {
+                return c.json({ success: false, error: "migration validation failed", mismatches: errors }, 409);
+            }
+            const blockBackups: Array<Record<string, unknown>> = [];
+            const entryPlans = new Map<string, {
+                id: string;
+                before: string | null;
+                after: string | null;
+                mappings: ImageReferenceMapping[];
+            }>();
+            let updatedImages = 0;
+            for (const blockId of blockIds) {
+                const block = blocksById.get(blockId)!;
+                const before = [...((block.images as string[] | null) || [])];
+                const after = finalImagesByBlock.get(blockId)!;
+                const blockMappings = mappings.filter((mapping) => mapping.flowlog_block_id === blockId);
+                const changed = before.some((url, index) => url !== after[index]);
+                updatedImages += blockMappings.filter((mapping) => before[mapping.flowlog_image_index - 1] === mapping.source_url).length;
+                blockBackups.push({ id: blockId, entry_id: block.entry_id, images: before, after_images: after, changed });
+                const entryValue = block.entries as Record<string, unknown> | Record<string, unknown>[];
+                const entry = Array.isArray(entryValue) ? entryValue[0] : entryValue;
+                const entryId = entry.id as string;
+                const existing = entryPlans.get(entryId);
+                if (existing) {
+                    existing.mappings.push(...blockMappings);
+                }
+                else {
+                    entryPlans.set(entryId, {
+                        id: entryId,
+                        before: (entry.formatted_content as string | null) ?? null,
+                        after: null,
+                        mappings: [...blockMappings],
+                    });
+                }
+            }
+            for (const plan of entryPlans.values()) {
+                plan.after = replaceEntryPhotoReferences(plan.before, plan.mappings, finalImagesByBlock);
+            }
+            if (!dryRun) {
+                for (const backup of blockBackups) {
+                    if (!backup.changed)
+                        continue;
+                    const { error } = await supabase.from("blocks").update({ images: backup.after_images }).eq("id", backup.id).eq("user_id", userId);
+                    if (error)
+                        throw new Error(`Failed to update block ${backup.id}: ${error.message}`);
+                }
+                for (const plan of entryPlans.values()) {
+                    if (plan.before === plan.after)
+                        continue;
+                    const { error } = await supabase.from("entries").update({ formatted_content: plan.after }).eq("id", plan.id).eq("user_id", userId);
+                    if (error)
+                        throw new Error(`Failed to update entry ${plan.id}: ${error.message}`);
+                }
+            }
+            const entryBackups = [...entryPlans.values()].map(({ id, before, after }) => ({ id, formatted_content: before, after_formatted_content: after, changed: before !== after }));
+            return c.json({
+                success: true,
+                dry_run: dryRun,
+                counts: {
+                    mappings: mappings.length,
+                    blocks: blockIds.length,
+                    updated_blocks: blockBackups.filter((item) => item.changed).length,
+                    updated_images: updatedImages,
+                    already_migrated_images: alreadyMigratedImages,
+                    entries: entryBackups.length,
+                    updated_entries: entryBackups.filter((item) => item.changed).length,
+                },
+                backups: { blocks: blockBackups, entries: entryBackups },
+            });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    async function deleteBlock(c: Context) {
+        try {
+            const userId = c.get("userId");
+            const blockId = c.req.param("id");
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            const { data, error } = await supabase
+                .from("blocks")
+                .delete()
+                .eq("id", blockId)
+                .eq("user_id", userId)
+                .is("content_confirmed_at", null).is("time_confirmed_at", null).select("id").maybeSingle();
+            if (error) {
+                throw new Error(`Failed to delete block: ${error.message}`);
+            }
+            if (!data) return c.json({ success: false, error: "Block is protected or unavailable" }, 409);
+            return c.json({ success: true, message: "ブロックを削除しました" });
+        }
+        catch (error) {
+            return c.json({ success: false, error: getErrorMessage(error) }, error instanceof CreationError ? error.status : 500);
+        }
+    }
+    return app.fetch;
+}

@@ -1,12 +1,16 @@
 import { useCallback } from 'react';
 import imageCompression from 'browser-image-compression';
-import { supabase } from '@/integrations/supabase/client';
+import compressionLibraryUrl from 'browser-image-compression/dist/browser-image-compression.js?url';
+import { flowlog } from '@/integrations/cloudflare/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 import { useImageStorageSettings } from './useImageStorageSettings';
 
 const BUCKET_NAME = 'block-images';
 const MAX_IMAGES = 5;
+// Reuse successful uploads when the same form is retried after a lost save response.
+const uploadedFiles = new WeakMap<File, Map<string, string>>();
+const uploadingFiles = new WeakMap<File, Map<string, Promise<string | undefined>>>();
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 async function compressImageFile(file: File): Promise<File> {
@@ -19,6 +23,7 @@ async function compressImageFile(file: File): Promise<File> {
       maxSizeMB: 1,
       maxWidthOrHeight: 2048,
       useWebWorker: true,
+      libURL: compressionLibraryUrl,
     });
   } catch (error) {
     console.warn('Image compression failed; uploading original file:', error);
@@ -44,6 +49,17 @@ export function useImageUpload() {
     const urls: string[] = [];
 
     for (const file of files) {
+      const cacheKey = `${user.id}:${settings.provider}`;
+      const cached = uploadedFiles.get(file)?.get(cacheKey);
+      if (cached) { urls.push(cached); continue; }
+      const inflight = uploadingFiles.get(file)?.get(cacheKey);
+      if (inflight) { const url=await inflight; if(url)urls.push(url); continue; }
+      let settle!: (url: string | undefined) => void;
+      const flight = new Promise<string | undefined>(resolve=>{settle=resolve;});
+      const flights=uploadingFiles.get(file)||new Map<string,Promise<string|undefined>>();flights.set(cacheKey,flight);uploadingFiles.set(file,flights);
+      const previousCount = urls.length;
+      const remember = () => { if (urls.length > previousCount) { const values=uploadedFiles.get(file)||new Map<string,string>(); values.set(cacheKey,urls[urls.length-1]);uploadedFiles.set(file,values); } };
+      try {
       const uploadFile = await compressImageFile(file);
 
       if (uploadFile.size > MAX_FILE_SIZE) {
@@ -60,7 +76,7 @@ export function useImageUpload() {
         const formData = new FormData();
         formData.append('image', uploadFile, uploadFile.name || file.name);
 
-        const { data, error } = await supabase.functions.invoke('gyazo-upload', {
+        const { data, error } = await flowlog.functions.invoke('gyazo-upload', {
           body: formData,
         });
 
@@ -71,13 +87,14 @@ export function useImageUpload() {
         }
 
         urls.push(data.url);
+        remember();
         continue;
       }
 
       const ext = (uploadFile.name || file.name).split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
-      const { data, error } = await supabase.storage
+      const { data, error } = await flowlog.storage
         .from(BUCKET_NAME)
         .upload(fileName, uploadFile, {
           cacheControl: '3600',
@@ -90,11 +107,13 @@ export function useImageUpload() {
         continue;
       }
 
-      const { data: urlData } = supabase.storage
+      const { data: urlData } = flowlog.storage
         .from(BUCKET_NAME)
         .getPublicUrl(data.path);
 
       urls.push(urlData.publicUrl);
+      remember();
+      } finally { settle(urls.length>previousCount?urls[urls.length-1]:undefined);flights.delete(cacheKey); }
     }
 
     return urls;
@@ -106,7 +125,7 @@ export function useImageUpload() {
     try {
       const gyazoMatch = url.match(/^https:\/\/i\.gyazo\.com\/([a-zA-Z0-9]+)\.[a-zA-Z0-9]+(?:\?.*)?$/);
       if (gyazoMatch) {
-        const { error } = await supabase.functions.invoke('gyazo-delete', {
+        const { error } = await flowlog.functions.invoke('gyazo-delete', {
           body: { url },
         });
         if (error) {
@@ -121,7 +140,7 @@ export function useImageUpload() {
       if (!match) return false;
 
       const path = match[1];
-      const { error } = await supabase.storage.from(BUCKET_NAME).remove([path]);
+      const { error } = await flowlog.storage.from(BUCKET_NAME).remove([path]);
 
       if (error) {
         console.error('Delete error:', error);
@@ -143,7 +162,7 @@ export function useImageUpload() {
     for (const url of urls) {
       const gyazoMatch = url.match(/^https:\/\/i\.gyazo\.com\/([a-zA-Z0-9]+)\.[a-zA-Z0-9]+(?:\?.*)?$/);
       if (gyazoMatch) {
-        const { error } = await supabase.functions.invoke('gyazo-delete', {
+        const { error } = await flowlog.functions.invoke('gyazo-delete', {
           body: { url },
         });
         if (error) {
@@ -157,7 +176,7 @@ export function useImageUpload() {
     }
 
     if (paths.length > 0) {
-      const { error } = await supabase.storage.from(BUCKET_NAME).remove(paths);
+      const { error } = await flowlog.storage.from(BUCKET_NAME).remove(paths);
       if (error) {
         console.error('Bulk delete error:', error);
       }

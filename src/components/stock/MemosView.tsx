@@ -6,7 +6,7 @@ import { formatTimeWithDayBoundary, formatDisplayDateJST, parseTimestamp } from 
 import { useDayBoundary } from '@/contexts/DayBoundaryContext';
 import { BlockTag, TAG_CONFIG, TAGS } from '@/lib/categoryUtils';
 import { useCustomTags, TAG_COLORS } from '@/hooks/useCustomTags';
-import { TagFilterDropdown } from './TagFilterDropdown';
+import { StockFilterPanel } from './StockFilterPanel';
 import { BlockEditModal } from '@/components/flow/BlockEditModal';
 import { QuickAddModal } from './QuickAddModal';
 import { toast } from 'sonner';
@@ -151,14 +151,13 @@ export function MemosView({ targetBlockId, onBlockScrolled, onSearchCleared }: M
           </Button>
         </div>
         
-        {/* Tag Filter Dropdown */}
-        <div className="mt-4">
-          <TagFilterDropdown
-            value={tagFilter === 'all' ? null : tagFilter}
-            onChange={handleTagChange}
-            customTags={customTags}
-          />
-        </div>
+        <StockFilterPanel
+          tone="purple"
+          tagFilter={tagFilter}
+          onTagChange={handleTagChange}
+          customTags={customTags}
+          onClear={() => setTagFilter('all')}
+        />
       </div>
 
       {/* Memos List */}

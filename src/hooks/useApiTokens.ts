@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog } from '@/integrations/cloudflare/client';
 import { toast } from 'sonner';
 
 interface ApiToken {
@@ -16,10 +16,10 @@ export function useApiTokens() {
   const fetchTokens = useCallback(async () => {
     try {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await flowlog.auth.getUser();
       if (!user) return;
 
-      const { data, error } = await supabase
+      const { data, error } = await flowlog
         .from('user_api_tokens')
         .select('id, name, created_at, last_used_at')
         .eq('user_id', user.id)
@@ -41,7 +41,7 @@ export function useApiTokens() {
 
   const generateToken = useCallback(async (name: string): Promise<string | null> => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await flowlog.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
       // ランダムなトークンを生成
@@ -59,7 +59,7 @@ export function useApiTokens() {
       const tokenHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
       // DBに保存
-      const { error } = await supabase
+      const { error } = await flowlog
         .from('user_api_tokens')
         .insert({
           user_id: user.id,
@@ -85,7 +85,7 @@ export function useApiTokens() {
 
   const deleteToken = useCallback(async (tokenId: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await flowlog
         .from('user_api_tokens')
         .delete()
         .eq('id', tokenId);

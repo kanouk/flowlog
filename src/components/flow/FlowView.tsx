@@ -1,3 +1,4 @@
+import { orderTimeline } from '@/lib/blockTiming';
 import { useDiaryGeneration } from '@/hooks/useDiaryGeneration';
 import { DiaryGenerationState } from '@/components/flow/DiaryGenerationState';
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -7,10 +8,9 @@ import { BlockList } from '@/components/flow/BlockList';
 import { DateNavigation } from '@/components/flow/DateNavigation';
 import { BlockListSkeleton } from '@/components/common/BlockListSkeleton';
 import { useDelayedFlag } from '@/components/common/useDelayedFlag';
-import { TimeQuestion, getTimeFromTimeframe, Timeframe } from '@/components/flow/TimeQuestion';
-import { useEntries, Block, Entry, AddBlockMode, BlockUpdatePayload, TimeQuestion as TimeQuestionType } from '@/hooks/useEntries';
+import { useEntries, Block, Entry, AddBlockMode, BlockUpdatePayload } from '@/hooks/useEntries';
 import { toast } from 'sonner';
-import { getTodayKey, parseTimestamp, getOccurredAtDayKey, formatDisplayDateJST, calculateMiddleOccurredAt, createOccurredAt } from '@/lib/dateUtils';
+import { getTodayKey, getOccurredAtDayKey, formatDisplayDateJST, createOccurredAt } from '@/lib/dateUtils';
 import { BlockCategory } from '@/lib/categoryUtils';
 import { arrayMove } from '@dnd-kit/sortable';
 import { useTargetBlockHighlight } from '@/hooks/useTargetBlockHighlight';
@@ -23,6 +23,7 @@ interface FlowViewProps {
   onNavigateToDate?: (date: string) => void;
   onDateChange: (date: string) => void;
   datesWithEntries?: string[];
+  datesWithPhotos?: string[];
   targetBlockId?: string | null;
   onBlockScrolled?: () => void;
   searchQuery?: string | null;
@@ -33,14 +34,10 @@ interface FlowViewProps {
  * ブロックを降順にソート（occurred_at, created_at）
  */
 function sortBlocksDesc(blocks: Block[]): Block[] {
-  return [...blocks].sort((a, b) => {
-    const diff = parseTimestamp(b.occurred_at).getTime() - parseTimestamp(a.occurred_at).getTime();
-    if (diff !== 0) return diff;
-    return parseTimestamp(b.created_at).getTime() - parseTimestamp(a.created_at).getTime();
-  });
+  return orderTimeline([...new Map(blocks.map(block => [block.id, block])).values()]).blocks;
 }
 
-export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWithEntries = [], targetBlockId, onBlockScrolled, searchQuery, onSearchCleared }: FlowViewProps) {
+export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWithEntries = [], datesWithPhotos = [], targetBlockId, onBlockScrolled, searchQuery, onSearchCleared }: FlowViewProps) {
   const { dayBoundaryHour } = useDayBoundary();
   const isMobile = useIsMobile();
   const today = getTodayKey(dayBoundaryHour);
@@ -57,6 +54,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     addBlockWithDate,
     deleteBlock,
     updateBlock,
+    setBlockTiming,
     summarizeUrl,
   } = useEntries();
 
@@ -64,7 +62,6 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [pendingQuestions, setPendingQuestions] = useState<TimeQuestionType[]>([]);
   const showInitialSkeleton = useDelayedFlag(initialLoading, 150);
 
   const loadData = useCallback(async () => {
@@ -98,8 +95,6 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
 
   useEffect(() => {
     loadData();
-    // 日付が変わったら質問をクリア
-    setPendingQuestions([]);
   }, [loadData, selectedDate]);
 
   // 表示中のブロックが selectedDate のものになるまでは古い日付のデータを見せない
@@ -126,57 +121,17 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
   // Mutations enqueue server jobs transactionally. The browser only observes.
   const generation = useDiaryGeneration(selectedDate, () => {void loadData();});
 
-  /**
-   * 時刻質問への回答
-   */
-  const handleTimeAnswer = useCallback(async (blockId: string, timeframe: Timeframe) => {
-    const time = getTimeFromTimeframe(timeframe);
-    const newOccurredAt = createOccurredAt(selectedDate, time, dayBoundaryHour);
-    
-    const updated = await updateBlock(blockId, { occurred_at: newOccurredAt }, dayBoundaryHour);
-    
-    if (updated) {
-      setBlocks(prev => sortBlocksDesc(
-        prev.map(b => b.id === blockId
-          ? { ...b, occurred_at: newOccurredAt, time_confirmed_at: updated.time_confirmed_at }
-          : b)
-      ));
-      setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
+  const applyTiming = async (id: string, answer: Parameters<typeof setBlockTiming>[1]) => {
+    const updated = await setBlockTiming(id, answer);
+    if (updated) setBlocks(current => sortBlocksDesc(current.map(block => block.id === id ? updated : block)));
+    return Boolean(updated);
+  };
 
-    }
-  }, [selectedDate, updateBlock, dayBoundaryHour]);
-
-  const handleExactTimeAnswer = useCallback(async (blockId: string, time: string) => {
-    const newOccurredAt = createOccurredAt(selectedDate, time, dayBoundaryHour);
-
-    const updated = await updateBlock(blockId, { occurred_at: newOccurredAt }, dayBoundaryHour);
-
-    if (updated) {
-      setBlocks(prev => sortBlocksDesc(
-        prev.map(b => b.id === blockId
-          ? { ...b, occurred_at: newOccurredAt, time_confirmed_at: updated.time_confirmed_at }
-          : b)
-      ));
-      setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
-
-    }
-  }, [selectedDate, updateBlock, dayBoundaryHour]);
-
-  /**
-   * 時刻質問を無視
-   * 「わからない」「×」は時刻確定として永続化し、以降の整形で同じ質問を再生成させない
-   */
-  const handleTimeDismiss = useCallback(async (blockId: string) => {
-    setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
-
-    const dismissedAt = new Date().toISOString();
-    const updated = await updateBlock(blockId, { time_confirmed_at: dismissedAt }, dayBoundaryHour);
-    if (updated) {
-      setBlocks(prev => prev.map(b =>
-        b.id === blockId ? { ...b, time_confirmed_at: updated.time_confirmed_at } : b
-      ));
-    }
-  }, [updateBlock, dayBoundaryHour]);
+  const applyExactTime = async (id: string, time: string) => {
+    const updated = await updateBlock(id, { occurred_at: createOccurredAt(selectedDate, time, dayBoundaryHour) }, dayBoundaryHour);
+    if (updated) setBlocks(current => sortBlocksDesc(current.map(block => block.id === id ? updated : block)));
+    return Boolean(updated);
+  };
 
   const handlePrevDay = useCallback(() => {
     const prevDate = subDays(new Date(selectedDate), 1);
@@ -248,8 +203,10 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       if (lines.length === 0) return false;
 
       let successCount = 0;
+      const confirmations: Array<() => void> = [];
+      const batchKey = JSON.stringify({content,selectedDate,mode,tag,priority,dueData});
 
-      for (const line of lines) {
+      for (const [index, line] of lines.entries()) {
         const tempId = `temp-${Date.now()}-${Math.random()}`;
         const optimisticBlock: Block = {
           id: tempId,
@@ -275,7 +232,8 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
         };
         setBlocks(prev => [optimisticBlock, ...prev]);
 
-        const { block: savedBlock } = await addBlockWithDate({
+        const { block: savedBlock, confirm } = await addBlockWithDate({
+          batchKey: batchKey+':'+index,
           content: line,
           selectedDate,
           mode,
@@ -291,6 +249,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
         if (savedBlock) {
           setBlocks(prev => sortBlocksDesc(prev.map(b => b.id === tempId ? savedBlock : b)));
           successCount += 1;
+          if (confirm) confirmations.push(confirm);
         } else {
           setBlocks(prev => prev.filter(b => b.id !== tempId));
         }
@@ -299,6 +258,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
       if (successCount > 0) {
         toast.success(`${successCount}件のタスクを登録しました`);
       }
+      if (successCount === lines.length) confirmations.forEach(confirm => confirm());
       return successCount === lines.length;
     }
     const tempId = `temp-${Date.now()}`;
@@ -382,7 +342,6 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     const success = await deleteBlock(blockId);
     if (success) {
       setBlocks(prev => prev.filter(b => b.id !== blockId));
-      setPendingQuestions(prev => prev.filter(q => q.block_id !== blockId));
     }
   };
 
@@ -424,33 +383,11 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
     const newBlocks = arrayMove(blocks, oldIndex, newIndex);
     setBlocks(newBlocks);
 
-    const prevBlock = newIndex > 0 ? newBlocks[newIndex - 1] : null;
-    const nextBlock = newIndex < newBlocks.length - 1 ? newBlocks[newIndex + 1] : null;
-
-    const result = calculateMiddleOccurredAt(
-      prevBlock?.occurred_at || null,
-      nextBlock?.occurred_at || null,
-      selectedDate,
-      dayBoundaryHour
-    );
-
-    if (result.success === false) {
-      toast.error(result.reason);
-      setBlocks(originalBlocks);
-      return;
-    }
-
-    const newOccurredAt = result.occurredAt;
-
-    const updated = await updateBlock(activeId, { occurred_at: newOccurredAt });
-    
-    if (!updated) {
-      setBlocks(originalBlocks);
-    } else {
-      setBlocks(prev => sortBlocksDesc(
-        prev.map(b => b.id === activeId ? { ...b, occurred_at: newOccurredAt } : b)
-      ));
-    }
+    const updated = await setBlockTiming(activeId, {
+      later: newBlocks[newIndex - 1]?.id ?? null,
+      earlier: newBlocks[newIndex + 1]?.id ?? null,
+    });
+    setBlocks(current => sortBlocksDesc(current.map(block => block.id === activeId ? (updated ?? originalBlocks[oldIndex]) : block)));
   };
 
   return (
@@ -459,6 +396,7 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
         selectedDate={selectedDate}
         onDateChange={onDateChange}
         datesWithEntries={datesWithEntries}
+        datesWithPhotos={datesWithPhotos}
       />
 
       <FlowInput
@@ -471,22 +409,6 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
         showInitialSkeleton ? <BlockListSkeleton /> : null
       ) : (
         <>
-          {pendingQuestions.length > 0 && (
-            <div className="space-y-2">
-              {pendingQuestions.map(q => (
-                <TimeQuestion
-                  key={q.block_id}
-                  blockId={q.block_id}
-                  contentPreview={q.content_preview}
-                  question={q.question}
-                  onAnswer={handleTimeAnswer}
-                  onAnswerExactTime={handleExactTimeAnswer}
-                  onDismiss={handleTimeDismiss}
-                />
-              ))}
-            </div>
-          )}
-
           <div className="flex items-center justify-between pb-3 border-b border-border">
             <div className="flex items-center gap-2">
               <div className="w-1 h-5 rounded-full bg-primary/60" />
@@ -513,6 +435,8 @@ export function FlowView({ selectedDate, onNavigateToDate, onDateChange, datesWi
             onDelete={handleDeleteBlock}
             onUpdate={handleUpdateBlock}
             onDragEnd={handleDragEnd}
+            onTimingAnswer={applyTiming}
+            onExactTime={applyExactTime}
             selectedDate={selectedDate}
             highlightQuery={searchQuery}
             dayBoundaryHour={dayBoundaryHour}

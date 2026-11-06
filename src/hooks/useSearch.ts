@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog } from '@/integrations/cloudflare/client';
 import { useAuth } from '@/hooks/useAuth';
 
 export interface BlockSearchResult {
@@ -42,13 +42,13 @@ export function useSearch() {
     try {
       // ブロックと日記を並行検索
       const [blocksResponse, entriesResponse] = await Promise.all([
-        supabase
+        flowlog
           .from('blocks')
           .select('id, content, category, tag, occurred_at, entry_id, url_metadata')
           .or(`content.ilike.%${searchQuery}%,url_metadata->>summary.ilike.%${searchQuery}%`)
           .order('occurred_at', { ascending: false })
           .limit(10),
-        supabase
+        flowlog
           .from('entries')
           .select('id, date, formatted_content, summary')
           .or(`formatted_content.ilike.%${searchQuery}%,summary.ilike.%${searchQuery}%`)

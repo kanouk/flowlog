@@ -16,6 +16,7 @@ import { AppSplash } from '@/components/common/AppSplash';
 import { getTodayKey } from '@/lib/dateUtils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { DayBoundaryProvider, useDayBoundary } from '@/contexts/DayBoundaryContext';
+import { diaryHasPhotos } from '@/lib/diaryParser';
 import logoImage from '@/assets/logo.png';
 
 type DashboardTab = 'flow' | 'journal' | 'tasks' | 'schedule' | 'memos' | 'readLater';
@@ -60,6 +61,8 @@ function DashboardContent() {
   const datesWithEntries = useMemo(() => {
     return entries.map(e => e.date);
   }, [entries]);
+
+  const datesWithPhotos = useMemo(() => entries.filter(e => diaryHasPhotos(e.formatted_content)).map(e => e.date), [entries]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -210,6 +213,7 @@ function DashboardContent() {
               onNavigateToDate={handleNavigateToDate}
               onDateChange={handleDateSelect}
               datesWithEntries={datesWithEntries}
+              datesWithPhotos={datesWithPhotos}
               targetBlockId={targetBlockId}
               onBlockScrolled={handleBlockScrolled}
               searchQuery={searchQuery}

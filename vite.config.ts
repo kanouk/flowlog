@@ -6,7 +6,8 @@ import path from "path";
 import { visualizer } from "rollup-plugin-visualizer";
 
 // https://vitejs.dev/config/
-export default defineConfig(() => ({
+export default defineConfig(({ mode }) => ({
+  define: ["staging", "cloudflare-production"].includes(mode) ? { "import.meta.env.VITE_MIGRATION_READ_ONLY": JSON.stringify(process.env.FLOWLOG_STAGING_READ_ONLY === "1"), "import.meta.env.VITE_DEPLOYMENT_ENVIRONMENT": JSON.stringify(mode === "cloudflare-production" ? "production" : "staging"), "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(""), "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify("") } : {},
   server: {
     host: "::",
     port: 8080,

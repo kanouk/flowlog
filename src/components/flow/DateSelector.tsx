@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
 import { format, isToday, isYesterday, isFuture, startOfDay } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { Calendar as CalendarIcon, List, ChevronRight } from 'lucide-react';
+import { Calendar as CalendarIcon, List, ChevronRight, Camera } from 'lucide-react';
 import { Entry } from '@/hooks/useEntries';
 import { Calendar } from '@/components/ui/calendar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { diaryHasPhotos } from '@/lib/diaryParser';
 
 interface DateSelectorProps {
   entries: Entry[];
@@ -38,6 +39,8 @@ export function DateSelector({ entries, onSelect, selectedDate }: DateSelectorPr
     });
     return dates;
   }, [entries]);
+
+  const datesWithPhotos = useMemo(() => entries.filter(entry => diaryHasPhotos(entry.formatted_content)).map(entry => entry.date), [entries]);
 
   // Selected date as Date object for calendar
   const selectedDateObj = useMemo(() => {
@@ -89,6 +92,7 @@ export function DateSelector({ entries, onSelect, selectedDate }: DateSelectorPr
         <Calendar
           mode="single"
           selected={selectedDateObj}
+          datesWithPhotos={datesWithPhotos}
           onSelect={handleCalendarSelect}
           onDayClick={handleCalendarDayClick}
           locale={ja}
@@ -114,7 +118,7 @@ export function DateSelector({ entries, onSelect, selectedDate }: DateSelectorPr
             head_cell: "text-muted-foreground rounded-md w-7 font-normal text-[0.65rem] flex-1 text-center",
             row: "flex w-full mt-1",
             cell: "relative h-7 w-7 text-center text-sm p-0 focus-within:relative focus-within:z-20 flex-1",
-            day: "h-7 w-7 p-0 font-normal aria-selected:opacity-100 rounded-md hover:bg-accent hover:text-accent-foreground inline-flex items-center justify-center text-xs",
+            day: "relative h-7 w-7 p-0 font-normal aria-selected:opacity-100 rounded-md hover:bg-accent hover:text-accent-foreground inline-flex items-center justify-center text-xs",
             day_range_end: "day-range-end",
             day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
             day_today: "bg-accent text-accent-foreground font-semibold",
@@ -129,6 +133,10 @@ export function DateSelector({ entries, onSelect, selectedDate }: DateSelectorPr
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-primary" />
             <span>投稿あり</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Camera className="h-3 w-3" aria-hidden="true" />
+            <span>写真あり</span>
           </div>
         </div>
       </TabsContent>

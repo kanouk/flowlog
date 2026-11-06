@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog } from '@/integrations/cloudflare/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useExternalSync } from '@/hooks/useExternalSync';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,7 @@ export function RaindropIntegrationSection() {
   const loadToken = async () => {
     setLoading(true);
     try {
-      const { data } = await supabase
+      const { data } = await flowlog
         .from('user_external_tokens')
         .select('id, last_synced_at')
         .eq('service', 'raindrop')
@@ -40,7 +40,7 @@ export function RaindropIntegrationSection() {
     if (!user || !token.trim()) return;
     setSaving(true);
     try {
-      const { error } = await supabase
+      const { error } = await flowlog
         .from('user_external_tokens')
         .upsert(
           { user_id: user.id, service: 'raindrop', token: token.trim() },
@@ -69,7 +69,7 @@ export function RaindropIntegrationSection() {
 
   const handleDelete = async () => {
     if (!user) return;
-    const { error } = await supabase
+    const { error } = await flowlog
       .from('user_external_tokens')
       .delete()
       .eq('user_id', user.id)

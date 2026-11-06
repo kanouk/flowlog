@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { X, Trash2, ImagePlus, Camera, Clock, Calendar, ScanText, Loader2, Copy, Pencil } from 'lucide-react';
 import { Block, BlockUpdatePayload } from '@/hooks/useEntries';
-import { supabase } from '@/integrations/supabase/client';
+import { flowlog } from '@/integrations/cloudflare/client';
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { useCustomTags } from '@/hooks/useCustomTags';
 import { Button } from '@/components/ui/button';
@@ -334,7 +334,10 @@ export function BlockEditModal({
   const handleSave = async () => {
     if (isSaving) return;
     
-    // カレンダー日付 + 実時刻から occurred_at を直接生成（生活日解釈なし）
+    if (calendarDate === getCalendarDateJST(block.occurred_at) && time === formatTimeJST(block.occurred_at)) {
+      await executeSave();
+      return;
+    }
     const newOccurredAt = createOccurredAtFromCalendarInput(calendarDate, time);
     
     // 本当に未来かどうかだけチェック
@@ -356,7 +359,7 @@ export function BlockEditModal({
     await executeSave(newOccurredAt);
   };
   
-  const executeSave = async (newOccurredAt: string) => {
+  const executeSave = async (newOccurredAt?: string) => {
     setIsSaving(true);
     try {
       // 1. Upload new images
@@ -380,7 +383,7 @@ export function BlockEditModal({
       // 4. Prepare updates
       const updates: BlockUpdatePayload & { images?: string[] } = {};
       
-      if (content !== block.content) {
+      if (content !== (block.content || '')) {
         updates.content = content;
       }
       if (category !== block.category) {
@@ -389,7 +392,7 @@ export function BlockEditModal({
       if (tag !== block.tag) {
         updates.tag = tag as BlockTag | null;
       }
-      if (newOccurredAt !== block.occurred_at) {
+      if (newOccurredAt && newOccurredAt !== block.occurred_at) {
         updates.occurred_at = newOccurredAt;
       }
       
@@ -728,7 +731,7 @@ export function BlockEditModal({
                           toast.error('保存済みの画像がありません');
                           return;
                         }
-                        const response = await supabase.functions.invoke('ocr-image', {
+                        const response = await flowlog.functions.invoke('ocr-image', {
                           body: { block_id: block.id, image_urls: allImageUrls },
                         });
                         if (response.error) throw new Error(response.error.message);
